@@ -21,7 +21,7 @@ test('barter updates both parties, rejects shortfalls and respects carried capac
   assert(!exchange(player, npc, { metal: 1 }, { fish: 40 }, rules, 12).ok); assert.deepEqual([player, npc], before);
 });
 test('full save round trip preserves negative extremes, modifications, NPC inventories and seed streams', () => {
-  const s = newState(worldSpec(0, 65535)); s.inventory.wood = -9999999; s.stockpile.gold = 9999999; s.changes.nodes['starter:wood'] = 0; s.changes.containers.push('ruin:0:0'); s.changes.npcs['npc:ruin:0:0'] = { inventory: balances({ fish: -20 }) };
+  const s = newState(worldSpec(0, 65535)); s.inventory.wood = -9999999; s.stockpile.gold = 9999999; s.changes.nodes['starter:wood'] = 0; s.changes.containers.push('ruin:0:0'); s.changes.npcs['npc:ruin:0:0'] = { inventory: balances({ fish: -20 }), hp: 100 };
   assert.deepEqual(importJSON(exportFull(s)), s);
 });
 test('sandbox import is clean and never restores previous positions, buildings or discoveries', () => {
@@ -30,7 +30,7 @@ test('sandbox import is clean and never restores previous positions, buildings o
 });
 test('invalid JSON, versions, seeds, numeric balances, IDs and structures are rejected without live mutation', () => {
   const live = newState(worldSpec(42)), baseline = exportFull(live);
-  for (const mutate of [(d: any) => d.world.seed = -1, (d: any) => d.formatVersion = 2, (d: any) => d.world.generationVersion = 99, (d: any) => d.state.inventory.wood = 1e12, (d: any) => d.state.inventory.wood = null, (d: any) => d.state.player.x = '3', (d: any) => d.state.furnaces = [], (d: any) => d.state.discovered = ['<script>']]) {
+  for (const mutate of [(d: any) => d.world.seed = -1, (d: any) => d.formatVersion = 99, (d: any) => d.world.generationVersion = 99, (d: any) => d.state.inventory.wood = 1e12, (d: any) => d.state.inventory.wood = null, (d: any) => d.state.player.x = '3', (d: any) => d.state.furnaces = [], (d: any) => d.state.discovered = ['<script>']]) {
     const doc = JSON.parse(baseline); mutate(doc); assert.throws(() => importJSON(JSON.stringify(doc))); assert.equal(exportFull(live), baseline);
   }
   assert.throws(() => importJSON('{broken')); assert.throws(() => importJSON(exportSandbox(live), 'full-save'));

@@ -1,6 +1,6 @@
-# Frostbound JSON format 1 / generation 1
+# Frostbound JSON format 2 / generations 1 and 2
 
-Both documents require `format: "frostbound"`, `formatVersion: 1`, `mode`, and `world`. JSON is parsed as data and never evaluated. UI strings from files are never inserted into HTML. Files over 12 MB, nonfinite/fractional resource numbers, invalid types, IDs, coordinates or unsupported versions are rejected before any state replacement.
+Both documents require `format: "frostbound"`, `formatVersion: 2`, `mode`, and `world`. JSON is parsed as data and never evaluated. UI strings from files are never inserted into HTML. Files over 12 MB, nonfinite/fractional resource numbers, invalid types, IDs, coordinates or unsupported versions are rejected before any state replacement.
 
 ## Shared `world`
 
@@ -26,7 +26,7 @@ Chunk size: integer 16–64; initial region: integer 64–4096; world scale: 0.5
 
 ## Common balances and settings
 
-A balance is a complete object containing integer `wood`, `stone`, `meat`, `fish`, `metal`, and `gold` values. Missing values are invalid. The inclusive default range is **−9,999,999 to 9,999,999**; negative values are valid, independent of debt settings. `null`, strings, fractions, NaN/infinity representations, and out-of-range values are not accepted.
+A balance is a complete object containing integer `wood`, `stone`, `meat`, `fish`, `metal`, `gold`, and `charcoal` values. Missing values are invalid. The inclusive default range is **−9,999,999 to 9,999,999**; negative values are valid, independent of debt settings. `null`, strings, fractions, NaN/infinity representations, and out-of-range values are not accepted.
 
 ```json
 {
@@ -88,4 +88,4 @@ Static terrain, trees and unmodified node amounts are regenerated; they are not 
 
 Failure leaves the live state and existing local save unchanged. Successful import does not pretend to be a merge. Local autosave will subsequently save the imported world after active play; export the old world first if you want to retain it too.
 
-Only format 1 / generation 1 are supported. There is no silent migration from the archived Phaser prototype or from future generation algorithms. Introduce explicit migrations if a later version needs them.
+Formats 1 and 2 are supported. Format 1 migrates with charcoal zero, full HP, and fresh combat equipment/state. Terrain generation 1 is preserved; generation 2 adds fixed, flattened villages. Unknown versions are rejected. Format 2 full saves additionally require player/worker/NPC HP, furnace charcoal energy, and validated combat state (actors, weapons, cooldowns, projectiles, fire zones, bleed, drops, encounters, burned trees/nodes, village hostility and weather). Sandbox equipment is optional and encounters always start fresh.

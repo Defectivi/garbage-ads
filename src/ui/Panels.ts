@@ -1,3 +1,4 @@
+import { WEAPONS, WEAPON_IDS, type WeaponType } from '../data/weapons';
 import type { App } from './App';
 import { BUILDINGS, RESOURCES, RESOURCE_IDS, type BuildingType } from '../data/definitions';
 import { exportFull, exportSandbox, importJSON, loadLocal, saveLocal, validateSettings } from '../systems/SaveSystem';
@@ -9,15 +10,19 @@ export class Panels {
   constructor(private app: App) {}
   inventory() {
     showInventory(this.app);
+
   }
   building() {
     const el = this.app.modal('Make a place in the snow', `<p>Build near your survivor on clear, dry ground. Costs use stored resources first, then carried supplies.</p><div class="building-list">${(Object.keys(BUILDINGS) as BuildingType[]).map(k => `<button data-building="${k}"><b>${BUILDINGS[k].name}</b><small>${resourceText(BUILDINGS[k].costs)}</small><span>${BUILDINGS[k].effect}</span></button>`).join('')}</div><button id="expand" class="secondary">Expand nearest furnace · 30 wood / +8 heat radius</button>`);
+    const fuel = document.createElement('button'); fuel.textContent = 'Fuel nearest furnace / 1 charcoal / 120 fuel / half burn rate'; el.querySelector('.modal-content')!.appendChild(fuel); fuel.onclick = () => { const p = this.app.game.state.player, f = [...this.app.game.state.furnaces].sort((a,b) => Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0]; this.app.report(this.app.game.feed(f.id, 'charcoal')); };
     el.querySelectorAll<HTMLButtonElement>('[data-building]').forEach(b => b.addEventListener('click', () => { this.app.closeModal(); this.app.beginBuilding(b.dataset.building as BuildingType); }));
     el.querySelector('#expand')!.addEventListener('click', () => { const f = [...this.app.game.state.furnaces].sort((a, b) => Math.hypot(a.x - this.app.game.state.player.x, a.z - this.app.game.state.player.z) - Math.hypot(b.x - this.app.game.state.player.x, b.z - this.app.game.state.player.z))[0]; this.app.report(this.app.game.upgradeFurnace(f.id)); this.app.refresh(); });
   }
   trade(ruin: Ruin, selected?: string) {
     const game = this.app.game, npc = game.npc(ruin);
     const el = this.app.modal(npc.name, `<p>Trading at ${ruin.name}. Barter and gold prices are both supported. No exchange occurs until you confirm.</p><div class="inventory-grid trade-balances"><b>RESOURCE</b><b>YOU</b><b>TRADER</b><b>YOU AFTER</b>${RESOURCE_IDS.map(k => `<span>${RESOURCES[k].name}</span><span>${game.state.inventory[k]}</span><span>${npc.inventory[k]}</span><strong data-after="${k}"></strong>`).join('')}</div><label>CHOOSE AN EXCHANGE<select id="offer">${npc.offers.map(o => `<option value="${o.id}" ${selected === o.id ? 'selected' : ''}>${o.title}</option>`).join('')}</select></label><p id="trade-preview"></p><div class="button-row"><button id="confirm-trade" class="primary">Confirm exchange</button><button id="cancel-trade">Cancel</button></div>`);
+    const armory = document.createElement('div'); armory.className = 'armory'; armory.innerHTML = '<h3>TRADER ARMORY</h3><p>Unlimited ammunition. Each weapon lasts 100 attacks.</p>' + WEAPON_IDS.map(k => `<button data-buy="${k}"><b>${WEAPONS[k].name}</b><small>${resourceText(WEAPONS[k].cost)}</small><span>Buy & equip</span></button>`).join(''); el.querySelector('.modal-content')!.appendChild(armory);
+    armory.querySelectorAll<HTMLButtonElement>('[data-buy]').forEach(b => b.onclick = () => this.app.report(game.buyWeapon(ruin, b.dataset.buy as WeaponType)));
     const select = el.querySelector<HTMLSelectElement>('#offer')!;
     const preview = () => { const o = npc.offers.find(o => o.id === select.value)!; el.querySelector('#trade-preview')!.textContent = `You give ${resourceText(o.give)}. You receive ${resourceText(o.receive)}.`; for (const k of RESOURCE_IDS) el.querySelector(`[data-after="${k}"]`)!.textContent = String(game.state.inventory[k] - (o.give[k] ?? 0) + (o.receive[k] ?? 0)); };
     select.addEventListener('change', preview); preview();
@@ -47,7 +52,7 @@ export class Panels {
   }
   map() {
     const game = this.app.game, p = game.state.player, ruin = game.world.ruin(0, 0)!;
-    const known = game.state.discovered.filter(k => k.startsWith('ruin:')).map(k => { const [, x, z] = k.split(':'); return game.world.ruin(Number(x), Number(z)); }).filter(r => !!r);
+    const known = game.state.discovered.filter(k => k.startsWith('ruin:')).map(k => { const [, x, z] = k.split(':'); return game.world.ruin(Number(x), Number(z)); }).filter(r => !!r).concat(game.world.villages());
     const el = this.app.modal('A field guide to the north', `<p>North is up. The chart covers 256 × 256 units around you; the world continues beyond its edges. Blue marks rivers. Cross at timber bridges every 64 east/west units.</p><canvas id="map-canvas" width="512" height="512"></canvas><div class="map-key"><span>● You</span><span>▲ Home</span><span>■ Discovered ruins</span></div><p id="map-rumour"></p><div id="known-places"></div>`);
     el.querySelector('#map-rumour')!.textContent = ruin && !game.state.discovered.includes(ruin.id) ? `A rumour of old rooftops: ${Math.round(ruin.x)} east, ${Math.abs(Math.round(ruin.z))} north of home.` : 'Follow blue fishing markers along accessible riverbanks. Search chests near ruined houses.';
     const list = el.querySelector('#known-places')!; for (const r of known) { const row = document.createElement('p'); row.textContent = `${r!.name} · ${Math.round(r!.x)}, ${Math.round(r!.z)}`; list.appendChild(row); }

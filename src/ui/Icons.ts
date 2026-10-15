@@ -1,6 +1,7 @@
 import type { Resource } from '../data/definitions';
 // Original, code-drawn pixel items. All silhouettes use the same 26 × 26 grid.
 const items: Record<Resource, string> = {
+  charcoal: '<path fill="#172328" d="M3 11h4V6h12v4h4v11H4z"/><path fill="#394248" d="M7 8h10v5H5v6h7v-5h9v6H5V11h2z"/><path fill="#62696a" d="M8 9h7v2H8zm6 7h5v2h-5z"/>',
   wood: '<path fill="#463127" d="M3 8h4V5h10v3h5v12h-5v3H7v-3H3z"/><path fill="#93633e" d="M5 8h12v12H5z"/><path fill="#c99459" d="M5 7h12v4H5z"/><path fill="#63412e" d="M5 15h12v4H5z"/><path fill="#e5bc7a" d="M17 9h4v10h-4z"/><path fill="#ad7c48" d="M18 12h2v4h-2z"/>',
   stone: '<path fill="#3e535f" d="M2 13h2V8h5V5h9v4h3v5h2v7H4v-3H2z"/><path fill="#92aab6" d="M4 12h3V8h10v3h4v8H4z"/><path fill="#c4d4d8" d="M7 8h9v3H7zm-3 4h6v3H4z"/><path fill="#657e8d" d="M11 13h10v7H6v-3h5z"/>',
   meat: '<path fill="#52352f" d="M6 4h10v3h5v10h-4v3H6v-3H3V8h3z"/><path fill="#b9614f" d="M7 6h8v3h4v7h-4v3H7v-3H5V9h2z"/><path fill="#e69b7b" d="M8 7h6v3H8zm-2 4h3v5H6z"/><path fill="#ebcda5" d="M14 13h4v3h-4zm-3 3h4v3h-4z"/>',

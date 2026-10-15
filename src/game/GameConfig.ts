@@ -1,5 +1,5 @@
 import { derive } from '../utils/SeededRNG';
-export const GENERATION_VERSION = 1;
+export const GENERATION_VERSION = 2;
 export interface WorldConfig { chunkSize: number; initialRegionSize: number; worldScale: number; riverDensity: number; ruinDensity: number; resourceDensity: number }
 export interface WorldSpec { seed: number; generationVersion: number; seeds: { terrain: number; rivers: number; biomes: number; resources: number; ruins: number; wildlife: number }; config: WorldConfig }
 export interface Settings { difficulty: 'relaxed' | 'survival'; renderDistance: number; sound: boolean; allowDebt: boolean; inventoryLimit: number; resourceMin: number; resourceMax: number }

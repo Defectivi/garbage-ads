@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { Game } from '../game/Game';
 import { BUILDINGS, type BuildingType } from '../data/definitions';
-import { heatRadius } from '../systems/SurvivalSystem';
+import { CombatRenderer, weaponMesh, disposeWeapon } from './CombatRenderer';
+import { heatRadius, furnaceTier } from '../systems/SurvivalSystem';
 import type { Chunk, Ruin } from '../world/WorldManager';
 import { SeededRNG } from '../utils/SeededRNG';
 
@@ -14,7 +15,7 @@ export class Renderer {
   private chunks = new Map<string, THREE.Group>(); private entities = new THREE.Group(); private markers = new THREE.Group();
   private player = this.person(0xc98b49); private dynamic = new Map<string, THREE.Group>();
   private preview?: THREE.Group; private ray = new THREE.Raycaster(); private sun: THREE.DirectionalLight;
-  private snowfall: THREE.Points;
+  private snowfall: THREE.Points; private combatVisual = new CombatRenderer(); private heldId = "";
   private materials = { snow: mat(0xe4edf0), dark: mat(0x314e5b), wood: mat(0x87664b), ice: mat(0x658d9f), metal: mat(0x5a7279), fire: mat(0xffa343, { emissive: 0xff781c, emissiveIntensity: 1.6 }), water: mat(0x407e9c, { roughness: .25, metalness: .25, transparent: true, opacity: .87 }) };
   constructor(private host: HTMLElement, public game: Game) {
     try { this.webgl = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); }
@@ -25,7 +26,7 @@ export class Renderer {
     this.scene.add(new THREE.HemisphereLight(0xd8ebff, 0x75899a, 2.2));
     this.sun = new THREE.DirectionalLight(0xfff5dd, 3); this.sun.position.set(-22, 35, 15); this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(1024, 1024); Object.assign(this.sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 100 }); this.sun.shadow.bias = -.001; this.sun.shadow.normalBias = .04;
-    this.scene.add(this.sun, this.sun.target, this.entities, this.markers, this.player);
+    this.scene.add(this.sun, this.sun.target, this.entities, this.markers, this.player, this.combatVisual.group);
     const snow = new Float32Array(180 * 3), rng = new SeededRNG(1938);
     for (let i = 0; i < 180; i++) { snow[i * 3] = rng.range(-35, 35); snow[i * 3 + 1] = rng.range(0, 22); snow[i * 3 + 2] = rng.range(-35, 35); }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(snow, 3)); this.snowfall = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xf1f9ff, size: .07, transparent: true, opacity: .55, depthWrite: false })); this.scene.add(this.snowfall);
@@ -85,16 +86,16 @@ export class Renderer {
     for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), z = pos.getZ(i), y = w.height(x, z); pos.setY(i, y); const river = w.river(x, z); color.setHex(y < .1 && river.distance < river.width + 2 ? 0x839ea9 : 0xe0ebef); color.multiplyScalar(1 - Math.max(0, y) * .007); colors.push(color.r, color.g, color.b); }
     terrain.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); terrain.computeVertexNormals();
     const ground = this.mesh(terrain, mat(0xffffff, { vertexColors: true })); ground.castShadow = false; g.add(ground);
-    const trees = data.trees.map(t => ({ ...t, y: w.height(t.x, t.z) }));
+    const trees = data.trees.filter((_, i) => !this.game.state.combat.charredTrees.includes(`tree:${data.cx}:${data.cz}:${i}`)).map(t => ({ ...t, y: w.height(t.x, t.z) }));
     this.instance(g, new THREE.CylinderGeometry(.16, .25, 2.2, 5), this.materials.wood, trees.map(t => ({ x: t.x, y: t.y + t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
     for (let layer = 0; layer < 3; layer++) {
       const scale = 1 - layer * .23;
       this.instance(g, new THREE.ConeGeometry(1.7 * scale, 2.5, 7), this.materials.dark, trees.map(t => ({ x: t.x, y: t.y + (2.5 + layer * 1.25) * t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
       this.instance(g, new THREE.ConeGeometry(1.78 * scale, 2.35, 7), this.materials.snow, trees.map(t => ({ x: t.x, y: t.y + (2.75 + layer * 1.25) * t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
     }
-    for (const resource of ['wood', 'stone', 'metal'] as const) {
-      const points = data.nodes.filter(n => n.resource === resource && this.game.nodeRemaining(n) > 0 && !w.isWater(n.x, n.z)).map(n => ({ x: n.x, y: w.height(n.x, n.z) + .45, z: n.z, sx: resource === 'wood' ? 1.3 : .9, sy: resource === 'wood' ? .5 : .8, sz: .7, rotation: n.x }));
-      this.instance(g, resource === 'wood' ? new THREE.CylinderGeometry(.4, .4, 2, 7).rotateZ(Math.PI / 2) : new THREE.DodecahedronGeometry(.85, 0), this.materials[resource === 'wood' ? 'wood' : resource === 'stone' ? 'ice' : 'metal'], points);
+    for (const resource of ['wood', 'stone', 'metal', 'charcoal'] as const) {
+      const points = this.game.nodes().filter(n => Math.floor(n.x / size) === data.cx && Math.floor(n.z / size) === data.cz && this.game.nodeResource(n) === resource && this.game.nodeRemaining(n) > 0 && !w.isWater(n.x, n.z)).map(n => ({ x: n.x, y: w.height(n.x, n.z) + .45, z: n.z, sx: resource === 'wood' ? 1.3 : .9, sy: resource === 'wood' ? .5 : .8, sz: .7, rotation: n.x }));
+      this.instance(g, resource === 'wood' ? new THREE.CylinderGeometry(.4, .4, 2, 7).rotateZ(Math.PI / 2) : new THREE.DodecahedronGeometry(.85, 0), resource === 'charcoal' ? this.materials.dark : this.materials[resource === 'wood' ? 'wood' : resource === 'stone' ? 'ice' : 'metal'], points);
     }
     if (w.spec.config.riverDensity > 0) {
       const vertices: number[] = [];
@@ -107,14 +108,14 @@ export class Renderer {
       if (vertices.length) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); geo.computeVertexNormals(); const water = this.mesh(geo, this.materials.water); water.castShadow = false; g.add(water); }
       for (let x = Math.ceil(x0 / 64) * 64; x < x0 + size; x += 64) { const r = w.river(x, z0 + size / 2); if (r.center < z0 || r.center >= z0 + size) continue; this.box(g, x, .45, r.center, 4.7, .4, r.width * 2 + 3, this.materials.wood); for (const side of [-1, 1]) this.box(g, x + side * 2.3, 1.05, r.center, .12, .16, r.width * 2 + 3, this.materials.snow); }
     }
-    for (const r of data.ruins) this.addRuin(g, r);
+    for (const r of [...data.ruins, ...w.villages().filter(v => Math.floor(v.x / size) === data.cx && Math.floor(v.z / size) === data.cz)]) this.addRuin(g, r);
     for (const f of data.fishing) { const post = this.mesh(new THREE.CylinderGeometry(.08, .08, 1.5, 5), this.materials.wood, f.x, w.height(f.x, f.z) + .75, f.z); g.add(post); this.box(g, f.x, w.height(f.x, f.z) + 1.35, f.z, .85, .4, .12, mat(0x5a94a6)); }
     return g;
   }
   private addRuin(g: THREE.Group, r: Ruin) {
     const w = this.game.world;
-    for (let i = 0; i < r.houses; i++) { const h = this.building(i % 2 ? 'hut' : 'ruin', i % 2 ? .1 : -.1); h.position.set(r.x + (i - 1) * 6, w.height(r.x + (i - 1) * 6, r.z - 3), r.z - 3); g.add(h); }
-    const npc = this.person([0x668985, 0x8e719a, 0x487c9d][r.variant]); npc.position.set(r.trader.x, w.height(r.trader.x, r.trader.z), r.trader.z); g.add(npc);
+    for (let i = 0; i < r.houses; i++) { const h = this.building(r.id.startsWith('village:') || i % 2 ? 'hut' : 'ruin', i % 2 ? .1 : -.1); h.position.set(r.x + (i - 1) * 6, w.height(r.x + (i - 1) * 6, r.z - 3), r.z - 3); g.add(h); }
+    const npc = this.person([0x668985, 0x8e719a, 0x487c9d][r.variant]); npc.position.set(r.trader.x, w.height(r.trader.x, r.trader.z), r.trader.z); npc.visible = this.game.npc(r).hp > 0; g.add(npc);
     const chest = this.game.state.changes.containers.includes(r.id) ? this.materials.dark : this.materials.wood;
     this.box(g, r.container.x, w.height(r.container.x, r.container.z) + .5, r.container.z, 1.4, .9, 1, chest);
     this.box(g, r.trader.x, w.height(r.trader.x, r.trader.z) + 2.6, r.trader.z, .45, .45, .1, mat(0xf4cf7c, { emissive: 0xaa7524 }));
@@ -124,7 +125,7 @@ export class Renderer {
   }
   refreshChunks() { for (const g of this.chunks.values()) this.dispose(g); this.chunks.clear(); }
   resize() { const w = this.host.clientWidth, h = this.host.clientHeight; this.webgl.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
-  setGame(game: Game) { this.game = game; this.refreshChunks(); this.dispose(this.entities); this.entities = new THREE.Group(); this.scene.add(this.entities); this.dynamic.clear(); this.target.set(game.state.player.x, 1, game.state.player.z); }
+  setGame(game: Game) { this.game = game; this.combatVisual.clear(); this.heldId = ""; this.refreshChunks(); this.dispose(this.entities); this.entities = new THREE.Group(); this.scene.add(this.entities); this.dynamic.clear(); this.target.set(game.state.player.x, 1, game.state.player.z); }
   groundAt(clientX: number, clientY: number) {
     const bounds = this.webgl.domElement.getBoundingClientRect(); this.ray.setFromCamera(new THREE.Vector2((clientX - bounds.x) / bounds.width * 2 - 1, -(clientY - bounds.y) / bounds.height * 2 + 1), this.camera);
     const terrain = Array.from(this.chunks.values()).map(g => g.children[0]); const hit = this.ray.intersectObjects(terrain, false)[0]; return hit ? { x: hit.point.x, z: hit.point.z } : undefined;
@@ -141,13 +142,16 @@ export class Renderer {
   }
   update(dt: number, time: number, moving: boolean) {
     const game = this.game, p = game.state.player, height = game.world.walkHeight(p.x, p.z);
-    this.snowfall.position.set(p.x + Math.sin(time * .08) * 5, height - time * .7 % 11, p.z);
-    (this.scene.fog as THREE.Fog).far = game.state.settings.renderDistance === 1 ? 56 : 110;
+    this.snowfall.position.set(p.x + Math.sin(time * .08) * 5, height - time * (game.state.combat.weather.mode === 'snow' ? 3 : .7) % 11, p.z);
+    const storm = game.state.combat.weather.mode === 'snow'; (this.snowfall.material as THREE.PointsMaterial).opacity = storm ? .95 : .22; (this.snowfall.material as THREE.PointsMaterial).size = storm ? .17 : .07; (this.scene.fog as THREE.Fog).far = storm ? 52 : game.state.settings.renderDistance === 1 ? 56 : 110;
     const target = new THREE.Vector3(p.x, height + 1.1, p.z), blend = 1 - Math.exp(-dt * 6); this.target.lerp(target, blend);
     // High orbit clears all player-buildable roofs; terrain clearance also protects hills.
     const offset = new THREE.Vector3(Math.sin(this.yaw) * this.zoom, this.zoom * .92, Math.cos(this.yaw) * this.zoom);
     this.camera.position.copy(this.target).add(offset); this.camera.position.y = Math.max(this.camera.position.y, game.world.height(this.camera.position.x, this.camera.position.z) + 9); this.camera.lookAt(this.target);
     this.sun.position.set(p.x - 22, height + 35, p.z + 15); this.sun.target.position.set(p.x, height, p.z);
+    const held = game.state.combat.weapons.find(w => w.id === game.state.combat.equipped);
+    if (this.heldId !== (held?.id ?? '')) { const old = this.player.getObjectByName('held-weapon') as THREE.Group; if (old) { disposeWeapon(old); old.removeFromParent(); } if (held) this.player.add(weaponMesh(held.type)); this.heldId = held?.id ?? ''; }
+    const hand = this.player.getObjectByName('held-weapon'); if (hand) hand.rotation.x = game.state.elapsed - game.combat.lastAttack < .25 ? -1.1 : 0;
     this.player.position.set(p.x, height, p.z); this.player.rotation.y = p.heading;
     for (const side of [-1, 1]) this.player.getObjectByName(`leg${side}`)!.rotation.x = moving ? Math.sin(time * 12) * .5 * side : 0;
     const needed = game.world.around(p, game.state.settings.renderDistance), ids = new Set(needed.map(c => c.id));
@@ -160,7 +164,12 @@ export class Renderer {
       if (!group) { group = this.building(b.type, b.rotation); this.dynamic.set(b.id, group); this.entities.add(group); }
       group.position.set(b.x, game.world.height(b.x, b.z), b.z);
       if (b.type === 'furnace') {
-        const furnace = game.state.furnaces.find(f => f.id === b.id)!; const active = furnace.fuel > 0;
+        const furnace = game.state.furnaces.find(f => f.id === b.id)!; const active = furnace.fuel + furnace.charcoal > 0;
+        const tier = furnaceTier(furnace.level);
+        if (group.userData.tier !== tier) { const old = group.getObjectByName('reinforcement'); if (old) this.dispose(old as THREE.Group); const upgrade = new THREE.Group(); upgrade.name = 'reinforcement';
+          for (let i = 0; i < tier; i++) { this.box(upgrade, 0, 3.7 + i * .6, 0, .9, .4, .9, this.materials.metal); for (const side of [-1, 1]) this.box(upgrade, side * (1.15 + i * .1), 1.2, 0, .18, 2.4, .7, this.materials.dark); }
+          group.add(upgrade); group.userData.tier = tier;
+        }
         const flame = group.getObjectByName('flame')!; flame.visible = active; flame.scale.y = .95 + Math.sin(time * 9) * .13;
         (group.getObjectByName('warm-light') as THREE.PointLight).intensity = active ? 35 + Math.sin(time * 11) * 3 : 0;
         const old = group.getObjectByName('heat-ring') as THREE.Mesh | undefined, radius = heatRadius(furnace);
@@ -173,12 +182,12 @@ export class Renderer {
         }
       }
     }
-    for (const worker of game.state.workers) {
+    for (const worker of game.state.workers) { if (worker.hp <= 0) continue;
       entityIds.add(worker.id); let group = this.dynamic.get(worker.id); if (!group) { group = this.person(0x5b9ca6); this.dynamic.set(worker.id, group); this.entities.add(group); }
       group.position.set(worker.x, game.world.walkHeight(worker.x, worker.z), worker.z);
       for (const side of [-1, 1]) group.getObjectByName(`leg${side}`)!.rotation.x = worker.state === 'returning' || worker.state === 'seeking' ? Math.sin(time * 10) * .5 * side : 0;
     }
     for (const [id, group] of this.dynamic) if (!entityIds.has(id)) { this.dispose(group); this.dynamic.delete(id); }
-    this.webgl.render(this.scene, this.camera);
+    this.combatVisual.update(game, this.camera, time); this.webgl.render(this.scene, this.camera);
   }
 }

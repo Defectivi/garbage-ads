@@ -1,6 +1,9 @@
 import { balances, BUILDINGS, RESOURCE_IDS, type Balances, type BuildingType } from '../data/definitions';
 import { GENERATION_VERSION, type Settings, type WorldSpec } from '../game/GameConfig';
 import { newState, type GameState, type Point } from '../game/GameState';
+import { WorldManager } from '../world/WorldManager';
+import { freshCombat, type CombatState } from '../game/CombatState';
+import { ACTOR_HP, WEAPONS, type WeaponType, type ActorType } from '../data/weapons';
 const KEY = 'frostbound.world.v2';
 const record = (v: unknown, path: string): Record<string, unknown> => { if (!v || typeof v !== 'object' || Array.isArray(v) || Object.getPrototypeOf(v) !== Object.prototype) throw new Error(`${path} must be an object.`); return v as Record<string, unknown>; };
 const num = (v: unknown, path: string, min: number, max: number, integer = false) => { if (typeof v !== 'number' || !Number.isFinite(v) || (integer && !Number.isSafeInteger(v)) || v < min || v > max) throw new Error(`${path} must be ${integer ? 'an integer' : 'a number'} from ${min} to ${max}.`); return v; };
@@ -19,10 +22,10 @@ export function validateBalances(v: unknown, settings: Settings, path = 'resourc
 }
 export function validateWorld(v: unknown): WorldSpec {
   const w = record(v, 'world');
-  if (w.generationVersion !== GENERATION_VERSION) throw new Error(`Unsupported generation version ${String(w.generationVersion)}. This build supports version ${GENERATION_VERSION}; no terrain migration is attempted.`);
+  if (w.generationVersion !== GENERATION_VERSION && w.generationVersion !== 1) throw new Error(`Unsupported generation version ${String(w.generationVersion)}. Supported terrain generations: 1 and ${GENERATION_VERSION}.`);
   const seeds = record(w.seeds, 'world.seeds'), c = record(w.config, 'world.config');
   const read = (k: string) => num(seeds[k], `seeds.${k}`, 0, 65535, true);
-  return { seed: num(w.seed, 'world.seed', 0, 65535, true), generationVersion: GENERATION_VERSION, seeds: { terrain: read('terrain'), rivers: read('rivers'), biomes: read('biomes'), resources: read('resources'), ruins: read('ruins'), wildlife: read('wildlife') }, config: { chunkSize: num(c.chunkSize, 'chunkSize', 16, 64, true), initialRegionSize: num(c.initialRegionSize, 'initialRegionSize', 64, 4096, true), worldScale: num(c.worldScale, 'worldScale', .5, 4), riverDensity: num(c.riverDensity, 'riverDensity', 0, 3), ruinDensity: num(c.ruinDensity, 'ruinDensity', 0, 3), resourceDensity: num(c.resourceDensity, 'resourceDensity', 0, 3) } };
+  return { seed: num(w.seed, 'world.seed', 0, 65535, true), generationVersion: Number(w.generationVersion), seeds: { terrain: read('terrain'), rivers: read('rivers'), biomes: read('biomes'), resources: read('resources'), ruins: read('ruins'), wildlife: read('wildlife') }, config: { chunkSize: num(c.chunkSize, 'chunkSize', 16, 64, true), initialRegionSize: num(c.initialRegionSize, 'initialRegionSize', 64, 4096, true), worldScale: num(c.worldScale, 'worldScale', .5, 4), riverDensity: num(c.riverDensity, 'riverDensity', 0, 3), ruinDensity: num(c.ruinDensity, 'ruinDensity', 0, 3), resourceDensity: num(c.resourceDensity, 'resourceDensity', 0, 3) } };
 }
 function numericMap(v: unknown, path: string) {
   const raw = record(v, path); if (Object.keys(raw).length > 50000) throw new Error(`${path} is too large.`);
@@ -30,15 +33,52 @@ function numericMap(v: unknown, path: string) {
   for (const [key, value] of Object.entries(raw)) out[id(key, path)] = num(value, `${path}.${key}`, 0, 9999999, true);
   return out;
 }
-export function exportFull(state: GameState) { const { world, ...rest } = state; return JSON.stringify({ format: 'frostbound', formatVersion: 1, mode: 'full-save', world, state: rest }, null, 2); }
+function weaponType(v: unknown): WeaponType { if (typeof v !== 'string' || !Object.hasOwn(WEAPONS, v)) throw new Error('Unknown weapon type.'); return v as WeaponType; }
+function validateEquipment(v: unknown) {
+  const e = record(v, 'equipment'), seen = new Set<string>();
+  const weapons = array(e.weapons, 'weapons', 500).map(v => { const w = record(v, 'weapon'), key = id(w.id, 'weapon.id'); if (seen.has(key)) throw new Error('Duplicate weapon ID.'); seen.add(key); return { id: key, type: weaponType(w.type), uses: num(w.uses, 'weapon.uses', 0, 100, true) }; });
+  const equipped = e.equipped === null ? null : id(e.equipped, 'equipped'); if (equipped && !weapons.some(w => w.id === equipped)) throw new Error('Equipped weapon does not exist.'); return { weapons, equipped };
+}
+function validateCombat(v: unknown): CombatState {
+  const raw = record(v, 'combat'), fresh = freshCombat(), equipment = validateEquipment(raw); fresh.weapons = equipment.weapons; fresh.equipped = equipment.equipped;
+  fresh.cooldown = num(raw.cooldown, 'cooldown', 0, 4); fresh.sequence = num(raw.sequence, 'combat.sequence', 1, 1e9, true); fresh.kills = num(raw.kills, 'kills', 0, 1e9, true);
+  const actors = record(raw.actors, 'actors'); if (Object.keys(actors).length > 15000) throw new Error('Too many combat actors.');
+  for (const [key, value] of Object.entries(actors)) {
+    const a = record(value, 'actor'); if (typeof a.type !== 'string' || !Object.hasOwn(ACTOR_HP, a.type)) throw new Error('Unknown actor type.'); const type = a.type as ActorType;
+    if (a.id !== key) throw new Error('Actor ID does not match its record key.');
+    fresh.actors[id(key, 'actor.id')] = { id: key, type, ...point(a, 'actor'), hp: num(a.hp, 'actor.hp', 0, ACTOR_HP[type]), weapon: a.weapon === null ? null : weaponType(a.weapon), groupId: id(a.groupId, 'groupId'), villageId: a.villageId === null ? null : id(a.villageId, 'villageId'), homeX: num(a.homeX, 'homeX', -1e6, 1e6), homeZ: num(a.homeZ, 'homeZ', -1e6, 1e6), heading: num(a.heading, 'heading', -1000, 1000), cooldown: num(a.cooldown, 'actor.cooldown', 0, 5), roamTimer: num(a.roamTimer, 'roamTimer', -1, 10), targetX: num(a.targetX, 'targetX', -1e6, 1e6), targetZ: num(a.targetZ, 'targetZ', -1e6, 1e6), alerted: bool(a.alerted, 'alerted') };
+  }
+  for (const key of ['encounters', 'villageAlerts', 'charredNodes', 'charredTrees'] as const) fresh[key] = array(raw[key], key, 50000).map(v => id(v, key));
+  fresh.projectiles = array(raw.projectiles, 'projectiles', 1000).map(v => {
+    const p = record(v, 'projectile'); if (!['arrow', 'pellet', 'bottle', 'swing'].includes(String(p.kind))) throw new Error('Unknown projectile kind.');
+    return { id: id(p.id, 'projectile.id'), ownerId: id(p.ownerId, 'ownerId'), kind: p.kind as CombatState['projectiles'][number]['kind'], ...point(p, 'projectile'), targetX: num(p.targetX, 'targetX', -1e6, 1e6), targetZ: num(p.targetZ, 'targetZ', -1e6, 1e6), fromX: num(p.fromX, 'fromX', -1e6, 1e6), fromZ: num(p.fromZ, 'fromZ', -1e6, 1e6), age: num(p.age, 'age', 0, 10), duration: num(p.duration, 'duration', .01, 10), damage: num(p.damage, 'damage', 0, 100) };
+  });
+  fresh.fires = array(raw.fires, 'fires', 500).map(v => { const f = record(v, 'fire'); return { ...point(f, 'fire'), id: id(f.id, 'fire.id'), ownerId: id(f.ownerId, 'ownerId'), remaining: num(f.remaining, 'fire.remaining', 0, 10), tick: num(f.tick, 'fire.tick', 0, 1), charred: bool(f.charred, 'charred') }; });
+  fresh.drops = array(raw.drops, 'drops', 1000).map(v => { const d = record(v, 'drop'); return { ...point(d, 'drop'), id: id(d.id, 'drop.id'), weapon: weaponType(d.weapon), uses: num(d.uses, 'drop.uses', 0, 100, true) }; });
+  const statuses = record(raw.statuses, 'statuses'); if (Object.keys(statuses).length > 10000) throw new Error('Too many status effects.');
+  for (const [key, value] of Object.entries(statuses)) { const status = record(value, 'status'); fresh.statuses[id(key, 'status.id')] = { bleed: num(status.bleed, 'bleed', 0, 5), tick: num(status.tick, 'bleed tick', 0, 1) }; }
+  const w = record(raw.weather, 'weather'); if (w.mode !== 'clear' && w.mode !== 'snow') throw new Error('Weather must be clear or snow.'); fresh.weather = { mode: w.mode, remaining: num(w.remaining, 'weather.remaining', 0, 300), cycle: num(w.cycle, 'weather.cycle', 0, 1e9, true) };
+  return fresh;
+}
+export function exportFull(state: GameState) { const { world, ...rest } = state; return JSON.stringify({ format: 'frostbound', formatVersion: 2, mode: 'full-save', world, state: rest }, null, 2); }
 export function exportSandbox(state: GameState) {
-  return JSON.stringify({ format: 'frostbound', formatVersion: 1, mode: 'sandbox-config', world: state.world, startingState: { resources: state.inventory, stockpile: state.stockpile, furnace: { level: state.furnaces[0].level, fuel: state.furnaces[0].fuel }, settings: state.settings } }, null, 2);
+  return JSON.stringify({ format: 'frostbound', formatVersion: 2, mode: 'sandbox-config', world: state.world, startingState: { resources: state.inventory, stockpile: state.stockpile, furnace: { level: state.furnaces[0].level, fuel: state.furnaces[0].fuel, charcoal: state.furnaces[0].charcoal }, equipment: { weapons: state.combat.weapons, equipped: state.combat.equipped }, settings: state.settings } }, null, 2);
 }
 /** Parse into a new detached state. The live state is never referenced or mutated. */
 export function importJSON(text: string, expectedMode?: 'full-save' | 'sandbox-config'): GameState {
   if (text.length > 12000000) throw new Error('JSON file is larger than 12 MB.');
   let parsed: unknown; try { parsed = JSON.parse(text); } catch { throw new Error('Invalid JSON syntax. Check commas, quotes and numeric values.'); }
-  const doc = record(parsed, 'document'); if (doc.format !== 'frostbound' || doc.formatVersion !== 1) throw new Error('Unsupported save format or formatVersion. Expected frostbound formatVersion 1.');
+  const doc = record(parsed, 'document'); if (doc.format !== 'frostbound' || ![1, 2].includes(doc.formatVersion as number)) throw new Error('Unsupported save format or formatVersion. Expected frostbound formatVersion 1 or 2.');
+  if (doc.formatVersion === 1) {
+    const body = record(doc.mode === 'sandbox-config' ? doc.startingState : doc.state, 'legacy state');
+    for (const k of [doc.mode === 'sandbox-config' ? 'resources' : 'inventory', 'stockpile']) { const r = record(body[k], k); r.charcoal ??= 0; }
+    if (doc.mode === 'full-save') {
+      record(body.player, 'player').hp ??= 100; body.combat = freshCombat();
+      for (const f of array(body.furnaces, 'furnaces')) record(f, 'furnace').charcoal ??= 0;
+      for (const w of array(body.workers, 'workers')) record(w, 'worker').hp ??= 100;
+      for (const value of Object.values(record(record(body.changes, 'changes').npcs, 'npcs'))) { const npc = record(value, 'npc'); npc.hp ??= 100; record(npc.inventory, 'NPC inventory').charcoal ??= 0; }
+    }
+  }
   if (doc.mode !== 'full-save' && doc.mode !== 'sandbox-config') throw new Error('mode must be full-save or sandbox-config.');
   if (expectedMode && doc.mode !== expectedMode) throw new Error(`This is a ${String(doc.mode)} file; use the matching import mode.`);
   const world = validateWorld(doc.world);
@@ -46,33 +86,36 @@ export function importJSON(text: string, expectedMode?: 'full-save' | 'sandbox-c
     const start = record(doc.startingState, 'startingState'), settings = validateSettings(start.settings), fresh = newState(world, settings), f = record(start.furnace, 'startingState.furnace');
     fresh.inventory = validateBalances(start.resources, settings); fresh.stockpile = validateBalances(start.stockpile, settings, 'stockpile');
     fresh.furnaces[0].level = num(f.level, 'furnace.level', 1, 25, true); fresh.furnaces[0].fuel = num(f.fuel, 'furnace.fuel', 0, 3600);
+    fresh.furnaces[0].charcoal = num(f.charcoal ?? 0, 'furnace.charcoal', 0, 3600);
+    if (start.equipment !== undefined) { const equipment = validateEquipment(start.equipment); fresh.combat.weapons = equipment.weapons; fresh.combat.equipped = equipment.equipped; fresh.combat.sequence = Math.max(1, ...equipment.weapons.map(w => Number(w.id.split(':').at(-1)) + 1 || 1)); }
     return fresh;
   }
   const raw = record(doc.state, 'state'), settings = validateSettings(raw.settings), player = record(raw.player, 'player'), changes = record(raw.changes, 'changes');
   const state = newState(world, settings);
-  state.player = { ...point(player, 'player'), warmth: num(player.warmth, 'warmth', 0, 100), heading: num(player.heading, 'heading', -1000000, 1000000) };
+  state.player = { ...point(player, 'player'), warmth: num(player.warmth, 'warmth', 0, 100), hp: num(player.hp, 'hp', 0, 100), heading: num(player.heading, 'heading', -1000000, 1000000) };
+  state.combat = validateCombat(raw.combat);
   state.inventory = validateBalances(raw.inventory, settings); state.stockpile = validateBalances(raw.stockpile, settings, 'stockpile');
   state.elapsed = num(raw.elapsed, 'elapsed', 0, 1e12); state.nextId = num(raw.nextId, 'nextId', 1, 1e9, true);
   const seen = new Set<string>();
   const unique = (key: string) => { if (seen.has(key)) throw new Error(`Duplicate entity ID ${key}.`); seen.add(key); return key; };
   state.buildings = array(raw.buildings, 'buildings', 2000).map((v, i) => { const b = record(v, `building ${i}`); if (typeof b.type !== 'string' || !Object.hasOwn(BUILDINGS, b.type)) throw new Error(`Unknown building type ${String(b.type)}.`); return { id: unique(id(b.id, 'building.id')), ...point(b, 'building'), type: b.type as BuildingType, rotation: num(b.rotation, 'rotation', -1000, 1000) }; });
-  state.furnaces = array(raw.furnaces, 'furnaces', 2001).map(v => { const f = record(v, 'furnace'); return { id: id(f.id, 'furnace.id'), ...point(f, 'furnace'), fuel: num(f.fuel, 'fuel', 0, 3600), level: num(f.level, 'level', 1, 25, true) }; });
+  state.furnaces = array(raw.furnaces, 'furnaces', 2001).map(v => { const f = record(v, 'furnace'); return { id: id(f.id, 'furnace.id'), ...point(f, 'furnace'), fuel: num(f.fuel, 'fuel', 0, 3600), charcoal: num(f.charcoal, 'charcoal', 0, 3600), level: num(f.level, 'level', 1, 25, true) }; });
   if (state.furnaces.filter(f => f.id === 'home').length !== 1 || state.furnaces[0].id !== 'home' || state.furnaces[0].x !== 0 || state.furnaces[0].z !== 0) throw new Error('Exactly one home furnace at 0,0 must be first.');
   if (new Set(state.furnaces.map(f => f.id)).size !== state.furnaces.length) throw new Error('Duplicate furnace IDs.');
   for (const b of state.buildings) if (b.type === 'furnace' && !state.furnaces.some(f => f.id === b.id && f.x === b.x && f.z === b.z)) throw new Error('A built furnace is missing its matching fuel state.');
-  for (const f of state.furnaces) if (f.id !== 'home' && !state.buildings.some(b => b.id === f.id && b.type === 'furnace')) throw new Error('Outpost furnace has no building.');
+  for (const f of state.furnaces) if (f.id !== 'home' && !state.buildings.some(b => b.id === f.id && b.type === 'furnace') && !new WorldManager(world).villages().some(v => `${v.id}:furnace` === f.id && v.x === f.x && v.z + 1 === f.z)) throw new Error('Outpost furnace has no building or fixed village.');
   state.workers = array(raw.workers, 'workers', 2000).map(v => {
     const w = record(v, 'worker'); if (!['seeking', 'gathering', 'returning', 'blocked'].includes(String(w.state))) throw new Error('Invalid worker state.');
     const hutId = id(w.hutId, 'worker.hutId'); if (!state.buildings.some(b => b.id === hutId && b.type === 'hut')) throw new Error('Worker is missing its hut.');
-    return { id: unique(id(w.id, 'worker.id')), hutId, ...point(w, 'worker'), sourceId: w.sourceId === null ? null : id(w.sourceId, 'sourceId'), state: w.state as GameState['workers'][number]['state'], load: num(w.load, 'worker.load', 0, 3, true), progress: num(w.progress, 'worker.progress', 0, 100) };
+    return { id: unique(id(w.id, 'worker.id')), hutId, hp: num(w.hp, 'worker.hp', 0, 100), ...point(w, 'worker'), sourceId: w.sourceId === null ? null : id(w.sourceId, 'sourceId'), state: w.state as GameState['workers'][number]['state'], load: num(w.load, 'worker.load', 0, 3, true), progress: num(w.progress, 'worker.progress', 0, 100) };
   });
   if (new Set(state.workers.map(w => w.hutId)).size !== state.workers.length) throw new Error('Only one worker per hut is supported.');
   const maxBuilt = Math.max(0, ...state.buildings.map(b => Number(b.id.split(':')[1]) || 0)); if (state.nextId <= maxBuilt) throw new Error('nextId must exceed existing building numbers.');
   state.changes.nodes = numericMap(changes.nodes, 'changes.nodes'); state.changes.fishing = numericMap(changes.fishing, 'changes.fishing');
   state.changes.containers = array(changes.containers, 'containers').map(v => id(v, 'container')); state.discovered = array(raw.discovered, 'discovered').map(v => id(v, 'discovered'));
-  if (state.discovered.some(k => k !== 'home' && !/^ruin:-?\d{1,4}:-?\d{1,4}$/.test(k))) throw new Error('Discovered locations must be home or stable ruin:regionX:regionZ IDs.');
+  if (state.discovered.some(k => k !== 'home' && !/^ruin:-?\d{1,4}:-?\d{1,4}$/.test(k) && !new WorldManager(world).villages().some(v => v.id === k))) throw new Error('Unknown discovered location ID.');
   const npcs = record(changes.npcs, 'npcs'); if (Object.keys(npcs).length > 10000) throw new Error('Too many NPC records.');
-  for (const [key, value] of Object.entries(npcs)) state.changes.npcs[id(key, 'npc.id')] = { inventory: validateBalances(record(value, 'NPC').inventory, settings, 'NPC inventory') };
+  for (const [key, value] of Object.entries(npcs)) state.changes.npcs[id(key, 'npc.id')] = { inventory: validateBalances(record(value, 'NPC').inventory, settings, 'NPC inventory'), hp: num(record(value, 'NPC').hp, 'NPC.hp', 0, 100) };
   return state;
 }
 export function saveLocal(state: GameState): ResultMessage {

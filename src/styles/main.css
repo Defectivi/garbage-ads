@@ -344,3 +344,53 @@ label { display: grid; gap: 8px; margin: 21px 0 13px; font: 9px var(--mono); let
   .modal { max-height: 94dvh; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+/* Expedition combat interface */
+.menu { color: #ecf3f5; background: linear-gradient(90deg,#071722f5 0%,#102632d9 35%,#122a3440 75%); }
+.menu header, .menu footer { color:#a9c3cf; }
+.menu-panel { top:15%; width:400px; }
+.menu-panel h1 { font:900 clamp(48px,6vw,82px)/.95 'DM Sans',sans-serif; letter-spacing:-4px; margin:25px 0; }
+.menu-panel h1 em { color:#ffb45b; font-style:normal; }
+.menu-panel > p { color:#a9bec8; font-size:13px; line-height:1.7; }
+.menu-panel > .eyebrow { color:#ffb45b; }
+.menu .seed-label { color:#a6bbc6; }
+.menu .seed-control { border-color:#69839366; }
+.menu .seed-control input, .menu .seed-control button { color:#f3f6ed; background:transparent; }
+.menu .primary { background:#e7a052; color:#17232a; border-color:#ffd49b; font-weight:800; box-shadow:0 5px 22px #d7923330; }
+.menu .secondary { background:#284352; border-color:#7793a0; }
+.menu-tools { border-color:#7793a044; }
+.menu-tools button { color:#b9cdd5; }
+.menu-coordinate b { font:800 35px/1.1 'DM Sans',sans-serif; letter-spacing:-1px; }
+.combat-hud { position:absolute; left:3%; bottom:110px; width:350px; padding:14px; background:#0d202deb; border:1px solid #68859480; border-left:3px solid #e9ac63; color:#eef4ed; box-shadow:0 8px 30px #10233333; }
+.health-line { display:flex; justify-content:space-between; gap:8px; font:10px var(--mono); }
+.health-line span { color:#afc9d6; font-size:9px; }
+.hp-meter { height:5px; margin:9px 0 12px; background:#ffffff20; }
+.hp-meter i { display:block; height:100%; background:#e67f69; transition:width .15s; }
+#weapon-rack { display:flex; gap:4px; overflow:auto; max-height:100px; pointer-events:auto; }
+#weapon-rack button { position:relative; flex:0 0 90px; padding:10px 6px 7px; background:#29404d; color:#d8e4e8; border:1px solid #617988; box-shadow:none; }
+#weapon-rack b { display:block; font-size:10px; }
+#weapon-rack kbd { position:absolute; top:1px; left:3px; color:#b6c8cf; font-size:7px; }
+#weapon-rack small { display:block; font:9px var(--mono); margin-top:5px; color:#a6bdc8; }
+#weapon-rack button.selected, #sprint-button.selected { border-color:#ffc67d; background:#604c34; color:#ffe1b3; }
+#weapon-state { display:block; font:8px var(--mono); margin:9px 0; color:#a9c3ce; }
+#attack-button, #sprint-button { background:#344e5e; color:#f3e6cf; padding:7px 10px; font-size:9px; border-color:#8297a466; }
+#attack-button { background:#9b5237; }
+.armory { margin-top:20px; border-top:1px solid #5c74734a; padding-top:12px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.armory h3,.armory p { grid-column:1/-1; margin:3px 0 10px; }
+.armory button { text-align:left; font-size:11px; }
+.armory small,.armory span { display:block; margin-top:6px; font-size:9px; }
+@media(max-width:700px) {
+ .menu-panel { width:340px; top:14%; }
+ .menu-panel h1 { font-size:58px; letter-spacing:-3px; }
+ .combat-hud { left:4%; bottom:220px; width:230px; padding:9px; }
+ #weapon-rack button { flex-basis:78px; }
+ .health-line { font-size:9px; }
+ .health-line span { font-size:7px; }
+ #weapon-state { font-size:7px; }
+ .resource-bar b { font-size:8px; }
+ .resource-bar .item-icon { width:18px; height:18px; }
+}
+@media(max-height:600px) { .menu-panel { top:13%; } .menu-panel h1 { font-size:42px; margin:12px 0; } .menu-panel > p { margin-bottom:10px; } .combat-hud { bottom:75px; padding:8px; width:300px; } }
+.menu::before { background:linear-gradient(90deg,#071722f7 0%,#102632e8 35%,#122a3433 85%); }
+.menu-panel h1 em { font-weight:800; }
+.menu header b { color:#d5e5ea; }
+.menu-coordinate { color:#e7eef1; }
