@@ -1,0 +1,80 @@
+{
+  "format": "frostbound",
+  "formatVersion": 1,
+  "mode": "full-save",
+  "world": {
+    "seed": 48192,
+    "generationVersion": 1,
+    "seeds": {
+      "terrain": 33224,
+      "rivers": 44367,
+      "biomes": 63969,
+      "resources": 27341,
+      "ruins": 13969,
+      "wildlife": 60270
+    },
+    "config": {
+      "chunkSize": 32,
+      "initialRegionSize": 256,
+      "worldScale": 1,
+      "riverDensity": 1,
+      "ruinDensity": 1,
+      "resourceDensity": 1
+    }
+  },
+  "state": {
+    "player": {
+      "x": 0,
+      "z": 4,
+      "warmth": 100,
+      "heading": 0
+    },
+    "inventory": {
+      "wood": 5000,
+      "stone": 250,
+      "meat": 20,
+      "fish": 40,
+      "metal": 10,
+      "gold": 100
+    },
+    "stockpile": {
+      "wood": 0,
+      "stone": 0,
+      "meat": 0,
+      "fish": 0,
+      "metal": 0,
+      "gold": 0
+    },
+    "furnaces": [
+      {
+        "id": "home",
+        "x": 0,
+        "z": 0,
+        "fuel": 100,
+        "level": 1
+      }
+    ],
+    "buildings": [],
+    "workers": [],
+    "changes": {
+      "nodes": {},
+      "containers": [],
+      "fishing": {},
+      "npcs": {}
+    },
+    "discovered": [
+      "home"
+    ],
+    "elapsed": 0,
+    "nextId": 1,
+    "settings": {
+      "difficulty": "relaxed",
+      "renderDistance": 2,
+      "sound": true,
+      "allowDebt": false,
+      "inventoryLimit": 0,
+      "resourceMin": -9999999,
+      "resourceMax": 9999999
+    }
+  }
+}
