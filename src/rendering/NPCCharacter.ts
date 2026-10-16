@@ -1,3 +1,4 @@
+import {createWolfAsset} from './WolfAsset';
 import { meleePose } from './MeleePose';
 import * as T from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -11,7 +12,7 @@ import { solveArm } from './RigIK';
 
 const templates=new Map<string,Promise<{scene:T.Group;animations:T.AnimationClip[]}>>();
 function template(id:string) {
-  if(!templates.has(id))templates.set(id,new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${id}.glb`).catch(()=>id.startsWith('bear-')?createBearAsset(id):createSurvivorAsset(CHARACTER_STYLES.find(s=>s.id===id))));
+  if(!templates.has(id))templates.set(id,new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${id}.glb`).catch(()=>id.startsWith('wolf-')?createWolfAsset(id):id.startsWith('bear-')?createBearAsset(id):createSurvivorAsset(CHARACTER_STYLES.find(s=>s.id===id))));
   return templates.get(id)!;
 }
 export class NPCCharacter {
@@ -33,7 +34,7 @@ export class NPCCharacter {
     this.speed=T.MathUtils.lerp(this.speed,dt>0?Math.min(3,distance/dt):0,1-Math.exp(-dt*12));
     this.object.position.set(point.x,height,point.z);this.object.rotation.y+=Math.atan2(Math.sin(heading-this.object.rotation.y),Math.cos(heading-this.object.rotation.y))*(1-Math.exp(-dt*10));
     if(!this.ready)return;
-    const bear=this.appearance.startsWith('bear-'),moving=this.speed>.08;
+    const bear=this.appearance.startsWith('bear-')||this.appearance.startsWith('wolf-'),moving=this.speed>.08;
     this.play(moving?'walk':'idle');if(this.base&&moving)this.base.setEffectiveTimeScale(T.MathUtils.clamp(this.speed/(bear?1.5:1.8),.4,1.5));
     if(this.weaponType!==(weapon??undefined)) { if(this.weapon)disposeWeapon(this.weapon);this.weapon=undefined;this.weaponType=weapon??undefined;if(weapon&&!bear){this.weapon=weaponMesh(weapon,true);if(weapon==='shotgun')this.weapon.scale.setScalar(.8);if(['wooden_sword','spear','machete'].includes(weapon))this.weapon.rotation.x=weapon==='spear'?0:Math.PI;this.asset!.getObjectByName(weapon==='bow'?'HandL':'HandR')?.add(this.weapon);}}
     if(this.action&&this.upper&&this.upper.time>=this.upper.getClip().duration-.02)this.action=false;

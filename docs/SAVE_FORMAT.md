@@ -92,7 +92,7 @@ Formats 1 and 2 are supported. Format 1 migrates with charcoal zero, full HP, an
 
 ## Phase 1 generation compatibility
 
-New worlds use generation 3 and require eight explicit unsigned 16-bit stream seeds. The village stream determines guard composition; the loot stream determines equipment drops. Neither changes terrain, rivers, vegetation or resource positions. Village coordinates remain the existing fixed sites. Save format remains 2 because the mutable state schema is unchanged.
+New worlds use generation 4 and require eight explicit unsigned 16-bit stream seeds. The village stream determines guard composition; the loot stream determines equipment drops. Neither changes terrain, rivers, vegetation or resource positions. Generation 4 moves villages to distant fixed sites; generations 1-3 preserve their original layouts. Save format remains 2 because the mutable state schema is unchanged.
 
 Generations 1 and 2 still load. Missing `seeds.villages` and `seeds.loot` default to the saved wildlife seed, exactly matching the old algorithms. Explicit zero is preserved; null, fractional and out-of-range values are rejected. Generation 3 never silently fills missing seeds. Imported legacy worlds retain their generation version, layouts, changes and drop outcomes; export writes the normalized seed fields.
 
@@ -111,3 +111,5 @@ Projectiles may additionally contain `weapon`, `weaponId`, `hitIds`, `volleyId` 
 ## Settlement and terrain expansion
 
 Format 2 additionally accepts optional player `invulnerable` (0-5s) and `heatTime` (0-3s), `changes.terrain` (felled/broken stages), `changes.structures` (validated stage/HP), `changes.refuges` (known civilian/worker/guard and house, phase/position/timer), `changes.lootTaken` (unique generated village-pile IDs), and `changes.groundLoot` (validated persistent salvage). Missing fields default to empty records. Projectile `weapon` may be the action `punch`; equipment arrays still accept only real weapons. New state has an empty equipment array. Existing format-2 equipment persists when loaded. Pending gathering and falling-tree effects are not saved and cannot duplicate awards. Generated houses use stable `house:<settlement-id>:<index>` IDs. Intact and ruined structures remain in their original building/furnace records even after disappearance, with their stage stored separately; this preserves worker and furnace references.
+
+Wilderness optional fields: actors can be `wolf` (50 HP) and may carry `pursuitId` and `retreating`; statuses may additionally contain `wolfBleed` (0-12 seconds) and `wolfTick` (0-1). Player `stunned` accepts 0-3 seconds, and `hypothermia` contains `level` (1 or 2), `waterTime` (0-5) and `tick` (0-3). Hypothermic imports cap current HP at 90. Older records remain valid. These effects persist across full saves and reset on new worlds/respawn.

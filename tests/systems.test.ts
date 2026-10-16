@@ -49,7 +49,7 @@ test('build, save, unload and revisit retain placed structure and depleted nodes
   game.state.changes.nodes['starter:wood'] = 0; for (let x = -150; x <= 150; x++) game.world.chunk(x, 9); const node = game.world.chunk(0, 0).nodes.find(n => n.id === 'starter:wood')!; assert.equal(game.nodeRemaining(node), 0);
   const loaded = new Game(importJSON(snapshot)); assert.deepEqual(loaded.state.buildings, game.state.buildings); assert.equal(loaded.state.workers.length, 1);
 });
-test('river blocks walking except explicit bridges; valid fishing yields consumable inventory', () => {
+test('river identifies wet crossings and dry bridges; valid fishing yields consumable inventory', () => {
   const game = new Game(newState(worldSpec(42))); game.paused = false; const r = game.world.river(12, 48); assert(game.world.isWater(12, r.center)); assert(!game.world.isWater(0, game.world.river(0, 48).center));
   const spot = game.world.around({ x: 12, z: r.center }, 1).flatMap(c => c.fishing)[0]; assert(spot); game.state.player.x = spot.x; game.state.player.z = spot.z;
   const old = game.state.inventory.fish; assert(game.startFishing(spot).ok); for (let i = 0; i < 42; i++) game.update(.1); assert(game.state.inventory.fish > old); assert(game.state.changes.fishing[spot.id] > 0);

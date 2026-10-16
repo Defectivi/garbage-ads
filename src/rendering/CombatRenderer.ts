@@ -19,8 +19,8 @@ export class CombatRenderer {
   private mats = { white: new THREE.MeshStandardMaterial({ color: 0xe6e9df }), black: new THREE.MeshStandardMaterial({ color: 0x28353d }), guard: new THREE.MeshStandardMaterial({ color: 0x3c6874 }), bandit: new THREE.MeshStandardMaterial({ color: 0x4d504a }), arsonist: new THREE.MeshStandardMaterial({ color: 0x9e5539 }), fur: new THREE.MeshStandardMaterial({ color: 0xbda788 }), red: new THREE.MeshBasicMaterial({ color: 0xce6e4e }), green: new THREE.MeshBasicMaterial({ color: 0x82b694 }), fire: new THREE.MeshBasicMaterial({ color: 0xff9437, transparent: true, opacity: .42, depthWrite: false }), core: new THREE.MeshBasicMaterial({ color: 0xffd16d }), dark: new THREE.MeshBasicMaterial({ color: 0x24363e }), gold: new THREE.MeshBasicMaterial({ color: 0xf3ce7c }) };
   private piece(g: THREE.Group, geometry: keyof CombatRenderer['geometry'], material: THREE.Material, x: number, y: number, z: number, sx: number, sy: number, sz: number) { const mesh = new THREE.Mesh(this.geometry[geometry], material); mesh.position.set(x, y, z); mesh.scale.set(sx, sy, sz); g.add(mesh); return mesh; }
   private actor(type: ActorType, weapon: WeaponType | null, id: string) {
-    const bear = type === 'polar_bear';
-    const appearance = bear ? bearAppearance(id) : characterStyle(type,id).id;
+    const bear = type === 'polar_bear'||type==='wolf';
+    const appearance = type==='wolf'?(id.length%2?'wolf-slate':'wolf-ash'):bear ? bearAppearance(id) : characterStyle(type,id).id;
     const visual = new NPCCharacter(appearance); this.characters.set(id,visual); const g=visual.object;g.userData.actorId=id;
     const bar = new THREE.Group(); bar.name = 'health'; bar.position.y = bear ? 2.5 : 2.4;
     this.piece(bar, 'box', this.mats.dark, 0, 0, 0, 1.6, .14, .02); const fill = this.piece(bar, 'box', type === 'guard' ? this.mats.green : this.mats.red, 0, 0, .02, 1.5, .08, .02); fill.name = 'fill'; g.add(bar); return g;

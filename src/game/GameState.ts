@@ -10,7 +10,7 @@ export interface NPCState { inventory: Balances; hp: number }
 export interface GameState {
   world: WorldSpec;
   respawnFurnaceId?: string;
-  player: Point & { warmth: number; heading: number; hp: number; invulnerable?:number; heatTime?:number };
+  player: Point & { warmth: number; heading: number; hp: number; invulnerable?:number; heatTime?:number; stunned?:number; hypothermia?:{level:1|2;waterTime:number;tick:number} };
   combat: CombatState;
   inventory: Balances; stockpile: Balances;
   furnaces: Furnace[]; buildings: Building[]; workers: Worker[];
@@ -20,3 +20,5 @@ export interface GameState {
 export function newState(world: WorldSpec, settings: Partial<Settings> = {}): GameState {
   return { world: structuredClone(world), player: { x: 0, z: 4, warmth: 100, heading: 0, hp: 100 }, combat: freshCombat(), inventory: balances({ wood: 12, fish: 3 }), stockpile: balances(), furnaces: [{ id: 'home', x: 0, z: 0, fuel: 100, charcoal: 0, level: 1 }], buildings: [], workers: [], changes: { nodes: {}, containers: [], fishing: {}, npcs: {}, terrain:{}, structures:{}, refuges:{}, lootTaken:[], groundLoot:{} }, discovered: ['home'], elapsed: 0, nextId: 1, settings: { ...DEFAULT_SETTINGS, ...settings } };
 }
+
+export function maxPlayerHP(state:GameState){return state.player.hypothermia?90:100;}

@@ -1,3 +1,4 @@
+import {createWolfAsset} from '../src/rendering/WolfAsset';
 import { mkdirSync,writeFileSync } from 'node:fs';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { CHARACTER_STYLES } from '../src/data/characters';
@@ -19,3 +20,5 @@ for(const style of CHARACTER_STYLES) {
 }
 for(const name of ['bear-ivory','bear-frost']) {const asset=createBearAsset(name);const glb=await new GLTFExporter().parseAsync(asset.scene,{binary:true,animations:asset.animations});writeFileSync(`public/models/${name}.glb`,Buffer.from(glb as ArrayBuffer));}
 console.log('Prepared 14 humanoid NPC appearances and 2 rigged polar bear models.');
+
+for(const name of ['wolf-slate','wolf-ash']){const asset=createWolfAsset(name);const glb=await new GLTFExporter().parseAsync(asset.scene,{binary:true,animations:asset.animations});writeFileSync(`public/models/${name}.glb`,Buffer.from(glb as ArrayBuffer));}

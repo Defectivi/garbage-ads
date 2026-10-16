@@ -31,7 +31,7 @@ The built application is in `dist/`; preview serves it at **http://localhost:417
 ## Start exploring
 
 1. Enter a **world seed from 0 to 65535**, randomize it, or enter the current world.
-2. **F** starts a three-second gathering action within three units. Hold it to repeatedly gather timber, stone, or metal. Guaranteed wood and stone sources are beside home.
+2. **F** starts a one-second gathering action within three units. Hold it to repeatedly gather timber, stone, or metal. Guaranteed wood and stone sources are beside home.
 3. Approach a furnace and press F to burn **one wood for 60 seconds of fuel**. Heating rings indicate actual warmth recovery. Initial fuel lasts 100 seconds.
 4. Open **Build**. A **hut costs 5 wood** and recruits a working woodcutter. Storehouses, trail shelters, and outpost furnaces have distinct functional effects. Preview, rotate, confirm or cancel construction.
 5. The map gives a rumour of a generated settlement. Follow it, search the chest, and interact with the trader. Gold purchases and direct resource barter are supported.
@@ -59,7 +59,7 @@ The built application is in `dist/`; preview serves it at **http://localhost:417
 
 The joystick returns smoothly to neutral. Right-side camera gestures begin on terrain, so buttons and the left joystick do not rotate the camera. Blur and pause clear movement, sprint and held attacks. Attacks share the combat system, cooldown, durability and damage rules across mouse, keyboard and touch.
 
-**Planned controls, not yet implemented:** fixed weapon bindings 1=bow, 2=shotgun, 3=Molotov, 4=wooden sword, 5=spear, 6=machete; dedicated F/Pickup; touch ranged Aim; pinch zoom; I/M toggle-to-close. Current pickup uses the F/Interact prompt. Mouse wheel always zooms. Inventory and map open with E/M (I remains an inventory alias) and close with Escape.
+**Planned controls, not yet implemented:** fixed weapon bindings 1=bow, 2=shotgun, 3=Molotov, 4=wooden sword, 5=spear, 6=machete; dedicated F/Pickup; touch ranged Aim; pinch zoom. Current pickup uses the F/Interact prompt. Mouse wheel always zooms. Inventory and map open with E/M (I remains an inventory alias) and close with E/I or M as appropriate, as well as Escape.
 
 Tap/click terrain to reposition a selected building preview. Placement is limited to 15 units from the survivor and rejects deep water, steep slopes, solid overlaps, occupied player space, the home delivery apron, and essential trader/chest/fishing access. Costs spend positive stored resources first, then carried resources. Failed/cancelled purchases do not spend anything.
 
@@ -87,7 +87,7 @@ The renderer loads a square of nearby chunks (distance 1–3, default 2), create
 
 Generation version **3** uses Mulberry32 plus independent coordinate-addressed streams. Stream seeds are 16-bit values derived from the world seed with FNV-1a and a documented integer avalanche in `src/utils/SeededRNG.ts`. The eight stream labels are terrain, rivers, biomes, resources, ruins, villages, wildlife, and loot. Resource coordinates/amounts use only their resource stream; changing that stream does not move terrain, rivers, or trees. Terrain/rivers intentionally cooperate to carve waterways. Wildlife seeds encounters and weather; villages seeds guard composition; loot seeds equipment-drop outcomes. The current three village positions are fixed rather than randomly placed.
 
-Generation 3 requires all eight seeds. Generations 1 and 2 remain supported: when their village/loot fields are absent, import uses their stored wildlife seed for those fields, retaining the previous outcomes. Terrain and resource geometry are preserved. Exported JSON includes every stream seed and the generation configuration. Edit `world.seeds.resources` to customize resources independently. `world.config` supports chunk size, starting-region scale, terrain scale, river density, ruin density, and resource density. With densities set to zero, the corresponding optional features can be absent; default settings provide rivers and a starting-region ruin. Resource candidates that lie in deep water are not rendered or harvestable; other accessible nodes and guaranteed starter sources remain available.
+Generations 3 and 4 require all eight seeds. Generations 1 and 2 remain supported: when their village/loot fields are absent, import uses their stored wildlife seed for those fields, retaining the previous outcomes. Terrain and resource geometry are preserved. Exported JSON includes every stream seed and the generation configuration. Edit `world.seeds.resources` to customize resources independently. `world.config` supports chunk size, starting-region scale, terrain scale, river density, ruin density, and resource density. With densities set to zero, the corresponding optional features can be absent; default settings provide rivers and a starting-region ruin. Resource candidates that lie in deep water are not rendered or harvestable; other accessible nodes and guaranteed starter sources remain available.
 
 ## Saves and sandbox JSON
 
@@ -153,7 +153,7 @@ All mesh artwork and synthesized sounds are original procedural work. Bundled DM
 
 ## Combat and whiteouts
 
-Start a new expedition for terrain generation 3 and its three fixed villages: Hearthwatch (40, 8), Stonehaven (-72, -32), and Northpass (132, 112). Villages have traders, 3-5 armed guards, and a furnace. Old terrain-generation-1 saves keep their original terrain and ruins. Bandits roam in groups of 2-10; polar bears and arsonists also patrol. Guards fight enemies and retaliate when you attack their village.
+Start a new expedition for terrain generation 4 and its three distant fixed villages: Hearthwatch (128, 8), Stonehaven (-144, -32), and Northpass (192, 176). Each has packed paths connecting houses, trading areas and the entrance. Older saves preserve their village sites. Villages have traders, 3-5 armed guards, and a furnace. Old terrain-generation-1 saves keep their original terrain and ruins. Bandits roam in groups of 2-10; polar bears and arsonists also patrol. Guards fight enemies and retaliate when you attack their village.
 
 Move with the keyboard or joystick to set facing; that direction is retained when you stop. Left click and the touch Attack button assist a nearby reachable hostile; otherwise attacks follow your facing. Space attacks forward. Mouse movement does not redirect the survivor. Equip from the weapon rack, keys 1-6, or the Rucksack equipment list. Hold Shift to sprint (9 rather than 6 units/sec), or hold the touch Sprint button; exposure consumes twice the warmth. New survivors start unarmed with a 2-damage punch; weapons can be traded or found in village supplies. Traders sell all six weapons using carried resources, and defeated armed actors have a deterministic 7% equipment drop chance. Collect drops with F. Melee weapons wear once per successful enemy-hitting swing, with 100 such hits. Ranged weapons have 100 shots and unlimited ammo; enemy weapons never wear out.
 
@@ -166,7 +166,7 @@ Move with the keyboard or joystick to set facing; that direction is retained whe
 | Shotgun | 12-95 | 4s | 3-unit, 80-degree pellet fan; closer targets take more damage |
 | Molotov | 3/sec | 4s | Traveling bottle, 4-unit radius, 10s fire; friendly fire applies |
 
-One world unit is one tile. Sword, machete and shotgun values reflect the latest requested buffs; bow damage, machete cooldown and molotov cooldown/DOT retain their previous tuning. All values live in `src/data/weapons.ts` and `src/systems/CombatSystem.ts`. Player, traders, and workers have 100 HP; bears 50, bandits/guards 125, arsonists 75. Combat defeat opens the recovery dialog.
+One world unit is one tile. Sword, machete and shotgun values reflect the latest requested buffs; bow damage, machete cooldown and molotov cooldown/DOT retain their previous tuning. All values live in `src/data/weapons.ts` and `src/systems/CombatSystem.ts`. Player, traders, and workers have 100 HP; bears/wolves 50, bandits/guards 125, arsonists 75. Combat defeat opens the recovery dialog.
 
 Fire converts timber nodes and standing trees into gatherable charcoal after ten seconds. Charcoal adds 120 furnace energy (wood adds 60) and consumes energy at half the wood rate, giving four times the total heating duration per unit. Use the Build panel charcoal-fuel button near a furnace. F feeds wood first, falling back to charcoal. A whiteout starts after 90 seconds, lasts 55 seconds, triples fuel consumption, reduces visibility, and increases enemy detection distance. Clear intervals thereafter last 90-150 seconds. Furnace reinforcement and chimney models change at every fifth furnace level (levels 5, 10, 15, 20, 25).
 
@@ -194,7 +194,7 @@ Run `npm.cmd run test:presentation` with the dev server running. Rebuild the ori
 
 Fuel, furnace upgrades and completed buildings now use the resource-flight presentation system. Supply icons fly toward the world target, followed by a receipt toward the HUD; real costs are applied once before animation. Reduced motion and effect caps remain supported.
 
-Traders, workers and hostile humanoids now use the original rigged character library. Fourteen human appearances and two original rigged bear models are prepared locally, with shared templates and independent skeletons. Trading has separate Resources/Weapons tabs, clear pay/receive cards, precise shortages and disabled unaffordable purchases.
+Traders, workers and hostile humanoids now use the original rigged character library. Fourteen human appearances and two original rigged bear models are prepared locally; two original wolf variants join the library, with shared templates and independent skeletons. Trading has separate Resources/Weapons tabs, clear pay/receive cards, precise shortages and disabled unaffordable purchases.
 
 Inside an active player-owned furnace heat zone, incoming player damage is reduced by **50%**. Hostile enemies lose **10% of max HP on entry**, once until they leave and re-enter; overlapping circles do not stack. Village furnaces and extinguished furnaces do not grant this combat protection. Enemy collision steering and speed-driven animation replace the previous shove-and-slide movement. Furnace model tiers now change at levels **5, 10, 15, 20 and 25**.
 
@@ -212,4 +212,6 @@ Left click assists the nearest reachable hostile within weapon reach (ranged ass
 
 Active furnace ranges heal 25 HP every three uninterrupted seconds. Owned heat zones also double damage taken by hostiles and halve their movement, alongside entry damage and player protection. Respawning grants five seconds of immunity. New expeditions reset every upgrade and start unarmed.
 
-Harvesting takes three seconds; standing trees shake/fall into finite logs, and large boulders split into smaller stones. Damaged civilians shelter in houses. Huts have 1,000 HP and storehouses 2,000; destroyed structures become quarter-health ruins, then finite salvage. Buildings are bleed-immune. Village supply piles roll 50% food, 40% materials and 10% random weapons. See [expansion rules and verification](docs/EXPANSION.md).
+Harvesting takes one second; standing trees shake/fall into finite logs, and large boulders split into smaller stones. Damaged civilians shelter in houses. Huts have 1,000 HP and storehouses 2,000; destroyed structures become quarter-health ruins, then finite salvage. Buildings are bleed-immune. Village supply piles roll 50% food, 40% materials and 10% random weapons. See [expansion rules and verification](docs/EXPANSION.md).
+
+Wilderness update: wolves hunt in packs of 3-12, bears deal 15/30 damage and stun, and wading causes persistent hypothermia. E toggles inventory; M closes inventory or toggles the map. Larger block typography and status cards show current effects. See [wilderness rules and validation](docs/WILDERNESS.md).

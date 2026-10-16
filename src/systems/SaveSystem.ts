@@ -23,7 +23,7 @@ export function validateBalances(v: unknown, settings: Settings, path = 'resourc
 }
 export function validateWorld(v: unknown): WorldSpec {
   const w = record(v, 'world');
-  if (![1, 2, GENERATION_VERSION].includes(w.generationVersion as number)) throw new Error(`Unsupported generation version ${String(w.generationVersion)}. Supported terrain generations: 1, 2 and ${GENERATION_VERSION}.`);
+  if (![1, 2, 3, GENERATION_VERSION].includes(w.generationVersion as number)) throw new Error(`Unsupported generation version ${String(w.generationVersion)}. Supported terrain generations: 1, 2, 3 and ${GENERATION_VERSION}.`);
   const seeds = record(w.seeds, 'world.seeds'), c = record(w.config, 'world.config');
   const read = (k: string) => num(seeds[k], `seeds.${k}`, 0, 65535, true);
   // Legacy worlds used wildlife for village guards and equipment drops. Preserve those outcomes.
@@ -49,7 +49,7 @@ function validateCombat(v: unknown): CombatState {
   for (const [key, value] of Object.entries(actors)) {
     const a = record(value, 'actor'); if (typeof a.type !== 'string' || !Object.hasOwn(ACTOR_HP, a.type)) throw new Error('Unknown actor type.'); const type = a.type as ActorType;
     if (a.id !== key) throw new Error('Actor ID does not match its record key.');
-    fresh.actors[id(key, 'actor.id')] = { id: key, type, ...point(a, 'actor'), hp: num(a.hp, 'actor.hp', 0, ACTOR_HP[type]), weapon: a.weapon === null ? null : weaponType(a.weapon), groupId: id(a.groupId, 'groupId'), villageId: a.villageId === null ? null : id(a.villageId, 'villageId'), homeX: num(a.homeX, 'homeX', -1e6, 1e6), homeZ: num(a.homeZ, 'homeZ', -1e6, 1e6), heading: num(a.heading, 'heading', -1000, 1000), cooldown: num(a.cooldown, 'actor.cooldown', 0, 5), roamTimer: num(a.roamTimer, 'roamTimer', -1, 10), targetX: num(a.targetX, 'targetX', -1e6, 1e6), targetZ: num(a.targetZ, 'targetZ', -1e6, 1e6), alerted: bool(a.alerted, 'alerted'), ...(a.heatInside === undefined ? {} : {heatInside: bool(a.heatInside,'heatInside')}) };
+    fresh.actors[id(key, 'actor.id')] = { id: key, type, ...point(a, 'actor'), hp: num(a.hp, 'actor.hp', 0, ACTOR_HP[type]), weapon: a.weapon === null ? null : weaponType(a.weapon), groupId: id(a.groupId, 'groupId'), villageId: a.villageId === null ? null : id(a.villageId, 'villageId'), homeX: num(a.homeX, 'homeX', -1e6, 1e6), homeZ: num(a.homeZ, 'homeZ', -1e6, 1e6), heading: num(a.heading, 'heading', -1000, 1000), cooldown: num(a.cooldown, 'actor.cooldown', 0, 5), roamTimer: num(a.roamTimer, 'roamTimer', -1, 10), targetX: num(a.targetX, 'targetX', -1e6, 1e6), targetZ: num(a.targetZ, 'targetZ', -1e6, 1e6), alerted: bool(a.alerted, 'alerted'), ...(a.heatInside === undefined ? {} : {heatInside: bool(a.heatInside,'heatInside')}),...(a.pursuitId===undefined?{}:{pursuitId:id(a.pursuitId,'pursuitId')}),...(a.retreating===undefined?{}:{retreating:bool(a.retreating,'retreating')}) };
   }
   for (const key of ['encounters', 'villageAlerts', 'charredNodes', 'charredTrees'] as const) fresh[key] = array(raw[key], key, 50000).map(v => id(v, key));
   fresh.projectiles = array(raw.projectiles, 'projectiles', 1000).map(v => {
@@ -59,7 +59,7 @@ function validateCombat(v: unknown): CombatState {
   fresh.fires = array(raw.fires, 'fires', 500).map(v => { const f = record(v, 'fire'); return { ...point(f, 'fire'), id: id(f.id, 'fire.id'), ownerId: id(f.ownerId, 'ownerId'), remaining: num(f.remaining, 'fire.remaining', 0, 10), tick: num(f.tick, 'fire.tick', 0, 1), charred: bool(f.charred, 'charred') }; });
   fresh.drops = array(raw.drops, 'drops', 1000).map(v => { const d = record(v, 'drop'); return { ...point(d, 'drop'), id: id(d.id, 'drop.id'), weapon: weaponType(d.weapon), uses: num(d.uses, 'drop.uses', 0, 100, true) }; });
   const statuses = record(raw.statuses, 'statuses'); if (Object.keys(statuses).length > 10000) throw new Error('Too many status effects.');
-  for (const [key, value] of Object.entries(statuses)) { const status = record(value, 'status'); fresh.statuses[id(key, 'status.id')] = { bleed: num(status.bleed, 'bleed', 0, 10), tick: num(status.tick, 'bleed tick', 0, 1) }; }
+  for (const [key, value] of Object.entries(statuses)) { const status = record(value, 'status'); fresh.statuses[id(key, 'status.id')] = { bleed: num(status.bleed, 'bleed', 0, 10), tick: num(status.tick, 'bleed tick', 0, 1),...(status.wolfBleed===undefined?{}:{wolfBleed:num(status.wolfBleed,'wolfBleed',0,12)}),...(status.wolfTick===undefined?{}:{wolfTick:num(status.wolfTick,'wolfTick',0,1)}) }; }
   const w = record(raw.weather, 'weather'); if (w.mode !== 'clear' && w.mode !== 'snow') throw new Error('Weather must be clear or snow.'); fresh.weather = { mode: w.mode, remaining: num(w.remaining, 'weather.remaining', 0, 300), cycle: num(w.cycle, 'weather.cycle', 0, 1e9, true) };
   return fresh;
 }
@@ -95,7 +95,8 @@ export function importJSON(text: string, expectedMode?: 'full-save' | 'sandbox-c
   }
   const raw = record(doc.state, 'state'), settings = validateSettings(raw.settings), player = record(raw.player, 'player'), changes = record(raw.changes, 'changes');
   const state = newState(world, settings);
-  state.player = { ...point(player, 'player'), warmth: num(player.warmth, 'warmth', 0, 100), hp: num(player.hp, 'hp', 0, 100), heading: num(player.heading, 'heading', -1000000, 1000000), ...(player.invulnerable===undefined?{}:{invulnerable:num(player.invulnerable,'invulnerable',0,5)}), ...(player.heatTime===undefined?{}:{heatTime:num(player.heatTime,'heatTime',0,3)}) };
+  state.player = { ...point(player, 'player'), warmth: num(player.warmth, 'warmth', 0, 100), hp: num(player.hp, 'hp', 0, 100), heading: num(player.heading, 'heading', -1000000, 1000000), ...(player.invulnerable===undefined?{}:{invulnerable:num(player.invulnerable,'invulnerable',0,5)}), ...(player.heatTime===undefined?{}:{heatTime:num(player.heatTime,'heatTime',0,3)}),...(player.stunned===undefined?{}:{stunned:num(player.stunned,'stunned',0,3)}) };
+  if(player.hypothermia!==undefined){const h=record(player.hypothermia,'hypothermia');state.player.hypothermia={level:num(h.level,'hypothermia.level',1,2,true) as 1|2,waterTime:num(h.waterTime,'waterTime',0,5),tick:num(h.tick,'hypothermia.tick',0,3)};state.player.hp=Math.min(90,state.player.hp);}
   state.combat = validateCombat(raw.combat);
   state.inventory = validateBalances(raw.inventory, settings); state.stockpile = validateBalances(raw.stockpile, settings, 'stockpile');
   state.elapsed = num(raw.elapsed, 'elapsed', 0, 1e12); state.nextId = num(raw.nextId, 'nextId', 1, 1e9, true);

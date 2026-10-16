@@ -27,7 +27,13 @@ export class Renderer {
   private weather = new SnowWeather(); private snowfall = this.weather.points;
   private reducedMotion=matchMedia('(prefers-reduced-motion: reduce)'); private combatVisual = new CombatRenderer();
   private materials = { snow: mat(0xe4edf0), dark: mat(0x314e5b), wood: mat(0x87664b), ice: mat(0x658d9f), metal: mat(0x5a7279), fire: mat(0xffa343, { emissive: 0xff781c, emissiveIntensity: 1.6 }), water: mat(0x407e9c, { roughness: .25, metalness: .25, transparent: true, opacity: .87 }) };
+  private flowTime={value:0};
   constructor(private host: HTMLElement, public game: Game) {
+    this.materials.water.onBeforeCompile=shader=>{
+      shader.uniforms.uFlowTime=this.flowTime;
+      shader.vertexShader='varying vec2 vRiver;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvRiver=(modelMatrix*vec4(transformed,1.0)).xz;');
+      shader.fragmentShader='uniform float uFlowTime; varying vec2 vRiver;\n'+shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\nfloat wave=sin(vRiver.y*5.0+sin(vRiver.x*0.45-uFlowTime)*0.65);float breaks=0.5+0.5*sin(vRiver.x*0.7-uFlowTime*1.4+cos(vRiver.y*2.3));float foam=smoothstep(0.94,1.0,wave)*smoothstep(0.35,0.85,breaks);diffuseColor.rgb*=0.94+0.06*sin(vRiver.x*2.0-uFlowTime*3.0+vRiver.y*0.7);diffuseColor.rgb=mix(diffuseColor.rgb,vec3(0.67,0.86,0.91),foam*0.25);');
+    };
     try { this.webgl = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); }
     catch { throw new Error('Frostbound needs WebGL 2. Enable hardware acceleration or try a modern browser with WebGL support.'); }
     this.webgl.setPixelRatio(Math.min(devicePixelRatio, 1.75)); this.webgl.shadowMap.enabled = true; this.webgl.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -152,6 +158,14 @@ export class Renderer {
   private addRuin(g: THREE.Group, r: Ruin) {
     const w = this.game.world;
 
+    if(r.id.startsWith('village:')){
+      const paths=new THREE.Group();paths.name='village-paths';paths.userData.villageId=r.id;
+      const paving=mat(0x8c8978,{roughness:1});
+      // Packed-snow spine, door approaches, trader lane and an entrance to the square.
+      const segments=[[-9,4,9,4],[0,4,0,15],[-5,4,-5,5],[5,4,5,5],[-6,-.5,-6,4],[6,-.5,6,4],[0,-.5,3.5,-.5],[3.5,-.5,3.5,4]];
+      for(const [ax,az,bx,bz]of segments){const length=Math.hypot(bx-ax,bz-az);for(let d=0;d<length;d+=.7){const t=(d+.35)/length,x=r.x+ax+(bx-ax)*t,z=r.z+az+(bz-az)*t;if(w.isWater(x,z))continue;const slab=this.box(paths,x,w.height(x,z)+.035,z,1.65,.06,.72,paving);slab.rotation.y=Math.atan2(bx-ax,bz-az);slab.receiveShadow=true;slab.castShadow=false;}}
+      g.add(paths);
+    }
     const chest = this.game.state.changes.containers.includes(r.id) ? this.materials.dark : this.materials.wood;
     this.box(g, r.container.x, w.height(r.container.x, r.container.z) + .5, r.container.z, 1.4, .9, 1, chest);
     this.box(g, r.trader.x, w.height(r.trader.x, r.trader.z) + 2.6, r.trader.z, .45, .45, .1, mat(0xf4cf7c, { emissive: 0xaa7524 }));
@@ -184,6 +198,7 @@ export class Renderer {
   }
   update(dt: number, time: number, moving: boolean, aiming = false) {
     const game = this.game, p = game.state.player, height = game.world.walkHeight(p.x, p.z);
+    this.flowTime.value=this.reducedMotion.matches?0:game.state.elapsed;
     const storm=game.state.combat.weather.mode==='snow';this.weather.update(game.paused?0:dt,storm,p,height,this.reducedMotion.matches);
     const fog=this.scene.fog as THREE.Fog,intensity=this.snowfall.userData.intensity;
     fog.near=THREE.MathUtils.lerp(42,Math.max(12,this.zoom*.75),intensity);fog.far=THREE.MathUtils.lerp(game.state.settings.renderDistance===1?56:110,Math.max(55,this.zoom*1.6+12),intensity);

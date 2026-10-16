@@ -5,7 +5,7 @@ import {newState} from '../src/game/GameState';
 import {worldSpec} from '../src/game/GameConfig';
 import {exportFull,importJSON} from '../src/systems/SaveSystem';
 function fixture(){
- const g=new Game(newState(worldSpec(42)));g.combat.ensureEncounters();g.combat.ensureEncounters=()=>{};
+ const g=new Game(newState({...worldSpec(42),generationVersion:3}));g.combat.ensureEncounters();g.combat.ensureEncounters=()=>{};
  const guards=Object.values(g.state.combat.actors).filter(a=>a.type==='guard'),guard=guards[0],healthy=guards[1];
  for(const a of Object.values(g.state.combat.actors))a.hp=0;
  const house={id:'built:1',type:'hut' as const,x:8,z:0,rotation:0};g.state.buildings.push(house);g.state.nextId=2;

@@ -10,7 +10,7 @@ import {createSurvivorAsset} from '../src/rendering/SurvivorAsset';
 import {weaponMesh,disposeWeapon} from '../src/rendering/WeaponModels';
 import {meleePose} from '../src/rendering/MeleePose';
 import {SnowWeather} from '../src/rendering/SnowWeather';
-const game=()=>{const g=new Game(newState(worldSpec(42)));g.paused=false;g.combat.ensureEncounters();for(const a of Object.values(g.state.combat.actors))a.hp=0;return g;};
+const game=()=>{const g=new Game(newState({...worldSpec(42),generationVersion:3}));g.paused=false;g.combat.ensureEncounters();for(const a of Object.values(g.state.combat.actors))a.hp=0;return g;};
 
 test('movement owns facing; firing at a separate point never changes it',()=>{
  const g=game();g.paused=false;g.update(.05,{x:1,z:0});assert.equal(g.state.player.heading,Math.PI/2);g.combat.fireWeapon('player',g.state.player,{x:0,z:-10},'bow');assert.equal(g.state.player.heading,Math.PI/2);g.update(.05);assert.equal(g.state.player.heading,Math.PI/2);

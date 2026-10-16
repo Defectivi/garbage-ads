@@ -6,7 +6,7 @@ const browser=await chromium.launch({headless:true,executablePath:existsSync(edg
 const errors=[];mkdirSync('test-results',{recursive:true});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',e=>errors.push(e.message));await page.goto('http://localhost:5173');await page.locator('#seed').fill('42');await page.locator('#new-world').click();await page.waitForFunction(()=>window.__frostbound.renderer.playerCharacter.ready);
- await page.evaluate(()=>{const g=window.__frostbound.game;g.combat.ensureEncounters();for(const a of Object.values(g.state.combat.actors))a.hp=0;});
+ await page.evaluate(()=>{const g=window.__frostbound.game,v=g.world.villages()[0];g.state.player.x=v.x;g.state.player.z=v.z;g.combat.ensureEncounters();g.state.player.x=0;g.state.player.z=4;for(const a of Object.values(g.state.combat.actors))a.hp=0;});
  await page.keyboard.down('d');await page.waitForTimeout(180);await page.keyboard.up('d');await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
  const heading=await page.evaluate(()=>window.__frostbound.game.state.player.heading);await page.mouse.move(100,200);await page.mouse.click(100,200);assert.equal(await page.evaluate(()=>window.__frostbound.game.state.player.heading),heading);assert.equal(await page.evaluate(()=>window.__frostbound.game.state.combat.weapons.length),0);
  await page.keyboard.press('e');await page.waitForSelector('.inventory-modal');await page.keyboard.press('Escape');await page.keyboard.press('b');await page.waitForSelector('[data-building="hut"]');await page.keyboard.press('Escape');await page.keyboard.press('m');await page.waitForSelector('#map-canvas');await page.keyboard.press('Escape');

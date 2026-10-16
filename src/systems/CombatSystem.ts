@@ -50,6 +50,7 @@ export class CombatSystem {
       const groups: { type: ActorType; count: number; x: number; z: number }[] = [
         { type: 'polar_bear', count: 1, x: x * 64 + rng.range(14, 50), z: z * 64 + rng.range(14, 50) }
       ];
+      if(derive(this.s.world.seeds.wildlife,'wolf-pack',x,z)%3===0||x===0&&z===0)groups.push({type:'wolf',count:3+Math.floor(rng.next()*10),x:x*64-24,z:z*64+25});
       if (derive(this.s.world.seeds.wildlife, 'bandit-group', x, z) % 3 === 0 || x === 0 && z === 0) groups.push({ type: 'bandit', count: 2 + Math.floor(rng.next() * 9), x: x * 64 + 30, z: z * 64 - 22 });
       if (derive(this.s.world.seeds.wildlife, 'arsonist', x, z) % 3 === 0 || x === 0 && z === 0) groups.push({ type: 'arsonist', count: 1, x: x * 64 + 19, z: z * 64 + 29 });
       for (const group of groups) for (let i = 0; i < group.count; i++) {
@@ -74,12 +75,12 @@ export class CombatSystem {
   }
   damage(target: CombatUnit, amount: number, ownerId: string, bleed = false) {
     if(target.kind==='building'){
-      if(ownerId==='bleed')return;
+      if(ownerId==='bleed')return 0;
       const lost=this.game.settlement.damage(target.id,amount,target);
-      if(lost>0){if(this.damageEvents.length>=64)this.damageEvents.shift();this.damageEvents.push({x:target.x,z:target.z,amount:lost,targetId:target.id,bleed:false});}return;
+      if(lost>0){if(this.damageEvents.length>=64)this.damageEvents.shift();this.damageEvents.push({x:target.x,z:target.z,amount:lost,targetId:target.id,bleed:false});}return lost;
     }
     const before=target.id==='player'?this.s.player.hp:this.c.actors[target.id]?.hp??this.s.workers.find(w=>w.id===target.id)?.hp??target.hp;
-    if (before <= 0 || target.id==='player'&&(this.s.player.invulnerable??0)>0) return;
+    if (before <= 0 || target.id==='player'&&(this.s.player.invulnerable??0)>0) return 0;
     const enemy=this.c.actors[target.id];
     if(enemy&&this.hostile(enemy)&&inPlayerHeat(this.s,enemy)&&ownerId!=='furnace')amount*=2;
     if (target.id === 'player' && inPlayerHeat(this.s)) amount *= .5;
@@ -91,7 +92,7 @@ export class CombatSystem {
       if (wasAlive && actor.hp <= 0) {
         this.c.kills++; delete this.c.statuses[actor.id];
         if (actor.weapon && equipmentDrops(this.s.world.seeds.loot, actor.id)) this.c.drops.push({ id: this.nextId('drop'), x: actor.x, z: actor.z, weapon: actor.weapon, uses: 100 });
-        this.game.notify(`${actor.type === 'polar_bear' ? 'Polar bear' : actor.type === 'guard' ? 'Guard' : 'Raider'} defeated.`);
+        this.game.notify(`${actor.type === 'polar_bear' ? 'Polar bear' : actor.type === 'guard' ? 'Guard' : actor.type==='wolf'?'Wolf':'Raider'} defeated.`);
       }
     } else {
       const worker = this.s.workers.find(w => w.id === target.id);
@@ -106,10 +107,11 @@ export class CombatSystem {
     if((target.kind==='npc'||enemy?.type==='guard')&&before>amount&&ownerId!=='bleed')this.game.settlement.flee(target.id,target);
     if(this.damageEvents.length>=64)this.damageEvents.shift();
     this.damageEvents.push({x:target.x,z:target.z,amount:Math.min(before,amount),targetId:target.id,bleed:ownerId==='bleed'});
-    if (bleed&&before>amount) this.c.statuses[target.id] = { bleed: 10, tick: 0 };
+    if (bleed&&before>amount) this.c.statuses[target.id] = { ...this.c.statuses[target.id],bleed: 10, tick: 0 };
+    return Math.min(before,amount);
   }
   attack(target: Point): boolean {
-    if (this.game.paused || this.game.dead || this.c.cooldown > 0) return false;
+    if (this.game.paused || this.game.dead || (this.s.player.stunned??0)>0 || this.c.cooldown > 0) return false;
     const weapon = this.c.weapons.find(w => w.id === this.c.equipped && w.uses > 0);
     this.game.gathering=undefined;
     const type=weapon?.type??'punch',def=type==='punch'?{type:'melee',cooldown:1,range:1,damage:2}:WEAPONS[type];
@@ -119,7 +121,7 @@ export class CombatSystem {
     return true;
   }
   attackAssisted():boolean {
-    if(this.game.paused||this.game.dead||this.c.cooldown>0)return false;
+    if(this.game.paused||this.game.dead||(this.s.player.stunned??0)>0||this.c.cooldown>0)return false;
     const p=this.s.player,weapon=this.c.weapons.find(w=>w.id===this.c.equipped&&w.uses>0);
     const type=weapon?.type??'punch',range=type==='punch'?1:Math.min(12,WEAPONS[type].range);
     const target=this.units().filter(u=>(u.kind==='enemy'||u.kind==='guard'&&!!u.villageId&&this.c.villageAlerts.includes(u.villageId))&&distance(u,p)<=range+this.hurtRadius(u)&&this.assistReach(p,u,type)&&!this.blocked(p,u,u.id)).sort((a,b)=>distance(a,p)-distance(b,p)||a.id.localeCompare(b.id))[0];
@@ -131,20 +133,21 @@ export class CombatSystem {
     const heading=Math.atan2(unit.x-origin.x,unit.z-origin.z);
     for(let t=.1;t<=.8;t+=.025){const blade=bladeSegment(origin,heading,weapon,t);if(this.touches(unit,blade.a,blade.b))return true;}return false;
   }
-  private hurtRadius(unit:CombatUnit){if(unit.kind==='building')return unit.radius??2;return this.c.actors[unit.id]?.type==='polar_bear'?1.95:.65;}
+  private hurtRadius(unit:CombatUnit){if(unit.kind==='building')return unit.radius??2;return this.c.actors[unit.id]?.type==='polar_bear'?1.95:this.c.actors[unit.id]?.type==='wolf'?1.6:.65;}
   private touches(unit:CombatUnit,a:Point,b:Point,padding=.1){
     if(unit.kind==='building')return segmentDistance(unit,a,b)<=(unit.radius??2)+padding;
     const actor=this.c.actors[unit.id];
-    if(actor?.type!=='polar_bear')return segmentDistance(unit,a,b)<=.65+padding;
-    const dx=Math.sin(actor.heading),dz=Math.cos(actor.heading);
-    return segmentSegmentDistance(a,b,{x:actor.x-dx*.8,z:actor.z-dz*.8},{x:actor.x+dx*1.3,z:actor.z+dz*1.3})<=.7+padding;
+    if(actor?.type!=='polar_bear'&&actor?.type!=='wolf')return segmentDistance(unit,a,b)<=.65+padding;
+    const dx=Math.sin(actor.heading),dz=Math.cos(actor.heading),back=actor.type==='wolf'?.68:.8,front=actor.type==='wolf'?1.1:1.3,radius=actor.type==='wolf'?.45:.7;
+    return segmentSegmentDistance(a,b,{x:actor.x-dx*back,z:actor.z-dz*back},{x:actor.x+dx*front,z:actor.z+dz*front})<=radius+padding;
   }
   private blocked(a:Point,b:Point,targetId?:string){return this.game.solids(b).some(s=>(!('id'in s)||s.id!==targetId)&&distance(s,a)>s.radius+.2&&segmentDistance(s,a,b)<s.radius);}
   private canHit(ownerId: string, target: CombatUnit) {
     if (ownerId === target.id || target.hp <= 0) return false;
     if (ownerId === 'player') return true;
     const owner = this.c.actors[ownerId];
-    return owner?.type === 'guard' ? target.kind === 'enemy' || target.kind === 'player' && !!owner.villageId && this.c.villageAlerts.includes(owner.villageId) : target.kind !== 'enemy';
+    if(owner?.type==='wolf')return target.kind!=='building'&&this.c.actors[target.id]?.groupId!==owner.groupId;
+    return owner?.type === 'guard' ? target.kind === 'enemy' || target.kind === 'player' && !!owner.villageId && this.c.villageAlerts.includes(owner.villageId) : target.kind !== 'enemy'||this.c.actors[target.id]?.type==='wolf';
   }
   fireWeapon(ownerId: string, from: Point, target: Point, weapon: WeaponType|'punch', weaponId?:string) {
     if (ownerId !== 'player') this.actorAttacks.set(ownerId, this.s.elapsed);
@@ -165,7 +168,7 @@ export class CombatSystem {
     const old={x:p.x,z:p.z},previous=p.age/p.duration;p.age+=dt;const t=Math.min(1,p.age/p.duration);
     if(p.kind==='swing'){
       const owner=p.ownerId==='player'?this.s.player:this.c.actors[p.ownerId];
-      if(!owner||owner.hp<=0||this.game.settlement.refuge(p.ownerId))return false;
+      if(!owner||owner.hp<=0||p.ownerId==='player'&&(this.s.player.stunned??0)>0||this.game.settlement.refuge(p.ownerId))return false;
       if(!p.weapon||p.damage<=0)return t<1; // Legacy swings were cosmetic.
       p.x=owner.x;p.z=owner.z;const hits=p.hitIds??(p.hitIds=[]),units=this.units().filter(u=>this.canHit(p.ownerId,u)&&!hits.includes(u.id));
       const steps=Math.max(1,Math.ceil((t-previous)*48));
@@ -216,7 +219,7 @@ export class CombatSystem {
     this.ensureEncounters(); this.c.cooldown = Math.max(0, this.c.cooldown - dt);
     const weather = this.c.weather; weather.remaining -= dt;
     if (weather.remaining <= 0) { weather.mode = weather.mode === 'clear' ? 'snow' : 'clear'; weather.cycle++; weather.remaining = weather.mode === 'snow' ? 55 : 90 + derive(this.s.world.seeds.wildlife, 'weather', weather.cycle) % 61; this.game.notify(weather.mode === 'snow' ? 'Blizzard incoming. Fuel burns 3× faster; enemies track you from farther away.' : 'The storm has passed.'); }
-    for (const [id, status] of Object.entries(this.c.statuses)) { status.tick += Math.min(dt,status.bleed); status.bleed = Math.max(0,status.bleed-dt); while (status.tick >= 1 - 1e-8) { status.tick = Math.max(0, status.tick - 1); const u = this.units().find(u => u.id === id); if (u) this.damage(u, 2, 'bleed'); } if (status.bleed <= 1e-8) delete this.c.statuses[id]; }
+    for (const [id, status] of Object.entries(this.c.statuses)) { status.tick += Math.min(dt,status.bleed); status.bleed = Math.max(0,status.bleed-dt); while (status.tick >= 1 - 1e-8) { status.tick = Math.max(0, status.tick - 1); const u = this.units().find(u => u.id === id); if (u) this.damage(u, 2, 'bleed'); } status.wolfTick=(status.wolfTick??0)+Math.min(dt,status.wolfBleed??0);status.wolfBleed=Math.max(0,(status.wolfBleed??0)-dt);while(status.wolfTick>=1-1e-8){status.wolfTick=Math.max(0,status.wolfTick-1);const u=this.units().find(u=>u.id===id);if(u)this.damage(u,4,'bleed');}if (status.bleed <= 1e-8 && status.wolfBleed<=1e-8) delete this.c.statuses[id]; }
     for (const fire of this.c.fires) {
       fire.remaining -= dt; fire.tick += dt;
       while (fire.tick >= 1 - 1e-8) { fire.tick = Math.max(0, fire.tick - 1); for (const u of this.units()) if (distance(u, fire) <= 4) this.damage(u, 3, fire.ownerId); }
@@ -224,30 +227,44 @@ export class CombatSystem {
     }
     this.c.fires = this.c.fires.filter(f => f.remaining > 1e-8);
     this.c.projectiles = this.c.projectiles.filter(p => this.stepProjectile(p, dt));
-    const units = this.units(), snow = weather.mode === 'snow';
+    const units=this.units(),snow = weather.mode === 'snow';
     for (const actor of Object.values(this.c.actors)) {
-      if (actor.hp <= 0 || distance(actor, this.s.player) > 70) continue;
+      if(actor.hp<=0)continue;
+      if(distance(actor,this.s.player)>70&&!(actor.type==='wolf'&&actor.pursuitId==='player')){if(actor.type!=='wolf'){delete actor.pursuitId;actor.alerted=false;actor.retreating=true;}continue;}
       actor.cooldown = Math.max(0, actor.cooldown - dt); actor.roamTimer = Math.max(0, actor.roamTimer - dt);
       if(this.game.settlement.refuge(actor.id)?.phase!=='hidden')this.heatEntry(actor);
       if(actor.hp<=0)continue;
       if(this.game.settlement.refuge(actor.id)){this.velocities.delete(actor.id);continue;}
-      const guard = actor.type === 'guard', hostilePlayer = !guard || !!actor.villageId && this.c.villageAlerts.includes(actor.villageId);
-      const targets = units.filter(u => u.hp > 0 && u.id !== actor.id && (guard ? u.kind === 'enemy' || u.kind === 'player' && hostilePlayer : u.kind !== 'enemy'));
-      const target = targets.filter(u => distance(u, actor) < (actor.alerted ? 30 : snow ? 27 : guard ? 16 : 12)).sort((a, b) => distance(a, actor) - distance(b, actor))[0];
+      const guard = actor.type === 'guard';
+      const wolf=actor.type==='wolf';
+      const targets=units.filter(u=>(u.id==='player'?this.s.player.hp:this.c.actors[u.id]?.hp??this.s.workers.find(w=>w.id===u.id)?.hp??this.s.changes.npcs[u.id]?.hp??u.hp)>0&&this.canHit(actor.id,u));
+      let target=actor.pursuitId?targets.find(u=>u.id===actor.pursuitId):undefined;
+      if(target&&!wolf&&distance(target,actor)>40){actor.retreating=true;actor.alerted=false;target=undefined;delete actor.pursuitId;}
+      if(actor.retreating){if(distance(actor,{x:actor.homeX,z:actor.homeZ})>4){this.walk(actor,{x:actor.homeX,z:actor.homeZ},dt,1.8);continue;}actor.retreating=false;}
+      if(!target)target=targets.filter(u=>distance(u,actor)<(actor.alerted?30:snow?27:guard?16:18)&&(!wolf||u.kind!=='building')&&!this.blocked(actor,u,u.id)).sort((a,b)=>distance(a,actor)-distance(b,actor)||a.id.localeCompare(b.id))[0];
+      if(target)actor.pursuitId=target.id;else delete actor.pursuitId;
       const weapon = actor.weapon, range = weapon ? WEAPONS[weapon].range : 1.65;
       if (target) {
         const d = distance(actor, target); this.face(actor, Math.atan2(target.x - actor.x, target.z - actor.z), dt);
         if (d < range && actor.cooldown === 0) {
           actor.cooldown = weapon ? WEAPONS[weapon].cooldown : 1.5;
-          if (weapon) this.fireWeapon(actor.id, actor, target, weapon); else { this.actorAttacks.set(actor.id,this.s.elapsed); this.damage(target, 5, actor.id); }
+          if (weapon) this.fireWeapon(actor.id, actor, target, weapon); else this.bite(actor,target);
         }
-        if (d > (weapon === 'bow' ? 8 : weapon === 'molotov' ? 6 : weapon === 'shotgun' ? 2.2 : 1.35)) this.walk(actor, target, dt, actor.type === 'polar_bear' ? 2.1 : 1.8);
+        if (d > (weapon === 'bow' ? 8 : weapon === 'molotov' ? 6 : weapon === 'shotgun' ? 2.2 : 1.35)) this.walk(actor, target, dt, actor.type==='wolf'?3.2:actor.type === 'polar_bear' ? 2.1 : 1.8);
       } else {
         if (actor.roamTimer <= 0) { actor.roamTimer = 3 + derive(this.s.world.seeds.wildlife, actor.id, Math.floor(this.s.elapsed / 4)) % 5; const a = derive(this.s.world.seeds.wildlife, actor.id, Math.floor(this.s.elapsed / 5)) / 4294967296 * Math.PI * 2; actor.targetX = actor.homeX + Math.cos(a) * (guard ? 5 : 11); actor.targetZ = actor.homeZ + Math.sin(a) * (guard ? 5 : 11); }
         this.walk(actor, { x: actor.targetX, z: actor.targetZ }, dt, 1.1);
       }
       this.heatEntry(actor);
     }
+  }
+  private bite(actor:Actor,target:CombatUnit){
+    this.actorAttacks.set(actor.id,this.s.elapsed);
+    const critical=actor.type==='polar_bear'&&derive(this.s.world.seeds.wildlife,'bear-critical',this.c.sequence++)%2===0;
+    const lost=this.damage(target,actor.type==='wolf'?7:actor.type==='polar_bear'?(critical?30:15):5,actor.id);
+    if(!lost)return;
+    if(actor.type==='wolf')this.c.statuses[target.id]={...this.c.statuses[target.id],bleed:this.c.statuses[target.id]?.bleed??0,tick:this.c.statuses[target.id]?.tick??0,wolfBleed:12,wolfTick:this.c.statuses[target.id]?.wolfTick??0};
+    if(actor.type==='polar_bear'&&target.id==='player')this.s.player.stunned=3;
   }
   private face(actor: Actor, angle: number, dt: number) {
     actor.heading += Math.atan2(Math.sin(angle - actor.heading), Math.cos(angle - actor.heading)) * (1 - Math.exp(-dt * 8));
@@ -262,6 +279,7 @@ export class CombatSystem {
   }
   private walk(actor: Actor, target: Point, dt: number, speed: number) {
     if(this.hostile(actor)&&inPlayerHeat(this.s,actor))speed*=.5;
+    if(this.game.world.isWater(actor.x,actor.z))speed*=.1;
     const d = distance(actor,target), oldVelocity = this.velocities.get(actor.id) ?? {x:0,z:0};
     const dx = d > .5 ? (target.x-actor.x)/d*speed : 0, dz = d > .5 ? (target.z-actor.z)/d*speed : 0;
     const blend = 1-Math.exp(-dt*5), vx = oldVelocity.x+(dx-oldVelocity.x)*blend, vz = oldVelocity.z+(dz-oldVelocity.z)*blend;
@@ -273,7 +291,7 @@ export class CombatSystem {
     for (const turn of [0,.5,-.5,1,-1,1.5,-1.5,Math.PI]) {
       const angle = base+turn, p = {x:actor.x+Math.sin(angle)*step,z:actor.z+Math.cos(angle)*step};
       const crowd = Object.values(this.c.actors).some(a=>a!==actor&&a.hp>0&&distance(a,p)<radius+(a.type==='polar_bear'?.75:.4)+.08&&distance(a,p)<distance(a,actor));
-      if (!crowd && !this.game.world.isWater(p.x,p.z) && penetration(p) <= Math.max(.001,current-.00001)) {
+      if (!crowd && penetration(p) <= Math.max(.001,current-.00001)) {
         actor.x=p.x;actor.z=p.z;this.velocities.set(actor.id,{x:Math.sin(angle)*step/dt,z:Math.cos(angle)*step/dt});this.face(actor,angle,dt);return;
       }
     }

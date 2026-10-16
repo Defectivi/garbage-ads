@@ -13,7 +13,7 @@ try {
   assert.equal(await page.title(), 'FYWS: Frostbound');
   await page.locator('#seed').fill('0'); await page.locator('#new-world').click();
   await page.waitForFunction(() => window.__frostbound.game.state.elapsed > .2);
-  assert.match(await page.locator('#seed-hud').textContent(), /SEED 0 \/ GEN 3/);
+  assert.match(await page.locator('#seed-hud').textContent(), /SEED 0 \/ GEN 4/);
   await page.waitForFunction(() => window.__frostbound.renderer.chunks.has('2,0'));
   const outerResources = await page.evaluate(() => {
     const { game, renderer } = window.__frostbound, group = renderer.chunks.get('2,0');

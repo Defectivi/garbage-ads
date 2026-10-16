@@ -17,13 +17,13 @@ try {
     return {before,immediately,counts,dirty:r.dirtyChunks.size};
   });
   assert.equal(terrain.immediately,terrain.before);assert(terrain.counts.every(n=>n===25));assert.equal(terrain.dirty,0);
-  await page.evaluate(()=>{const a=window.__frostbound;a.game.state.player.x=3.4;a.game.state.player.z=4;a.game.stopMovement();a.refresh();window.woodCounter=document.querySelector('[data-resource="wood"] b');});
+  await page.evaluate(()=>{const a=window.__frostbound;a.game.state.player.x=3.4;a.game.state.player.z=4;a.game.stopMovement();a.refresh();window.woodCounter=document.querySelector('[data-resource="wood"] b');window.numberPops=0;const animate=window.woodCounter.animate.bind(window.woodCounter);window.woodCounter.animate=(...args)=>{window.numberPops++;return animate(...args);};});
   const wood=await page.evaluate(()=>window.__frostbound.game.state.inventory.wood);
   await page.keyboard.press('f');try{await page.waitForSelector('.collection-flight[data-resource="wood"]');}catch(error){console.log('Collection failure state:',await page.evaluate(()=>{const a=window.__frostbound;return {mode:a.mode,paused:a.game.paused,dead:a.game.dead,wood:a.game.state.inventory.wood,context:a.context(),focus:document.activeElement?.outerHTML,message:a.game.message,flights:a.collectionEffects.flights.length};}));throw error;}
   assert.equal(await page.evaluate(()=>window.__frostbound.game.state.inventory.wood),wood+1);
   assert.equal(await page.evaluate(()=>document.querySelector('[data-resource="wood"] b')===window.woodCounter),true);
   await page.waitForTimeout(280);await page.screenshot({path:'test-results/collection-flight-desktop.png'});
-  await page.waitForFunction(()=>document.querySelector('[data-resource="wood"] b').getAnimations().length>0);
+  await page.waitForFunction(()=>window.numberPops>0);
   await page.waitForTimeout(300);assert.equal(await page.locator('.collection-flight').count(),0);
   assert.equal(await page.evaluate(()=>window.__frostbound.game.state.inventory.wood),wood+1);
   // Check actual visible action transitions, not only clip names in the asset.

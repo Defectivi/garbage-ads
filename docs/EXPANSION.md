@@ -1,6 +1,6 @@
 # Furnace recovery, destructible settlements and natural gathering
 
-This user-directed increment was implemented in three checked steps: survival/unarmed rules, three-second gathering and natural resources, then structures/civilian sheltering/scattered village supplies. The original specification remains in PROJECT_SPEC.md; the newer user requests described here supersede its earlier starting equipment and furnace-defense rules.
+This user-directed increment was implemented in three checked steps: survival/unarmed rules, one-second gathering and natural resources, then structures/civilian sheltering/scattered village supplies. The original specification remains in PROJECT_SPEC.md; the newer user requests described here supersede its earlier starting equipment and furnace-defense rules.
 
 ## New worlds and survival
 
@@ -8,7 +8,7 @@ New expeditions construct fresh state and immediately replace the local save. Th
 
 New players have no weapon and can punch for 2 HP with a one-second cooldown. Punches work with existing assisted targeting, actual-contact collision and damage numbers, without durability. The player/NPC rigs include a punch clip. Existing usable owned weapons remain available normally.
 
-Inside any active furnace range, three uninterrupted seconds restore 25 HP, repeating every three seconds up to 100. Leaving an active range or extinguishing its heat resets the interval. Overlapping furnaces do not stack healing. Merely being near an unlit furnace does not heal. Dead players do not self-revive.
+Inside any active furnace range, three uninterrupted seconds restore 25 HP, repeating every three seconds up to the current maximum (90 while hypothermic, otherwise 100). Leaving an active range or extinguishing its heat resets the interval. Overlapping furnaces do not stack healing. Merely being near an unlit furnace does not heal. Dead players do not self-revive.
 
 Hostiles inside an active player-owned heat zone retain the 10%-maximum-HP entry penalty, take twice subsequent damage (including fire and bleed) and move at half speed. The entry penalty itself is not doubled. Peaceful guards are excluded until hostile. Village heat heals the player but does not confer the player's owned-zone combat defenses. The player retains 50% incoming damage reduction in owned heat zones.
 
@@ -16,13 +16,13 @@ Every recovery restores five seconds of damage immunity, including fire/bleed/di
 
 ## Gathering and natural resource stages
 
-F / touch Interact starts a three-second gathering action. Repeated presses cannot stack simultaneous actions. Hold F to repeat after completion. Moving away, movement input, resource exhaustion or attacking cancels a pending action without an award. Pause freezes progress; loading a save cancels this transient action. Actual awards still occur once through the atomic collection function and reuse world-to-HUD feedback.
+F / touch Interact starts a one-second gathering action. Repeated presses cannot stack simultaneous actions. Hold F to repeat after completion. Moving away, movement input, resource exhaustion or attacking cancels a pending action without an award. Pause freezes progress; loading a save cancels this transient action. Actual awards still occur once through the atomic collection function and reuse world-to-HUD feedback.
 
-Standing decorative conifers are gatherable. Completing a chop records the tree as felled, removes its standing collision/instances, plays a short falling-tree effect and exposes a finite log supply of `3 + floor(tree scale * 2)` wood. Gathering each wood from that supply takes another three seconds. Workers can also fell trees and collect their logs when choosing nearby wood sources; their gather interval is three seconds.
+Standing decorative conifers are gatherable. Completing a chop records the tree as felled, removes its standing collision/instances, plays a short falling-tree effect and exposes a finite log supply of `3 + floor(tree scale * 2)` wood. Gathering each wood from that supply takes another second. Workers can also fell trees and collect their logs when choosing nearby wood sources; their gather interval is one second.
 
 Tree instances visibly shake while chopping. Supported devices receive a short vibration on a chopping interaction. Reduced motion skips shaking, falling motion and haptics; the authoritative felling/log transition remains identical. Falling-tree effects are capped at eight and disposed on completion/world replacement.
 
-A deterministic third of nonstarter stone nodes are large boulders, with larger geometry and blocking collision. Breaking one takes three seconds and exposes three smaller stone fragments. Their quantities sum to the remaining original deposit, including partially depleted older saves. Each fragment resource collection takes three seconds. The guaranteed starter stone remains a small accessible deposit. Tree/rock stages and remaining quantities persist through chunk eviction and save/load. Fire converts remaining timber instead of duplicating a chopped tree's resources.
+A deterministic third of nonstarter stone nodes are large boulders, with larger geometry and blocking collision. Breaking one takes one second and exposes three smaller stone fragments. Their quantities sum to the remaining original deposit, including partially depleted older saves. Each fragment resource collection takes one second. The guaranteed starter stone remains a small accessible deposit. Tree/rock stages and remaining quantities persist through chunk eviction and save/load. Fire converts remaining timber instead of duplicating a chopped tree's resources.
 
 ## Buildings and civilians
 
@@ -47,7 +47,7 @@ Six persistent supply piles appear around each fixed village. Each pile independ
 - 40%: wood, stone, metal or gold.
 - 10%: one random weapon from the six weapon types, with 100 uses.
 
-These supplies are scattered in the village, not dropped by NPCs. Weapon pickup equips it. The existing separate enemy equipment-drop rule is preserved. Material/food stacks contain 2-4 units. There is no forced weapon guarantee in each village, preserving the requested probabilities. Failed capacity checks leave the pile intact; collected piles remain collected after reload. Salvage uses the same pickup flow. Supply pickup is immediate; the three-second work action applies to harvesting natural nodes.
+These supplies are scattered in the village, not dropped by NPCs. Weapon pickup equips it. The existing separate enemy equipment-drop rule is preserved. Material/food stacks contain 2-4 units. There is no forced weapon guarantee in each village, preserving the requested probabilities. Failed capacity checks leave the pile intact; collected piles remain collected after reload. Salvage uses the same pickup flow. Supply pickup is immediate; the one-second work action applies to harvesting natural nodes.
 
 ## Save compatibility and verification
 

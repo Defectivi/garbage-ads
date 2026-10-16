@@ -11,7 +11,7 @@ import {createSurvivorAsset} from '../src/rendering/SurvivorAsset';
 import {weaponMesh,disposeWeapon} from '../src/rendering/WeaponModels';
 import {meleePose} from '../src/rendering/MeleePose';
 function fixture(type:'wooden_sword'|'machete'|'shotgun'|'bow'|'molotov'='wooden_sword'){
- const g=new Game(newState(worldSpec(42)));g.paused=false;g.combat.ensureEncounters();for(const a of Object.values(g.state.combat.actors))a.hp=0;g.state.furnaces[0].fuel=0;g.solids=()=>[];
+ const g=new Game(newState({...worldSpec(42),generationVersion:3}));g.paused=false;g.combat.ensureEncounters();for(const a of Object.values(g.state.combat.actors))a.hp=0;g.state.furnaces[0].fuel=0;g.solids=()=>[];
  const a=Object.values(g.state.combat.actors).find(a=>a.type==='bandit')!;Object.assign(a,{hp:125,x:0,z:5.3,heading:0});g.state.combat.weapons=[{id:'fixture',type,uses:100}];g.state.combat.equipped='fixture';
  return {g,a,step:(dt:number)=>{g.state.combat.projectiles=g.state.combat.projectiles.filter(p=>(g.combat as any).stepProjectile(p,dt));}};
 }

@@ -1,5 +1,5 @@
 import { derive } from '../utils/SeededRNG';
-export const GENERATION_VERSION = 3;
+export const GENERATION_VERSION = 4;
 export interface WorldConfig { chunkSize: number; initialRegionSize: number; worldScale: number; riverDensity: number; ruinDensity: number; resourceDensity: number }
 export interface WorldSpec { seed: number; generationVersion: number; seeds: { terrain: number; rivers: number; biomes: number; resources: number; ruins: number; wildlife: number; villages: number; loot: number }; config: WorldConfig }
 export interface Settings { difficulty: 'relaxed' | 'survival'; renderDistance: number; sound: boolean; allowDebt: boolean; inventoryLimit: number; resourceMin: number; resourceMax: number }
@@ -14,3 +14,5 @@ export function randomSeed() { return crypto.getRandomValues(new Uint16Array(1))
 
 /** Local movement defaults; saved world geometry is unaffected. */
 export const MOVEMENT = { walkSpeed: 6, sprintSpeed: 9, response: 18, joystickRadius: 34, joystickDeadZone: .18 } as const;
+
+export const GATHER_SECONDS = 1;

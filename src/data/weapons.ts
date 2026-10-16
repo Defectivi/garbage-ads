@@ -11,5 +11,5 @@ export type WeaponType = keyof typeof WEAPONS;
 export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponType[];
 export interface Weapon { id: string; type: WeaponType; uses: number }
 export const weaponCost = (type: WeaponType): Partial<Balances> => WEAPONS[type].cost;
-export const ACTOR_HP = { polar_bear: 50, bandit: 125, arsonist: 75, guard: 125 } as const;
+export const ACTOR_HP = { polar_bear: 50, wolf: 50, bandit: 125, arsonist: 75, guard: 125 } as const;
 export type ActorType = keyof typeof ACTOR_HP;

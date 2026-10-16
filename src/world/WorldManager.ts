@@ -7,16 +7,18 @@ export interface Tree extends Point { scale: number }
 export interface Ruin extends Point { id: string; name: string; variant: number; houses: number; trader: Point; container: Point }
 export interface Village extends Ruin { guardCount: number }
 export const VILLAGE_SITES = [{ id: 'village:hearth', name: 'Hearthwatch', x: 40, z: 8 }, { id: 'village:quarry', name: 'Stonehaven', x: -72, z: -32 }, { id: 'village:river', name: 'Northpass', x: 132, z: 112 }];
+export const DISTANT_VILLAGE_SITES = VILLAGE_SITES.map((v,i)=>({...v,x:[128,-144,192][i],z:[8,-32,176][i]}));
 export interface FishingSpot extends Point { id: string; availability: number }
 export interface Chunk { id: string; cx: number; cz: number; trees: Tree[]; nodes: Node[]; ruins: Ruin[]; fishing: FishingSpot[] }
 export const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
 export class WorldManager {
   private cache = new Map<string, Chunk>();
   constructor(readonly spec: WorldSpec) {}
+  private get villageSites(){return this.spec.generationVersion>=4?DISTANT_VILLAGE_SITES:VILLAGE_SITES;}
   river(x: number, z: number) {
     const s = this.spec.seeds, row = Math.round((z - 48) / 128);
     let center = 48 + row * 128 + Math.sin(x / 31 + s.rivers * .01) * 6 + Math.sin(x / 83 + s.terrain * .01) * 10;
-    if (this.spec.generationVersion >= 2) for (const v of VILLAGE_SITES) if (Math.abs(x - v.x) < 34 && Math.abs(center - v.z) < 30) center += (center > v.z ? 1 : -1) * (30 - Math.abs(center - v.z)) * smooth((34 - Math.abs(x - v.x)) / 8);
+    if (this.spec.generationVersion >= 2) for (const v of this.villageSites) if (Math.abs(x - v.x) < 34 && Math.abs(center - v.z) < 30) center += (center > v.z ? 1 : -1) * (30 - Math.abs(center - v.z)) * smooth((34 - Math.abs(x - v.x)) / 8);
     const width = 3.4 * this.spec.config.riverDensity + noise(s.rivers, x / 38, row) * 1.8;
     return { center, width, distance: Math.abs(z - center), row, crossing: Math.abs(x - Math.round(x / 64) * 64) < 2.4 };
   }
@@ -24,15 +26,15 @@ export class WorldManager {
     const { terrain } = this.spec.seeds, scale = this.spec.config.worldScale;
     const raw = (noise(terrain, x / (62 * scale), z / (62 * scale)) - .4) * 8 + noise(terrain ^ 5182, x / 17, z / 17) * 1.5;
     const home = smooth((Math.hypot(x, z) - 10) / 18); let base = .8 * (1 - home) + raw * home;
-    if (this.spec.generationVersion >= 2) for (const v of VILLAGE_SITES) { const edge = smooth((distance(v, { x, z }) - 15) / 8); base = .8 * (1 - edge) + base * edge; }
+    if (this.spec.generationVersion >= 2) for (const v of this.villageSites) { const edge = smooth((distance(v, { x, z }) - 15) / 8); base = .8 * (1 - edge) + base * edge; }
     const r = this.river(x, z); if (this.spec.config.riverDensity === 0) return base;
     const bank = smooth((r.distance - r.width) / 9);
     return (-1.1 + Math.min(1, r.distance / r.width) * .8) * (1 - bank) + base * bank;
   }
-  walkHeight(x: number, z: number) { const r = this.river(x, z); return this.spec.config.riverDensity > 0 && r.crossing && r.distance < r.width + 2 ? .65 : this.height(x, z); }
+  walkHeight(x: number, z: number) { const r = this.river(x, z); return this.spec.config.riverDensity > 0 && r.crossing && r.distance < r.width + 2 ? .65 : this.isWater(x,z)?-.05:this.height(x, z); }
   isWater(x: number, z: number) { const r = this.river(x, z); return this.spec.config.riverDensity > 0 && r.distance < r.width + .2 && !r.crossing; }
   biome(x: number, z: number) { return noise(this.spec.seeds.biomes, x / 70, z / 70) > .56 ? 'Pinewood' : noise(this.spec.seeds.biomes, x / 25, z / 25) < .32 ? 'Rocky uplands' : 'Snowfields'; }
-  villages(): Village[] { return this.spec.generationVersion < 2 ? [] : VILLAGE_SITES.map((v, i) => ({ ...v, variant: i, houses: 3, trader: { x: v.x - 5, z: v.z + 5 }, container: { x: v.x + 5, z: v.z + 5 }, guardCount: 3 + derive(this.spec.seeds.villages, v.id) % 3 })); }
+  villages(): Village[] { return this.spec.generationVersion < 2 ? [] : this.villageSites.map((v, i) => ({ ...v, variant: i, houses: 3, trader: { x: v.x - 5, z: v.z + 5 }, container: { x: v.x + 5, z: v.z + 5 }, guardCount: 3 + derive(this.spec.seeds.villages, v.id) % 3 })); }
   settlements(point: Point, radius = 1): Ruin[] { const chunks = this.around(point, radius); return [...chunks.flatMap(c => c.ruins), ...this.villages().filter(v => distance(v, point) < this.spec.config.chunkSize * (radius + 1))]; }
   ruin(rx: number, rz: number): Ruin | undefined {
     const rng = new SeededRNG(derive(this.spec.seeds.ruins, 'ruin', rx, rz));

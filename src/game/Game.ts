@@ -1,6 +1,7 @@
+import {movementMultiplier,updateExposure} from '../systems/StatusSystem';
 import { SettlementSystem } from '../systems/SettlementSystem';
 import type { SettlementEvent } from './PresentationEvents';
-import { MOVEMENT } from './GameConfig';
+import { MOVEMENT, GATHER_SECONDS } from './GameConfig';
 import { BUILDINGS, RESOURCE_IDS, balances, type BuildingType, type Resource } from '../data/definitions';
 import { WorldManager, distance, type Chunk, type Node, type Ruin, type FishingSpot } from '../world/WorldManager';
 import type { GameState, Point } from './GameState';
@@ -40,7 +41,7 @@ export class Game {
   nodeResource(node: Node): Resource { return this.state.combat.charredNodes.includes(node.id) ? 'charcoal' : node.resource; }
   nodesInChunk(chunk: Chunk): Node[] {
     const terrain=this.state.changes.terrain??{};
-    const nodes=chunk.nodes.flatMap((n):Node[]=>{
+    const nodes=chunk.nodes.filter(n=>this.state.world.generationVersion<4||!this.world.villages().some(v=>distance(v,n)<15)).flatMap((n):Node[]=>{
       const large=n.resource==='stone'&&!n.id.startsWith('starter:')&&derive(this.state.world.seeds.resources,n.id)%3===0;
       if(!large)return[n];
       if(terrain[n.id]==='broken')return Array.from({length:3},(_,i)=>({...n,id:`fragment:${n.id}:${i}`,x:n.x+Math.cos(i*2.1)*.6,z:n.z+Math.sin(i*2.1)*.6,amount:Math.floor(this.nodeRemaining(n)/3)+(i<this.nodeRemaining(n)%3?1:0),radius:.4,kind:'fragment' as const}));
@@ -62,21 +63,22 @@ export class Game {
   }
   move(point: Point, dx: number, dz: number, radius = .42,ignoreId?:string) {
     let x = point.x + dx, z = point.z + dz;
-    if (this.world.isWater(x, point.z)) x = point.x;
-    if (this.world.isWater(x, z)) z = point.z;
     for (const s of this.solids({ x, z })) {
       if('id' in s&&s.id===ignoreId)continue;
       const d = Math.hypot(x - s.x, z - s.z), min = s.radius + radius;
       if (d < min) { x = s.x + (d ? (x - s.x) / d : 1) * min; z = s.z + (d ? (z - s.z) / d : 0) * min; }
     }
-    if (!this.world.isWater(x, z)) { point.x = x; point.z = z; }
+    point.x = x; point.z = z;
   }
   stopMovement() { this.velocity.x = 0; this.velocity.z = 0; }
   update(dt: number, input: Input = { x: 0, z: 0 }) {
     if (this.paused || this.dead) return;
     dt = Math.min(.1, Math.max(0, dt));
+    updateExposure(this.state,dt,this.world.isWater(this.state.player.x,this.state.player.z));
     const len = Math.hypot(input.x, input.z), factor = 1 - Math.exp(-dt * MOVEMENT.response);
-    const sprint = !!input.sprint && len > .1, speed = sprint ? MOVEMENT.sprintSpeed : MOVEMENT.walkSpeed;
+    const sprint = !!input.sprint && len > .1, speed = (sprint ? MOVEMENT.sprintSpeed : MOVEMENT.walkSpeed)*movementMultiplier(this.state,sprint);
+    if(speed===0)this.stopMovement();
+    const oldSpeed=Math.hypot(this.velocity.x,this.velocity.z);if(oldSpeed>speed&&oldSpeed>0){this.velocity.x*=speed/oldSpeed;this.velocity.z*=speed/oldSpeed;}
     this.velocity.x += (input.x / Math.max(1, len) * speed - this.velocity.x) * factor;
     this.velocity.z += (input.z / Math.max(1, len) * speed - this.velocity.z) * factor;
     this.move(this.state.player, this.velocity.x * dt, this.velocity.z * dt);
@@ -94,7 +96,7 @@ export class Game {
     }
     if(this.gathering){
       const task=this.gathering;
-      if(len>.1||distance(task.node,this.state.player)>3||this.nodeRemaining(task.node)<=0){this.gathering=undefined;this.notify('Gathering cancelled.');}
+      if((this.state.player.stunned??0)>0||len>.1||distance(task.node,this.state.player)>3||this.nodeRemaining(task.node)<=0){this.gathering=undefined;this.notify('Gathering cancelled.');}
       else{const before=task.remaining;task.remaining-=dt;if(Math.floor(before/.65)!==Math.floor(task.remaining/.65))this.lastGather=this.state.elapsed;if(task.remaining<=1e-8){this.gathering=undefined;const result=this.gather(task.node);if(!result.ok)this.notify(result.error);}}
     }
     this.settlement.update(dt);
@@ -102,9 +104,10 @@ export class Game {
   }
   startGather(node:Node):Result {
     if(this.paused||this.dead)return{ok:false,error:'Resume before gathering.'};
+    if((this.state.player.stunned??0)>0)return{ok:false,error:'Wait for the stun to end.'};
     if(this.gathering||this.fishing)return{ok:false,error:'Finish the current action first.'};
     if(distance(node,this.state.player)>3||this.nodeRemaining(node)<=0)return{ok:false,error:'Approach an available resource.'};
-    this.gathering={node:{...node},remaining:3};this.lastGather=this.state.elapsed;this.notify(node.kind==='tree'?'Chopping tree / 3 seconds':node.kind==='boulder'?'Breaking boulder / 3 seconds':'Gathering / 3 seconds');return{ok:true};
+    this.gathering={node:{...node},remaining:GATHER_SECONDS};this.lastGather=this.state.elapsed;this.notify(node.kind==='tree'?'Chopping tree / 1 second':node.kind==='boulder'?'Breaking boulder / 1 second':'Gathering / 1 second');return{ok:true};
   }
   private breakNatural(node:Node):boolean {
     if(node.kind!=='tree'&&node.kind!=='boulder')return false;
@@ -239,8 +242,8 @@ export class Game {
       if (w.state === 'blocked') { w.progress += dt; if (w.progress < 3) continue; w.progress = 0; w.state = w.load ? 'returning' : 'seeking'; this.paths.delete(w.id); }
       if (w.state === 'gathering') {
         w.progress += dt;
-        if(source&&w.progress>=3&&source.kind==='tree'){this.breakNatural(source);w.sourceId=null;w.state='seeking';w.progress=0;continue;}
-        if (source && w.progress >= 3) { this.state.changes.nodes[source.id] = this.nodeRemaining(source) - 1; if (this.nodeRemaining(source) === 0) this.revision++; w.load++; w.progress = 0; }
+        if(source&&w.progress>=GATHER_SECONDS&&source.kind==='tree'){this.breakNatural(source);w.sourceId=null;w.state='seeking';w.progress=0;continue;}
+        if (source && w.progress >= GATHER_SECONDS) { this.state.changes.nodes[source.id] = this.nodeRemaining(source) - 1; if (this.nodeRemaining(source) === 0) this.revision++; w.load++; w.progress = 0; }
         if (!source || w.load >= 3) { w.state = 'returning'; this.paths.delete(w.id); }
         continue;
       }
