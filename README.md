@@ -226,3 +226,5 @@ The [hunger, City Store and night update](docs/NIGHT_AND_BALANCE.md) adds moveme
 Worker tending and pause update: wolves leave deterministic 0-2 meat pickups; meat restores 3 hunger, fish 2 (both +5 HP, shared 3s cooldown). The pause screen places resume/save/exit first and keeps the desktop/touch control guide collapsed until opened. [Rules and verification](docs/WORKER_FUEL_AND_PAUSE.md).
 
 Text seeds are trimmed, Unicode NFC-normalized, case-sensitive and hashed deterministically to an unsigned 32-bit seed. The original text is preserved in saves. The [seed and HUD update](docs/SEEDS_AND_WEATHER.md) documents numeric bounds, legacy compatibility and the open-ended survival HUD.
+
+Workers can fell standing trees and break large boulders before gathering their logs/fragments. They use visible axes/pickaxes, approach outside solid colliders within tool reach, and temporarily skip unreachable sources rather than becoming stuck on one. Harvested resources remain finite and reach shared storage on delivery. [Worker harvesting details](docs/WORKER_HARVEST.md).

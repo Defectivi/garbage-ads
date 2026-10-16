@@ -1,3 +1,4 @@
+import {workerTool} from './WorkerTools';
 import {createWolfAsset} from './WolfAsset';
 import { meleePose } from './MeleePose';
 import * as T from 'three';
@@ -18,6 +19,7 @@ function template(id:string) {
 export class NPCCharacter {
   readonly object=new T.Group(); ready=false;
   private asset?:T.Group;private mixer?:T.AnimationMixer;private actions=new Map<string,T.AnimationAction>();
+  private tool?:T.Group;
   private base?:T.AnimationAction;private upper?:T.AnimationAction;private action=false;private lastAttack=-100;
   private old?:{x:number;z:number};private speed=0;private weapon?:T.Group;private weaponType?:WeaponType;private disposed=false;
   constructor(readonly appearance:string) {
@@ -30,11 +32,12 @@ export class NPCCharacter {
     next.reset().setEffectiveWeight(1).setEffectiveTimeScale(1).setLoop(once?T.LoopOnce:T.LoopRepeat,once?1:Infinity);next.clampWhenFinished=once;next.play();if(old&&old!==next)old.crossFadeTo(next,.18,false);
     if(upper){this.upper=next;this.action=once;}else this.base=next;
   }
-  update(point:{x:number;z:number},height:number,heading:number,dt:number,clock:number,weapon:WeaponType|null=null,attack=-100,working=false) {
+  update(point:{x:number;z:number},height:number,heading:number,dt:number,clock:number,weapon:WeaponType|null=null,attack=-100,working=false,tool?:'axe'|'pickaxe') {
     const distance=this.old?Math.hypot(point.x-this.old.x,point.z-this.old.z):0;this.old={...point};
     this.speed=T.MathUtils.lerp(this.speed,dt>0?Math.min(3,distance/dt):0,1-Math.exp(-dt*12));
     this.object.position.set(point.x,height,point.z);this.object.rotation.y+=Math.atan2(Math.sin(heading-this.object.rotation.y),Math.cos(heading-this.object.rotation.y))*(1-Math.exp(-dt*10));
     if(!this.ready)return;
+    const wanted=working?tool:undefined;if(this.tool?.userData.tool!==wanted){if(this.tool)disposeWeapon(this.tool);this.tool=undefined;if(wanted){this.tool=workerTool(wanted);this.asset!.getObjectByName('HandR')?.add(this.tool);}}
     const bear=this.appearance.startsWith('bear-')||this.appearance.startsWith('wolf-'),moving=this.speed>.08;
     this.play(moving?'walk':'idle');if(this.base&&moving)this.base.setEffectiveTimeScale(T.MathUtils.clamp(this.speed/(bear?1.5:1.8),.4,1.5));
     if(this.weaponType!==(weapon??undefined)) { if(this.weapon)disposeWeapon(this.weapon);this.weapon=undefined;this.weaponType=weapon??undefined;if(weapon&&!bear){this.weapon=weaponMesh(weapon,true);if(weapon==='shotgun')this.weapon.scale.setScalar(.8);if(['stone_sword','wooden_sword','spear','machete'].includes(weapon))this.weapon.rotation.x=weapon==='spear'?0:Math.PI;this.asset!.getObjectByName(weapon==='bow'?'HandL':'HandR')?.add(this.weapon);}}
@@ -50,5 +53,5 @@ export class NPCCharacter {
     if(this.weapon&&weapon&&['stone_sword','wooden_sword','machete','spear'].includes(weapon)){if(this.action&&this.upper?.getClip().name===weapon)meleePose(this.object,this.asset!,this.weapon,weapon,this.upper.time/this.upper.getClip().duration);else this.weapon.rotation.set(weapon==='spear'?0:Math.PI,0,-.15);}
     this.object.userData.animation=this.action?this.upper?.getClip().name:working?'gather':moving?'walk':'idle';
   }
-  dispose(){this.disposed=true;if(this.weapon)disposeWeapon(this.weapon);this.mixer?.stopAllAction();if(this.asset){this.mixer?.uncacheRoot(this.asset);this.asset.traverse(o=>{if(o instanceof T.SkinnedMesh)o.skeleton.dispose();});}this.object.removeFromParent();}
+  dispose(){this.disposed=true;if(this.tool)disposeWeapon(this.tool);if(this.weapon)disposeWeapon(this.weapon);this.mixer?.stopAllAction();if(this.asset){this.mixer?.uncacheRoot(this.asset);this.asset.traverse(o=>{if(o instanceof T.SkinnedMesh)o.skeleton.dispose();});}this.object.removeFromParent();}
 }

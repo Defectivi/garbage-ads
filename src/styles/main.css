@@ -526,3 +526,5 @@ h1,h2,h3,.modal h2,.death-modal h2{font-family:Consolas,'Courier New',monospace;
 #seed-preview{display:block;min-height:18px;font:12px/1.5 Consolas,monospace;letter-spacing:0;margin-top:8px;color:#506e72;overflow-wrap:anywhere}#day-night{color:#c4d7df;font-size:12px;white-space:nowrap}
 
 #weather{display:inline-flex;align-items:center;gap:5px}#weather svg{width:15px;height:15px;flex-shrink:0}
+
+@media(max-width:700px){.health-line #weather{flex-basis:auto}.survival{max-height:max(140px,calc(100dvh - 590px))}}

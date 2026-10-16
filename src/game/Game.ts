@@ -1,3 +1,4 @@
+import {harvestRoute,workerHarvestReach} from '../systems/WorkerHarvest';
 import {CITY_OFFERS} from '../data/cityStore';
 import {maxPlayerHP} from './GameState';
 import {beginSpawnProtection} from '../systems/SpawnProtection';
@@ -35,6 +36,8 @@ export class Game {
     this.collectionEvents.push({ resource, amount, x: point.x, z: point.z });
   }
   fishing?: { spot: FishingSpot; remaining: number };
+  readonly harvestTargets=new Map<string,Node>();
+  private unavailableSources=new Map<string,Map<string,number>>();
   private fuelTasks=new Map<string,string>();
   private paths = new Map<string, Point[]>();
   private velocity = { x: 0, z: 0 };
@@ -295,6 +298,7 @@ export class Game {
     const d=distance(worker,next),step=Math.min(d,dt*3.8);this.move(worker,(next.x-worker.x)/(d||1)*step,(next.z-worker.z)/(d||1)*step,.3);if(d<.4)path.shift();return true;
   }
   private updateWorkers(dt: number) {
+    this.harvestTargets.clear();
     for (const w of this.state.workers) {
       if(w.hp>0&&w.hp<50&&!this.settlement.refuge(w.id))this.settlement.flee(w.id,w);
       if (w.hp <= 0||this.settlement.refuge(w.id)) continue;
@@ -302,13 +306,16 @@ export class Game {
       if(this.tendFurnace(w,hut,dt))continue;
       const needsWood=this.workerFurnaces(hut).length>0;
       const sources = this.world.around(hut).flatMap(c => [...this.nodesInChunk(c),...c.fishing.map((f):Node=>({...f,amount:f.availability,resource:'fish' as const,radius:.4}))]).filter(n => (['wood','stone','fish'].includes(this.nodeResource(n))) && distance(n, hut) < 26 && this.nodeRemaining(n) > 0 && !this.world.isWater(n.x, n.z));
-      let source = sources.find(n => n.id === w.sourceId);
+      const blocked=this.unavailableSources.get(w.id);for(const [id,until]of blocked??[])if(until<=this.state.elapsed)blocked!.delete(id);const available=sources.filter(n=>!blocked?.has(n.id));
+      let source = available.find(n => n.id === w.sourceId);
       if (w.load >= 3 || !source && w.load > 0) w.state = 'returning';
-      if (!source && !w.load) { source = sources.sort((a,b)=>(needsWood?Number(b.resource==='wood')-Number(a.resource==='wood'):0)||this.state.stockpile[a.resource]-this.state.stockpile[b.resource]||distance(a,w)-distance(b,w))[0];if(source)w.resource=source.resource as 'wood'|'stone'|'fish'; w.sourceId = source?.id ?? null; w.state = source ? 'seeking' : 'blocked'; this.paths.delete(w.id); }
+      if (!source && !w.load) { source = available.sort((a,b)=>(needsWood?Number(b.resource==='wood')-Number(a.resource==='wood'):0)||this.state.stockpile[a.resource]-this.state.stockpile[b.resource]||distance(a,w)-distance(b,w))[0];if(source)w.resource=source.resource as 'wood'|'stone'|'fish'; w.sourceId = source?.id ?? null; w.state = source ? 'seeking' : 'blocked'; this.paths.delete(w.id); }
       if (w.state === 'blocked') { w.progress += dt; if (w.progress < 3) continue; w.progress = 0; w.state = w.load ? 'returning' : 'seeking'; this.paths.delete(w.id); }
       if (w.state === 'gathering') {
+        if(source&&distance(w,source)>=workerHarvestReach(source)){w.state='seeking';w.progress=0;this.paths.delete(w.id);continue;}
+        if(source)this.harvestTargets.set(w.id,source);
         w.progress += dt;
-        if(source&&w.progress>=gatherSeconds(source.resource)-1e-8&&(source.kind==='tree'||source.kind==='boulder')){this.breakNatural(source);w.sourceId=null;w.state='seeking';w.progress=0;continue;}
+        if(source&&w.progress>=gatherSeconds(source.resource)-1e-8&&(source.kind==='tree'||source.kind==='boulder')){this.breakNatural(source);w.sourceId=source.kind==='tree'?`log:${source.id}`:`fragment:${source.id}:0`;w.state='seeking';w.progress=0;this.harvestTargets.delete(w.id);this.paths.delete(w.id);continue;}
         if (source && w.progress >= gatherSeconds(source.resource)-1e-8) { if(source.resource==='fish')this.state.changes.fishing[source.id]=(this.state.changes.fishing[source.id]??0)+1;else this.state.changes.nodes[source.id] = this.nodeRemaining(source) - 1; if (this.nodeRemaining(source) === 0) this.revision++; w.load++; w.progress = 0; }
         if (!source || w.load >= 3) { w.state = 'returning'; this.paths.delete(w.id); }
         continue;
@@ -317,20 +324,23 @@ export class Game {
       const destinations = [...this.state.furnaces.filter(f=>this.settlement.intact(f.id)).map(f => ({ x: f.x, z: f.z + 3 })), ...this.state.buildings.filter(b => b.type === 'storage'&&this.settlement.intact(b.id)).map(b => ({ x: b.x, z: b.z + 3.4 }))];
       const destination = destinations.sort((a, b) => distance(a, w) - distance(b, w))[0];
       const target = w.state === 'returning' ? destination : source!;
-      if (distance(w, target) < (w.state === 'returning' ? 1.8 : 2)) {
+      if(!target){w.state='blocked';continue;}
+      if (distance(w, target) < (w.state === 'returning' ? 1.8 : workerHarvestReach(source!))) {
         if (w.state === 'returning') {
           const r = transact([{ account: this.state.stockpile, delta: { [w.resource??'wood']: w.load } }], this.state.settings);
           if (r.ok) { w.load = 0; w.sourceId = null; w.state = 'seeking'; this.paths.delete(w.id); } else w.state = 'blocked';
-        } else { w.state = 'gathering'; w.progress = 0; }
+        } else { w.state = 'gathering'; w.progress = 0;this.harvestTargets.set(w.id,source!); }
         continue;
       }
       let path = this.paths.get(w.id);
       if (!path) {
         const solids = this.solids(hut);
         const valid = (p: Point) => !this.world.isWater(p.x, p.z) && solids.every(s => distance(s, p) > s.radius + .6);
-        let end = target; if (!valid(end)) { const options = Array.from({ length: 8 }, (_, i) => ({ x: target.x + Math.cos(i * Math.PI / 4) * 1.6, z: target.z + Math.sin(i * Math.PI / 4) * 1.6 })).filter(valid); if (options.length) end = options.sort((a, b) => distance(a, w) - distance(b, w))[0]; }
-        path = route(w, end, valid); this.paths.set(w.id, path);
-        if (!path.length) { w.state = 'blocked'; continue; }
+        path=harvestRoute(w,target,w.state==='returning'?1.8:workerHarvestReach(source!),valid);this.paths.set(w.id,path);
+        if(!path.length){
+          if(source&&w.state!=='returning'){let unavailable=this.unavailableSources.get(w.id);if(!unavailable){unavailable=new Map();this.unavailableSources.set(w.id,unavailable);}unavailable.set(source.id,this.state.elapsed+10);w.sourceId=null;}
+          w.state='blocked';w.progress=0;continue;
+        }
       }
       const next = path[0]; if (!next) { this.paths.delete(w.id); continue; }
       const d = distance(w, next), step = Math.min(d, dt * 3.8); this.move(w, (next.x - w.x) / (d || 1) * step, (next.z - w.z) / (d || 1) * step, .3);

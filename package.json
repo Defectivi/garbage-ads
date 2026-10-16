@@ -28,7 +28,8 @@
     "test:spawn": "node tests/spawn-visibility.mjs",
     "test:night": "node tests/balance-night.mjs",
     "test:workers": "node tests/worker-pause.mjs",
-    "test:seeds": "node tests/seed-hud.mjs"
+    "test:seeds": "node tests/seed-hud.mjs",
+    "test:harvest": "node tests/worker-harvest.mjs"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.3.0",

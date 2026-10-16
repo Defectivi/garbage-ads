@@ -168,7 +168,7 @@ export class Renderer {
     for(let layer=0;layer<3;layer++){const size=1-layer*.23;const leaves=this.mesh(new THREE.ConeGeometry(1.7*size,2.5,7),this.materials.dark,0,(2.5+layer*1.25)*scale),snow=this.mesh(new THREE.ConeGeometry(1.78*size,2.35,7),this.materials.snow,0,(2.75+layer*1.25)*scale);leaves.scale.setScalar(scale);snow.scale.setScalar(scale);g.add(leaves,snow);}return g;
   }
   private terrainFeedback(dt:number){
-    const node=this.game.gathering?.node,reduced=this.reducedMotion.matches;
+    const node=this.game.gathering?.node??[...this.game.harvestTargets.values()].find(n=>n.kind==='tree'),reduced=this.reducedMotion.matches;
     if(this.shaking?.id!==node?.id){if(this.shaking)for(const e of this.shaking.entries)if(e.mesh.parent){e.mesh.setMatrixAt(e.index,e.matrix);e.mesh.instanceMatrix.needsUpdate=true;}this.shaking=undefined;}
     if(node?.kind==='tree'&&!this.shaking){const entries:{mesh:THREE.InstancedMesh;index:number;matrix:THREE.Matrix4}[]=[];for(const chunk of this.chunks.values())chunk.traverse(o=>{if(o instanceof THREE.InstancedMesh){const index=(o.userData.treeIds as string[]|undefined)?.indexOf(node.id)??-1;if(index>=0){const matrix=new THREE.Matrix4();o.getMatrixAt(index,matrix);entries.push({mesh:o,index,matrix});}}});this.shaking={id:node.id,entries};}
     if(this.shaking&&!reduced){const offset=Math.sin(this.game.state.elapsed*45)*.045;for(const e of this.shaking.entries)if(e.mesh.parent){const matrix=e.matrix.clone();matrix.elements[12]+=offset;e.mesh.setMatrixAt(e.index,matrix);e.mesh.instanceMatrix.needsUpdate=true;}}
@@ -300,7 +300,8 @@ export class Renderer {
     for(const worker of game.state.workers) {
       if(worker.hp<=0)continue;residentIds.add(worker.id);let visual=this.residents.get(worker.id);
       if(!visual){visual=new NPCCharacter(characterStyle('worker',worker.id).id);this.residents.set(worker.id,visual);this.entities.add(visual.object);}
-      const refuge=game.settlement.refuge(worker.id),dx=worker.x-visual.object.position.x,dz=worker.z-visual.object.position.z;visual.update(worker,game.world.walkHeight(worker.x,worker.z),Math.hypot(dx,dz)>.01?Math.atan2(dx,dz):visual.object.rotation.y,game.paused?0:dt,game.state.elapsed,null,-100,worker.state==='gathering'&&!refuge);visual.object.visible=visual.ready&&refuge?.phase!=='hidden';visual.object.userData.refuge=refuge?.phase;
+      const harvest=game.harvestTargets.get(worker.id);
+      const refuge=game.settlement.refuge(worker.id),dx=worker.x-visual.object.position.x,dz=worker.z-visual.object.position.z;visual.update(worker,game.world.walkHeight(worker.x,worker.z),harvest?Math.atan2(harvest.x-worker.x,harvest.z-worker.z):Math.hypot(dx,dz)>.01?Math.atan2(dx,dz):visual.object.rotation.y,game.paused?0:dt,game.state.elapsed,null,-100,worker.state==='gathering'&&!refuge,harvest?.resource==='wood'?'axe':harvest?.resource==='stone'?'pickaxe':undefined);visual.object.visible=visual.ready&&refuge?.phase!=='hidden';visual.object.userData.refuge=refuge?.phase;
     }
     for(const [id,visual] of this.residents)if(!residentIds.has(id)){visual.dispose();this.residents.delete(id);}
     for (const [id, group] of this.dynamic) if (!entityIds.has(id)) { this.dispose(group); this.dynamic.delete(id); }
