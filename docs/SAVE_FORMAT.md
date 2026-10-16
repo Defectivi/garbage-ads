@@ -1,4 +1,4 @@
-# Frostbound JSON format 2 / generations 1 and 2
+# Frostbound JSON format 2 / generations 1, 2 and 3
 
 Both documents require `format: "frostbound"`, `formatVersion: 2`, `mode`, and `world`. JSON is parsed as data and never evaluated. UI strings from files are never inserted into HTML. Files over 12 MB, nonfinite/fractional resource numbers, invalid types, IDs, coordinates or unsupported versions are rejected before any state replacement.
 
@@ -7,8 +7,8 @@ Both documents require `format: "frostbound"`, `formatVersion: 2`, `mode`, and `
 ```json
 {
   "seed": 48192,
-  "generationVersion": 1,
-  "seeds": { "terrain": 100, "rivers": 200, "biomes": 300, "resources": 27341, "ruins": 400, "wildlife": 500 },
+  "generationVersion": 3,
+  "seeds": { "terrain": 100, "rivers": 200, "biomes": 300, "resources": 27341, "ruins": 400, "wildlife": 500, "villages": 600, "loot": 700 },
   "config": {
     "chunkSize": 32,
     "initialRegionSize": 256,
@@ -20,7 +20,7 @@ Both documents require `format: "frostbound"`, `formatVersion: 2`, `mode`, and `
 }
 ```
 
-The top-level seed and all six stream seeds are unsigned 16-bit integers, including zero and 65535. Explicit stream seeds are authoritative: changing `world.seed` alone changes the displayed identifying seed, not the stored streams. Use **New World** to derive all streams from a different seed, or edit the individual streams deliberately. Generation is a function of the complete world specification, not the displayed seed alone.
+The top-level seed and all eight stream seeds are unsigned 16-bit integers, including zero and 65535. Explicit stream seeds are authoritative: changing `world.seed` alone changes the displayed identifying seed, not the stored streams. Use **New World** to derive all streams from a different seed, or edit the individual streams deliberately. Generation is a function of the complete world specification, not the displayed seed alone.
 
 Chunk size: integer 16–64; initial region: integer 64–4096; world scale: 0.5–4; densities: 0–3. Terrain samples are continuous world coordinates. Generated stable IDs include `node:chunkX:chunkZ:index`, `fish:chunkX:riverRow`, and `ruin:regionX:regionZ`. Regions for ruins are 128 units wide. Building IDs use `built:N`; workers refer to their hut ID. Coordinate addressing supports negatives.
 
@@ -89,3 +89,21 @@ Static terrain, trees and unmodified node amounts are regenerated; they are not 
 Failure leaves the live state and existing local save unchanged. Successful import does not pretend to be a merge. Local autosave will subsequently save the imported world after active play; export the old world first if you want to retain it too.
 
 Formats 1 and 2 are supported. Format 1 migrates with charcoal zero, full HP, and fresh combat equipment/state. Terrain generation 1 is preserved; generation 2 adds fixed, flattened villages. Unknown versions are rejected. Format 2 full saves additionally require player/worker/NPC HP, furnace charcoal energy, and validated combat state (actors, weapons, cooldowns, projectiles, fire zones, bleed, drops, encounters, burned trees/nodes, village hostility and weather). Sandbox equipment is optional and encounters always start fresh.
+
+## Phase 1 generation compatibility
+
+New worlds use generation 3 and require eight explicit unsigned 16-bit stream seeds. The village stream determines guard composition; the loot stream determines equipment drops. Neither changes terrain, rivers, vegetation or resource positions. Village coordinates remain the existing fixed sites. Save format remains 2 because the mutable state schema is unchanged.
+
+Generations 1 and 2 still load. Missing `seeds.villages` and `seeds.loot` default to the saved wildlife seed, exactly matching the old algorithms. Explicit zero is preserved; null, fractional and out-of-range values are rejected. Generation 3 never silently fills missing seeds. Imported legacy worlds retain their generation version, layouts, changes and drop outcomes; export writes the normalized seed fields.
+
+## Furnace-entry compatibility
+
+Actor records may include optional boolean `heatInside`. New actors store it to preserve whether they are already inside the union of active player-owned heat circles. Older actors without the field initialize it from their current location when the Game is reconstructed, avoiding repeated entry damage on load. Invalid nonboolean values are rejected. Settlement animation events and steering velocity caches are transient and are never serialized.
+
+## Recovery binding
+
+Full-save state may include `respawnFurnaceId`, an entity ID that must reference an existing furnace. Missing values in earlier saves fall back to the starting home furnace. Sandbox imports start unbound at home. Format remains 2. Recovery restores health/warmth, clears player bleed, and halves positive carried and stored resource balances once; negative debts, equipment, buildings and world changes persist. The title-menu death action saves the defeated state, so reopening it presents the recovery choices. New World explicitly replaces the local slot.
+
+## Swept-hit compatibility
+
+Projectiles may additionally contain `weapon`, `weaponId`, `hitIds`, `volleyId` and `wearCharged`. These optional validated fields retain melee hit/durability deduplication and per-volley shotgun deduplication across saves. Missing fields remain accepted for older format-2 saves; old zero-damage swings/pellets finish as cosmetic effects. Bleed duration now accepts 0-10 seconds (old 0-5 values remain valid). Damage-number events and DOM effects are transient and never saved.

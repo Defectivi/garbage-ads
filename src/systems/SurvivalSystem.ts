@@ -1,7 +1,11 @@
-import type { GameState, Furnace } from '../game/GameState';
+import type { GameState, Furnace, Point } from '../game/GameState';
 import { distance } from '../world/WorldManager';
 export const heatRadius = (f: Furnace) => f.fuel + f.charcoal > 0 ? 12 + (f.level - 1) * 8 : 0;
-export const furnaceTier = (level: number) => Math.floor((level - 1) / 5);
+export const furnaceTier = (level: number) => Math.floor(level / 5);
+export function playerHeatSources(state: GameState) {
+  return state.furnaces.filter(f => f.id === 'home' || state.buildings.some(b => b.id === f.id && b.type === 'furnace')).filter(f => heatRadius(f) > 0);
+}
+export function inPlayerHeat(state: GameState, point: Point = state.player) { return playerHeatSources(state).some(f => distance(f, point) < heatRadius(f)); }
 export function temperature(state: GameState) { return -18 - Math.sin(state.elapsed / 200) * 8; }
 export function sheltered(state: GameState) { return state.furnaces.some(f => distance(f, state.player) < heatRadius(f)) || state.buildings.some(b => b.type === 'shelter' && distance(b, state.player) < 5); }
 export function updateSurvival(state: GameState, dt: number, sprint = false) {

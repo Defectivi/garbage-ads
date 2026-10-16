@@ -8,6 +8,7 @@ export interface Worker extends Point { id: string; hutId: string; hp: number; s
 export interface NPCState { inventory: Balances; hp: number }
 export interface GameState {
   world: WorldSpec;
+  respawnFurnaceId?: string;
   player: Point & { warmth: number; heading: number; hp: number };
   combat: CombatState;
   inventory: Balances; stockpile: Balances;

@@ -10,15 +10,15 @@ import {exportFull,importJSON} from '../src/systems/SaveSystem';
 function isolated() { const g = new Game(newState(worldSpec(42))); g.paused=false; g.combat.ensureEncounters(); for(const a of Object.values(g.state.combat.actors)) a.hp=0; return g; }
 test('weapon cadence, 100 uses, infinite ammo and HP definitions',()=>{
  const g=isolated();
- for(const type of WEAPON_IDS){g.state.combat.weapons=[{id:'test',type,uses:100}];g.state.combat.equipped='test';g.state.combat.cooldown=0;assert(g.combat.attack({x:0,z:10}));assert.equal(g.state.combat.cooldown,WEAPONS[type].cooldown);assert.equal(g.state.combat.weapons[0].uses,99);assert(!g.combat.attack({x:0,z:10}));g.state.combat.cooldown=0;g.state.combat.weapons[0].uses=0;assert(!g.combat.attack({x:0,z:10}));}
+ for(const type of WEAPON_IDS){g.state.combat.weapons=[{id:'test',type,uses:100}];g.state.combat.equipped='test';g.state.combat.cooldown=0;assert(g.combat.attack({x:0,z:10}));assert.equal(g.state.combat.cooldown,WEAPONS[type].cooldown);assert.equal(g.state.combat.weapons[0].uses,WEAPONS[type].type==='melee'?100:99);assert(!g.combat.attack({x:0,z:10}));g.state.combat.cooldown=0;g.state.combat.weapons[0].uses=0;assert(!g.combat.attack({x:0,z:10}));}
  assert.deepEqual(ACTOR_HP,{polar_bear:50,bandit:125,arsonist:75,guard:125}); assert(shotgunDamage(.5)>shotgunDamage(2.9));
 });
-test('machete applies exactly five bleed ticks and guard retaliation persists',()=>{
- const g=isolated(), a=Object.values(g.state.combat.actors).find(a=>a.type==='guard')!; a.hp=125;a.x=0;a.z=5.5; a.weapon=null;
- g.combat.fireWeapon('player',g.state.player,a,'machete');assert.equal(a.hp,115);assert(g.state.combat.villageAlerts.includes(a.villageId!));
+test('machete applies 25 damage and exactly ten bleed ticks and guard retaliation persists',()=>{
+ const g=isolated();g.state.furnaces[0].fuel=0;const a=Object.values(g.state.combat.actors).find(a=>a.type==='guard')!; a.hp=125;a.x=0;a.z=5.5; a.weapon=null;
+ g.combat.fireWeapon('player',g.state.player,a,'machete');for(let i=0;i<6;i++)g.combat.update(.1);assert.equal(a.hp,100);assert(g.state.combat.villageAlerts.includes(a.villageId!));
  // Keep the target in the active region without AI retaliation affecting the test.
- for(let i=0;i<50;i++)g.combat.update(.1);
- assert.equal(a.hp,105);assert(!g.state.combat.statuses[a.id]); assert.deepEqual(importJSON(exportFull(g.state)),g.state);
+ for(let i=0;i<100;i++)g.combat.update(.1);
+ assert.equal(a.hp,80);assert(!g.state.combat.statuses[a.id]); assert.deepEqual(importJSON(exportFull(g.state)),g.state);
 });
 test('molotov burns for ten seconds, converts wood and trees into gatherable charcoal',()=>{
  const g=isolated(), n=g.nodes().find(n=>n.id==='starter:wood')!;
@@ -28,7 +28,7 @@ test('molotov burns for ten seconds, converts wood and trees into gatherable cha
 });
 test('snow triples fuel consumption; charcoal doubles energy and halves burn rate; sprint doubles exposure',()=>{
  const s=newState(worldSpec(42),{difficulty:'survival'});s.player.x=1000;s.player.warmth=80;const b=structuredClone(s);updateSurvival(s,1);updateSurvival(b,1,true);assert(Math.abs((80-b.player.warmth)-2*(80-s.player.warmth))<1e-9);
- const f=s.furnaces[0];f.fuel=100;s.combat.weather.mode='snow';updateSurvival(s,1);assert.equal(f.fuel,97);f.charcoal=120;updateSurvival(s,1);assert.equal(f.charcoal,118.5);assert.equal(f.fuel,97);assert.equal(furnaceTier(5),0);assert.equal(furnaceTier(6),1);assert.equal(furnaceTier(11),2);
+ const f=s.furnaces[0];f.fuel=100;s.combat.weather.mode='snow';updateSurvival(s,1);assert.equal(f.fuel,97);f.charcoal=120;updateSurvival(s,1);assert.equal(f.charcoal,118.5);assert.equal(f.fuel,97);assert.equal(furnaceTier(4),0);assert.equal(furnaceTier(5),1);assert.equal(furnaceTier(6),1);assert.equal(furnaceTier(11),2);
 });
 test('fixed villages spawn 3-5 guards, bandit groups 2-10, equipment drops approximate seven percent',()=>{
  const g=new Game(newState(worldSpec(42)));g.combat.ensureEncounters();for(const v of g.world.villages().filter(v=>Math.hypot(v.x,v.z)<85)){const guards=Object.values(g.state.combat.actors).filter(a=>a.villageId===v.id);assert(guards.length>=3&&guards.length<=5);assert(g.state.furnaces.some(f=>f.id===v.id+':furnace'));}
