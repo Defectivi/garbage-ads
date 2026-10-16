@@ -63,7 +63,7 @@ The joystick returns smoothly to neutral. Right-side camera gestures begin on te
 
 Tap/click terrain to reposition a selected building preview. Placement is limited to 15 units from the survivor and rejects deep water, steep slopes, solid overlaps, occupied player space, the home delivery apron, and essential trader/chest/fishing access. Costs spend positive stored resources first, then carried resources. Failed/cancelled purchases do not spend anything.
 
-The default **Relaxed exploration** mode loses warmth slowly and has no cold defeat. **Survival** makes exposure dangerous; a defeat dialog lets you recover at home without deleting your world. Furnaces, shelters, food, and cold exposure all affect actual player warmth. There is no timed expedition victory in v2.
+The default **Relaxed exploration** mode loses warmth slowly and has no cold defeat. **Survival** makes exposure dangerous; a defeat dialog lets you recover at home without deleting your world. Furnaces, shelters, food, and cold exposure all affect actual player warmth. There is no timed expedition victory or single-objective completion in v2. The HUD shows current weather without a clear-weather countdown; weather still cycles in the background.
 
 ## Resources and camp simulation
 

@@ -198,7 +198,7 @@ export class App {
     this.root.querySelector('#hunger')!.textContent=`HUNGER ${Math.ceil(s.player.hunger??20)} / 20`; (this.root.querySelector('.hunger-meter i') as HTMLElement).style.width=`${(s.player.hunger??20)*5}%`;
     this.root.querySelector('#health')!.textContent = `${Math.ceil(s.player.hp)} / ${maxPlayerHP(s)} HP`;
     (this.root.querySelector('.hp-meter i') as HTMLElement).style.width = `${s.player.hp/maxPlayerHP(s)*100}%`;
-    this.root.querySelector('#weather')!.textContent = c.weather.mode === 'snow' ? 'WHITEOUT / FUEL x3' : `CLEAR / ${Math.ceil(c.weather.remaining)}s`;
+    this.root.querySelector('#weather')!.textContent = c.weather.mode === 'snow' ? 'WHITEOUT / FUEL x3' : 'CLEAR';
     const rack = this.root.querySelector('#weapon-rack')!; const rackHTML = c.weapons.filter(w => w.uses > 0).map((w,i) => `<button data-weapon="${w.id}" class="${w.id === c.equipped ? 'selected' : ''}" title="${WEAPONS[w.type].name}"><kbd>${i < 6 ? i+1 : ''}</kbd><b>${WEAPONS[w.type].name}</b><small>${w.uses}/${weaponUses(w.type)}</small></button>`).join('');
     if (rack.innerHTML !== rackHTML) { rack.innerHTML = rackHTML; rack.querySelectorAll<HTMLButtonElement>('[data-weapon]').forEach(b => b.onclick = () => { c.equipped = b.dataset.weapon!; this.refresh(); }); }
     this.root.querySelector('#weapon-state')!.textContent = equipped ? `${WEAPONS[equipped.type].name} / ${equipped.uses} uses / ${c.cooldown > 0 ? c.cooldown.toFixed(1)+'s' : 'READY'} / ${equipped&&WEAPONS[equipped.type].type==='melee'?'wear on enemy hit':'unlimited ammo'}` : `Unarmed / 2 damage / ${c.cooldown>0?c.cooldown.toFixed(1)+'s':'READY'}`;
