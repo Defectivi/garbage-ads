@@ -58,7 +58,7 @@ export class SettlementSystem {
   flee(id:string,point:Point){
     const g=this.game,worker=g.state.workers.find(w=>w.id===id),old=this.refuge(id);
     if(old){old.remaining=12;if(old.phase==='returning')old.phase='fleeing';return;}
-    const houses=this.structures(point,2).filter(b=>b.type!=='furnace'&&this.integrity(b).stage==='intact'&&distance(b,point)<36).sort((a,b)=>(a.id===worker?.hutId?-100:distance(a,point))-(b.id===worker?.hutId?-100:distance(b,point)));
+    const houses=this.structures(point,2).filter(b=>b.type!=='furnace'&&this.integrity(b).stage==='intact'&&!b.construction&&distance(b,point)<36).sort((a,b)=>(a.id===worker?.hutId?-100:distance(a,point))-(b.id===worker?.hutId?-100:distance(b,point)));
     const house=houses[0];if(!house)return;
     (g.state.changes.refuges??(g.state.changes.refuges={}))[id]={houseId:house.id,x:point.x,z:point.z,homeX:point.x,homeZ:point.z,phase:'fleeing',remaining:12};this.paths.delete(id);
   }
@@ -70,7 +70,7 @@ export class SettlementSystem {
       if(distance(refuge,g.state.player)>100)continue;
       const house=this.structures(refuge,2).find(b=>b.id===refuge.houseId),worker=g.state.workers.find(w=>w.id===id);
       if(!house||this.integrity(house).stage!=='intact'){refuge.phase='returning';this.paths.delete(id);}
-      if(refuge.phase==='hidden'){refuge.remaining=Math.max(0,refuge.remaining-dt);if(refuge.remaining<=0){refuge.phase='returning';this.paths.delete(id);}else continue;}
+      if(refuge.phase==='hidden'){if(worker)worker.hp=Math.min(100,worker.hp+dt*5);refuge.remaining=Math.max(0,refuge.remaining-dt);if(refuge.remaining<=0){refuge.phase='returning';this.paths.delete(id);}else continue;}
       const target=refuge.phase==='fleeing'?{x:house!.x-.7*Math.cos(house!.rotation)+(BUILDINGS[house!.type].radius+.5)*Math.sin(house!.rotation),z:house!.z+.7*Math.sin(house!.rotation)+(BUILDINGS[house!.type].radius+.5)*Math.cos(house!.rotation)}:{x:refuge.homeX,z:refuge.homeZ};
       if(distance(refuge,target)<.4){if(refuge.phase==='fleeing'){refuge.phase='hidden';refuge.remaining=12;}else delete g.state.changes.refuges![id];this.paths.delete(id);continue;}
       let path=this.paths.get(id);if(!path){const solids=g.solids(refuge).filter(s=>!('id'in s)||s.id!==id),valid=(p:Point)=>!g.world.isWater(p.x,p.z)&&solids.every(s=>distance(s,p)>s.radius+.35),clear=(a:Point,b:Point)=>solids.every(s=>segmentDistance(s,a,b)>s.radius+.3);path=valid(target)&&clear(refuge,target)?[target]:route(refuge,target,valid);if(path.length&&valid(target)&&clear(path[path.length-1],target))path.push(target);this.paths.set(id,path);}

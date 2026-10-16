@@ -1,8 +1,9 @@
+import {furnaceCost,MAX_FURNACE_LEVEL,MAX_RADIUS_LEVEL} from '../data/furnaces';
 import {movementMultiplier,updateExposure} from '../systems/StatusSystem';
 import { SettlementSystem } from '../systems/SettlementSystem';
 import type { SettlementEvent } from './PresentationEvents';
 import { MOVEMENT, GATHER_SECONDS } from './GameConfig';
-import { BUILDINGS, RESOURCE_IDS, balances, type BuildingType, type Resource } from '../data/definitions';
+import { BUILDINGS, RESOURCE_IDS, balances, type Balances, type BuildingType, type Resource } from '../data/definitions';
 import { WorldManager, distance, type Chunk, type Node, type Ruin, type FishingSpot } from '../world/WorldManager';
 import type { GameState, Point } from './GameState';
 import { transact, single, negate, exchange, type Result } from '../systems/InventorySystem';
@@ -37,7 +38,7 @@ export class Game {
   get inventoryLimit() { return this.state.settings.inventoryLimit ? this.state.settings.inventoryLimit + this.state.buildings.filter(b => b.type === 'storage'&&this.settlement.intact(b.id)).length * 50 : 0; }
   get dead() { return this.state.player.hp <= 0 || this.state.settings.difficulty === 'survival' && this.state.player.warmth <= 0; }
   notify(message: string) { this.message = message; }
-  nodeRemaining(node: Node) { return this.state.changes.nodes[node.id] ?? node.amount; }
+  nodeRemaining(node: Node) { if(node.id.startsWith('fish:'))return Math.max(0,node.amount-(this.state.changes.fishing[node.id]??0));return this.state.changes.nodes[node.id] ?? node.amount; }
   nodeResource(node: Node): Resource { return this.state.combat.charredNodes.includes(node.id) ? 'charcoal' : node.resource; }
   nodesInChunk(chunk: Chunk): Node[] {
     const terrain=this.state.changes.terrain??{};
@@ -100,6 +101,7 @@ export class Game {
       else{const before=task.remaining;task.remaining-=dt;if(Math.floor(before/.65)!==Math.floor(task.remaining/.65))this.lastGather=this.state.elapsed;if(task.remaining<=1e-8){this.gathering=undefined;const result=this.gather(task.node);if(!result.ok)this.notify(result.error);}}
     }
     this.settlement.update(dt);
+    this.updateConstruction(dt);
     this.updateWorkers(dt);
   }
   startGather(node:Node):Result {
@@ -124,15 +126,15 @@ export class Game {
     if (result.ok) { this.state.changes.nodes[node.id] = left - 1; this.lastGather = this.state.elapsed; this.collected(resource, 1, node); if (left === 1) this.revision++; this.notify(`+1 ${resource}`); }
     return result;
   }
-  feed(id = 'home', resource: 'wood' | 'charcoal' = 'wood'): Result {
+  feed(id = 'home', resource: 'wood' | 'charcoal' = Math.max(0,this.state.inventory.charcoal)+Math.max(0,this.state.stockpile.charcoal)>0?'charcoal':'wood'): Result {
     const f = this.state.furnaces.find(f => f.id === id);
     if (!f || !this.settlement.intact(f.id)||distance(f, this.state.player) > 4) return { ok: false, error: 'Approach a furnace to add fuel.' };
     this.bindFurnace(id);
-    const fuel = resource === 'charcoal' ? 120 : 60;
+    const fuel = resource === 'charcoal' ? 30 : 10;
     if (f.fuel + f.charcoal > 3600 - fuel) return { ok: false, error: 'Furnace fuel capacity is 3600 units.' };
     const account = this.state.inventory[resource] > 0 ? this.state.inventory : this.state.stockpile;
     const r = transact([{ account, delta: single(resource, -1) }], this.state.settings);
-    if (r.ok) { this.action({kind:'fuel',x:f.x,z:f.z,label:`+${fuel} fuel`,costs:[{resource,amount:1,stock:account===this.state.stockpile?1:0}]}); if (resource === 'charcoal') f.charcoal += fuel; else f.fuel += fuel; this.notify(resource === 'charcoal' ? 'Added 120 charcoal fuel. It burns at half the wood rate.' : 'Added 60 seconds of fuel.'); } return r;
+    if (r.ok) { this.action({kind:'fuel',x:f.x,z:f.z,label:`+${fuel} fuel`,costs:[{resource,amount:1,stock:account===this.state.stockpile?1:0}]}); if (resource === 'charcoal') f.charcoal += fuel; else f.fuel += fuel; this.notify(resource === 'charcoal' ? 'Added 30 seconds of charcoal fuel at level 1.' : 'Added 10 seconds of wood fuel at level 1.'); } return r;
   }
   bindFurnace(id:string): boolean {
     const f=this.state.furnaces.find(f=>f.id===id);
@@ -190,18 +192,23 @@ export class Game {
     for (const k of RESOURCE_IDS) { const n = (cost as Partial<Record<Resource, number>>)[k] ?? 0; stock[k] = -Math.min(Math.max(0, this.state.stockpile[k]), n); carried[k] = -n - stock[k]!; }
     const r = transact([{ account: this.state.stockpile, delta: stock }, { account: this.state.inventory, delta: carried }], this.state.settings);
     if (!r.ok) return r;
-    const id = `built:${this.state.nextId++}`; this.state.buildings.push({ id, type, ...point, rotation }); this.paths.clear();
+    const id = `built:${this.state.nextId++}`; this.state.buildings.push({ id, type, ...point, rotation,...(type==='hut'?{construction:10}:{}) }); this.paths.clear();
     if (type === 'furnace') this.state.furnaces.push({ id, ...point, fuel: 0, charcoal: 0, level: 1 });
-    if (type === 'hut') this.state.workers.push({ id: `worker:${id}`, hutId: id, hp: 100, x: point.x, z: point.z + 3, sourceId: null, load: 0, progress: 0, state: 'seeking' });
-    this.action({kind:'build',...point,label:BUILDINGS[type].name+' built',costs:RESOURCE_IDS.filter(k=>(cost as Partial<Record<Resource,number>>)[k]).map(resource=>({resource,amount:(cost as Partial<Record<Resource,number>>)[resource]!,stock:-stock[resource]!}))});
-    this.revision++; this.notify(`${BUILDINGS[type].name} built.`); return r;
+    this.action({kind:'build',...point,label:BUILDINGS[type].name+(type==='hut'?' construction started':' built'),costs:RESOURCE_IDS.filter(k=>(cost as Partial<Record<Resource,number>>)[k]).map(resource=>({resource,amount:(cost as Partial<Record<Resource,number>>)[resource]!,stock:-stock[resource]!}))});
+    this.revision++; this.notify(type==='hut'?'Worker hut construction started / 10 seconds.':`${BUILDINGS[type].name} built.`); return r;
   }
   upgradeFurnace(id = 'home'): Result {
-    const f = this.state.furnaces.find(f => f.id === id); if (!f || !this.settlement.intact(f.id)||distance(f, this.state.player) > 5) return { ok: false, error: 'Approach the furnace to expand it.' };
-    if (f.level >= 25) return { ok: false, error: 'Furnace is at the supported maximum level (25).' };
-    const fromStock = Math.min(30, Math.max(0, this.state.stockpile.wood));
-    const r = transact([{ account: this.state.stockpile, delta: { wood: -fromStock } }, { account: this.state.inventory, delta: { wood: -(30 - fromStock) } }], this.state.settings);
-    if (r.ok) { f.level++; this.action({kind:'upgrade',x:f.x,z:f.z,label:`Level ${f.level} / +8 heat range`,costs:[{resource:'wood',amount:30,stock:fromStock}]}); this.notify('Furnace expanded: +8 world units of heat range, more efficient fuel.'); } return r;
+    const info=this.furnaceUpgrade(id);if(!info.ok)return{ok:false,error:info.error!};
+    const f=info.furnace!,cost=info.cost,stock:Partial<Balances>={},carried:Partial<Balances>={};
+    for(const k of RESOURCE_IDS){const n=cost[k]??0;stock[k]=-Math.min(n,Math.max(0,this.state.stockpile[k]));carried[k]=-n-stock[k]!;}
+    const r=transact([{account:this.state.stockpile,delta:stock},{account:this.state.inventory,delta:carried}],this.state.settings);
+    if(r.ok){f.level++;this.action({kind:'upgrade',x:f.x,z:f.z,label:`Level ${f.level} / ${f.level<=MAX_RADIUS_LEVEL?'+8 heat range':'fuel efficiency improved'}`,costs:RESOURCE_IDS.filter(k=>cost[k]).map(resource=>({resource,amount:cost[resource]!,stock:-stock[resource]!}))});this.notify(`Furnace level ${f.level}. ${f.level<=MAX_RADIUS_LEVEL?'Heat range expanded.':'Maximum heat range retained.'} Fuel lasts longer.`);}return r;
+  }
+  furnaceUpgrade(id?:string){
+    const furnace=id?this.state.furnaces.find(f=>f.id===id):[...this.state.furnaces].filter(f=>this.settlement.intact(f.id)).sort((a,b)=>distance(a,this.state.player)-distance(b,this.state.player))[0];
+    const cost=furnaceCost((furnace?.level??1)+1),missing=RESOURCE_IDS.filter(k=>Math.max(0,this.state.inventory[k])+Math.max(0,this.state.stockpile[k])<(cost[k]??0));
+    const error=!furnace||distance(furnace,this.state.player)>5||!this.settlement.intact(furnace.id)?'Approach a furnace to upgrade it.':furnace.level>=MAX_FURNACE_LEVEL?'Furnace is fully upgraded (level 50).':missing.length&&!this.state.settings.allowDebt?'Gather '+missing.map(k=>`${(cost[k]??0)-Math.max(0,this.state.inventory[k])-Math.max(0,this.state.stockpile[k])} ${k}`).join(', ')+' to upgrade.':undefined;
+    return{ok:!error,error,furnace,cost,missing};
   }
   startFishing(spot: FishingSpot): Result {
     if (distance(spot, this.state.player) > 3) return { ok: false, error: 'Stand beside the blue fishing marker on the bank.' };
@@ -231,19 +238,29 @@ export class Game {
     const result = exchange(this.state.inventory, inventory, offer.give, offer.receive, this.state.settings, this.inventoryLimit);
     if (result.ok) { this.state.changes.npcs[npc.id] = { inventory, hp: npc.hp }; this.notify(`Trade completed with ${npc.name}.`); } return result;
   }
+  private updateConstruction(dt:number){
+    for(const hut of this.state.buildings){
+      if(hut.type!=='hut'||hut.construction===undefined||!this.settlement.intact(hut.id))continue;
+      hut.construction=Math.max(0,hut.construction-dt);if(hut.construction>1e-8)continue;
+      delete hut.construction;
+      for(let i=0;i<2;i++){const id=`worker:${hut.id}:${i}`;if(!this.state.workers.some(w=>w.id===id))this.state.workers.push({id,hutId:hut.id,hp:100,x:hut.x+(i?1:-1),z:hut.z+3,sourceId:null,load:0,progress:0,state:'seeking'});}
+      this.revision++;this.notify('Worker hut ready. Two gatherers have joined the settlement.');this.action({kind:'build',x:hut.x,z:hut.z,label:'Hut complete / 2 workers',costs:[]});
+    }
+  }
   private updateWorkers(dt: number) {
     for (const w of this.state.workers) {
+      if(w.hp>0&&w.hp<50&&!this.settlement.refuge(w.id))this.settlement.flee(w.id,w);
       if (w.hp <= 0||this.settlement.refuge(w.id)) continue;
       const hut = this.state.buildings.find(b => b.id === w.hutId); if (!hut||!this.settlement.intact(hut.id)) continue;
-      const sources = this.world.around(hut).flatMap(c => this.nodesInChunk(c)).filter(n => this.nodeResource(n) === 'wood' && distance(n, hut) < 26 && this.nodeRemaining(n) > 0 && !this.world.isWater(n.x, n.z));
+      const sources = this.world.around(hut).flatMap(c => [...this.nodesInChunk(c),...c.fishing.map((f):Node=>({...f,amount:f.availability,resource:'fish' as const,radius:.4}))]).filter(n => (['wood','stone','fish'].includes(this.nodeResource(n))) && distance(n, hut) < 26 && this.nodeRemaining(n) > 0 && !this.world.isWater(n.x, n.z));
       let source = sources.find(n => n.id === w.sourceId);
       if (w.load >= 3 || !source && w.load > 0) w.state = 'returning';
-      if (!source && !w.load) { source = sources.sort((a, b) => distance(a, w) - distance(b, w))[0]; w.sourceId = source?.id ?? null; w.state = source ? 'seeking' : 'blocked'; this.paths.delete(w.id); }
+      if (!source && !w.load) { source = sources.sort((a,b)=>this.state.stockpile[a.resource]-this.state.stockpile[b.resource]||distance(a,w)-distance(b,w))[0];if(source)w.resource=source.resource as 'wood'|'stone'|'fish'; w.sourceId = source?.id ?? null; w.state = source ? 'seeking' : 'blocked'; this.paths.delete(w.id); }
       if (w.state === 'blocked') { w.progress += dt; if (w.progress < 3) continue; w.progress = 0; w.state = w.load ? 'returning' : 'seeking'; this.paths.delete(w.id); }
       if (w.state === 'gathering') {
         w.progress += dt;
-        if(source&&w.progress>=GATHER_SECONDS&&source.kind==='tree'){this.breakNatural(source);w.sourceId=null;w.state='seeking';w.progress=0;continue;}
-        if (source && w.progress >= GATHER_SECONDS) { this.state.changes.nodes[source.id] = this.nodeRemaining(source) - 1; if (this.nodeRemaining(source) === 0) this.revision++; w.load++; w.progress = 0; }
+        if(source&&w.progress>=GATHER_SECONDS-1e-8&&(source.kind==='tree'||source.kind==='boulder')){this.breakNatural(source);w.sourceId=null;w.state='seeking';w.progress=0;continue;}
+        if (source && w.progress >= GATHER_SECONDS-1e-8) { if(source.resource==='fish')this.state.changes.fishing[source.id]=(this.state.changes.fishing[source.id]??0)+1;else this.state.changes.nodes[source.id] = this.nodeRemaining(source) - 1; if (this.nodeRemaining(source) === 0) this.revision++; w.load++; w.progress = 0; }
         if (!source || w.load >= 3) { w.state = 'returning'; this.paths.delete(w.id); }
         continue;
       }
@@ -253,7 +270,7 @@ export class Game {
       const target = w.state === 'returning' ? destination : source!;
       if (distance(w, target) < (w.state === 'returning' ? 1.8 : 2)) {
         if (w.state === 'returning') {
-          const r = transact([{ account: this.state.stockpile, delta: { wood: w.load } }], this.state.settings);
+          const r = transact([{ account: this.state.stockpile, delta: { [w.resource??'wood']: w.load } }], this.state.settings);
           if (r.ok) { w.load = 0; w.sourceId = null; w.state = 'seeking'; this.paths.delete(w.id); } else w.state = 'blocked';
         } else { w.state = 'gathering'; w.progress = 0; }
         continue;

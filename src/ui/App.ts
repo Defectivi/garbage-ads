@@ -1,3 +1,5 @@
+import {fuelInterval} from '../data/furnaces';
+import {updateFurnaceUpgrade,flashMissing} from './FurnaceUpgradeUI';
 import {maxPlayerHP,playerEffects} from '../systems/StatusSystem';
 import { DamageEffects } from './DamageEffects';
 import { CollectionEffects } from './CollectionEffects';
@@ -12,7 +14,7 @@ import { distance } from '../world/WorldManager';
 import { Panels } from './Panels';
 import { loadLocal, saveLocal } from '../systems/SaveSystem';
 import { type Result } from '../systems/InventorySystem';
-import { temperature, sheltered, inPlayerHeat } from '../systems/SurvivalSystem';
+import { temperature, sheltered, inPlayerHeat, heatRadius, healingAmount } from '../systems/SurvivalSystem';
 import { AudioSystem } from '../game/audio';
 import { itemIcon, uiIcon } from './Icons';
 export class App {
@@ -46,6 +48,7 @@ export class App {
       if (/^[1-6]$/.test(e.key)) this.equip(Number(e.key) - 1);
       if (e.key.toLowerCase() === 'f') this.interact();
       if (['e','i'].includes(e.key.toLowerCase())) this.panels.inventory();
+      if (e.key.toLowerCase() === 't') this.upgradeFurnace();
       if (e.key.toLowerCase() === 'b') this.panels.building();
       if (e.key.toLowerCase() === 'm') this.panels.map();
       if (e.key.toLowerCase() === 'p') this.panels.saves();
@@ -83,7 +86,7 @@ export class App {
   }
   enter() {
     this.clearInput(); this.mode = 'game'; this.played = true; this.game.paused = false; this.root.className = 'playing'; this.keys.clear(); this.audio.enabled = this.game.state.settings.sound; this.audio.unlock(); this.audio.ambience(true);
-    this.root.innerHTML = `<header><b>${uiIcon('mountain')} FROSTBOUND</b><span id="seed-hud"></span><button id="menu" aria-label="Pause game">Ⅱ <span>Pause</span></button></header><div id="resources" class="resource-bar" aria-label="Carried resources"></div><section class="survival"><div class="exposure-heading">${uiIcon('flame')}<strong id="warmth"></strong></div><div class="warmth-meter"><i></i></div><span id="fuel"></span><small id="location"></small><small id="recovery-state"></small><small id="structure-status"></small></section><button id="interaction" class="interaction"><kbd>F</kbd><span></span></button><section class="combat-hud"><div class="health-line"><b id="health"></b><span id="weather"></span></div><div class="hp-meter"><i></i></div><div id="weapon-rack"></div><small id="weapon-state"></small><small id="furnace-defense"></small><button id="attack-button">ATTACK <kbd>SPACE</kbd></button><button id="sprint-button">SPRINT <kbd>SHIFT</kbd></button></section><aside id="player-effects" aria-label="Active player effects"></aside><div id="message" role="status"></div><footer><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move / F interact / E inventory / Shift+S save</footer>`;
+    this.root.innerHTML = `<header><b>${uiIcon('mountain')} FROSTBOUND</b><span id="seed-hud"></span><button id="menu" aria-label="Pause game">Ⅱ <span>Pause</span></button></header><div id="resources" class="resource-bar" aria-label="Carried resources"></div><section class="survival"><div class="exposure-heading">${uiIcon('flame')}<strong id="warmth"></strong></div><div class="warmth-meter"><i></i></div><span id="fuel"></span><small id="location"></small><small id="recovery-state"></small><small id="structure-status"></small><div id="furnace-upgrade"></div></section><button id="interaction" class="interaction"><kbd>F</kbd><span></span></button><section class="combat-hud"><div class="health-line"><b id="health"></b><b id="warmth-readout"></b><span id="weather"></span></div><div class="hp-meter"><i></i></div><div id="weapon-rack"></div><small id="weapon-state"></small><small id="furnace-defense"></small><button id="attack-button">ATTACK <kbd>SPACE</kbd></button><button id="sprint-button">SPRINT <kbd>SHIFT</kbd></button></section><aside id="player-effects" aria-label="Active player effects"></aside><div id="message" role="status"></div><footer><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move / F interact / E inventory / Shift+S save</footer>`;
     this.root.querySelector('#menu')!.addEventListener('click', () => this.pause()); this.root.querySelector('#interaction')!.addEventListener('click', () => this.interact());
     const toolbar = document.createElement('nav'); toolbar.className = 'toolbar'; toolbar.setAttribute('aria-label', 'Field kit'); toolbar.innerHTML = [['inventory', 'pack', 'Rucksack', 'E'], ['build', 'build', 'Build', 'B'], ['map', 'map', 'Map', 'M'], ['saves', 'save', 'World files', 'P'], ['settings', 'settings', 'Settings', '']].map(([id, art, label, key]) => `<button id="${id}" title="${label}${key ? ` (${key})` : ''}" aria-label="${label}">${uiIcon(art)}<span>${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`).join('');
     this.root.appendChild(toolbar); toolbar.querySelector('#inventory')!.addEventListener('click', () => this.panels.inventory()); toolbar.querySelector('#build')!.addEventListener('click', () => this.panels.building()); toolbar.querySelector('#map')!.addEventListener('click', () => this.panels.map()); toolbar.querySelector('#saves')!.addEventListener('click', () => this.panels.saves()); toolbar.querySelector('#settings')!.addEventListener('click', () => this.panels.settings());
@@ -116,7 +119,7 @@ export class App {
   replaceWorld(state: GameState) { const saved=saveLocal(state); this.collectionEffects.clear(); this.damageEffects.clear(); this.cancelBuilding(); this.game = new Game(state); this.renderer.setGame(this.game); this.revision = -1; this.autosave = 0; this.enter();if(!saved.ok)this.error(saved.message); }
   private offerWorld(state: GameState, message: string) { const el = this.modal('A new chapter?', '<p id="replace-description"></p><div class="button-row"><button id="confirm-world" class="primary">Confirm replacement</button><button id="cancel-world">Cancel</button></div>'); el.querySelector('#replace-description')!.textContent = `${message} Seed ${state.world.seed}, generation ${state.world.generationVersion}.`; el.querySelector('#confirm-world')!.addEventListener('click', () => this.replaceWorld(state)); el.querySelector('#cancel-world')!.addEventListener('click', () => this.closeModal()); }
   private pause() {
-    const el = this.modal('The wilderness can wait.', '<p>Simulation is paused. Your fire and workers will wait.</p><p class="control-hints">Desktop: WASD / arrows move, hold Shift to sprint, right-drag to orbit, wheel to zoom. Touch: left joystick moves; drag the right half of the world to orbit. Hold Sprint; use + / - to zoom. Attack uses the equipped weapon; F / Interact uses the nearby prompt. E toggles inventory, B builds, M toggles the map (or closes inventory), Shift+S saves locally. Movement sets facing. Left click and touch Attack assist nearby hostiles; Space attacks forward.</p><div class="button-row"><button id="resume" class="primary">Resume</button><button id="pause-save">Save locally</button><button id="reset-world">Reset this world</button><button id="exit-menu">Exit to Menu</button></div>');
+    const el = this.modal('The wilderness can wait.', '<p>Simulation is paused. Your fire and workers will wait.</p><p class="control-hints">Desktop: WASD / arrows move, hold Shift to sprint, right-drag to orbit, wheel to zoom. Touch: left joystick moves; drag the right half of the world to orbit. Hold Sprint; use + / - to zoom. Attack uses the equipped weapon; F / Interact uses the nearby prompt. E toggles inventory, B builds, T upgrades the nearest furnace, M toggles the map (or closes inventory), Shift+S saves locally. Movement sets facing. Left click and touch Attack assist nearby hostiles; Space attacks forward.</p><div class="button-row"><button id="resume" class="primary">Resume</button><button id="pause-save">Save locally</button><button id="reset-world">Reset this world</button><button id="exit-menu">Exit to Menu</button></div>');
     el.querySelector('#resume')!.addEventListener('click', () => this.closeModal()); el.querySelector('#pause-save')!.addEventListener('click', () => { const r = saveLocal(this.game.state); el.querySelector('#dialog-status')!.textContent = r.message; }); el.querySelector('#exit-menu')!.addEventListener('click', () => this.menu()); el.querySelector('#reset-world')!.addEventListener('click', () => this.offerWorld(newState(this.game.state.world, this.game.state.settings), 'Reset this seed to its original state? Buildings, discoveries and resource changes will be cleared.'));
   }
   beginBuilding(type: BuildingType) {
@@ -136,7 +139,7 @@ export class App {
     else if (context.kind === 'drop') this.game.combat.pickup(context.id!);
     else if (context.kind === 'trader') this.panels.trade(context.ruin!);
     else if (context.kind === 'storage') this.panels.inventory();
-    else { const result = context.kind === 'node' ? this.game.startGather(context.node!) : context.kind === 'furnace' ? this.game.feed(context.id, this.game.state.inventory.wood + this.game.state.stockpile.wood > 0 ? 'wood' : 'charcoal') : context.kind === 'fishing' ? this.game.startFishing(context.spot!) : this.game.search(context.ruin!); this.report(result); }
+    else { const result = context.kind === 'node' ? this.game.startGather(context.node!) : context.kind === 'furnace' ? this.game.feed(context.id) : context.kind === 'fishing' ? this.game.startFishing(context.spot!) : this.game.search(context.ruin!); this.report(result); }
     if(context.kind==='node'&&context.node?.kind==='tree'&&!matchMedia('(prefers-reduced-motion: reduce)').matches)navigator.vibrate?.(18);
     this.actionTimer = .45; this.refresh();
   }
@@ -175,11 +178,13 @@ export class App {
       value.classList.toggle('negative', s.inventory[resource] < 0);
     }
     this.root.querySelector('#warmth')!.textContent = `${Math.round(temperature(s))}°C · Warmth ${Math.round(s.player.warmth)}%`;
-    this.root.querySelector('#fuel')!.textContent = `Home · ${Math.ceil(s.furnaces[0].fuel + s.furnaces[0].charcoal * 2)}s fuel · Level ${s.furnaces[0].level}`;
+    this.root.querySelector('#fuel')!.textContent = `Home · ${Math.ceil((s.furnaces[0].fuel + s.furnaces[0].charcoal)*fuelInterval(s.furnaces[0].level)/(s.combat.weather.mode==='snow'?3:1))}s fuel · Level ${s.furnaces[0].level}`;
     this.root.querySelector('#location')!.textContent = `${this.game.world.biome(s.player.x, s.player.z)} / ${Math.round(s.player.x)}, ${Math.round(s.player.z)}`;
-    this.root.querySelector('#recovery-state')!.textContent=(s.player.invulnerable??0)>0?`RESPAWN SHIELD / ${s.player.invulnerable!.toFixed(1)}s`:s.player.hp<100&&s.furnaces.some(f=>this.game.settlement.intact(f.id)&&distance(f,s.player)<(f.fuel+f.charcoal>0?12+(f.level-1)*8:0))?`+25 HP in ${(3-(s.player.heatTime??0)).toFixed(1)}s`:'';
+    this.root.querySelector('#recovery-state')!.textContent=(s.player.invulnerable??0)>0?`RESPAWN SHIELD / ${s.player.invulnerable!.toFixed(1)}s`:s.player.hp<maxPlayerHP(s)&&s.furnaces.some(f=>this.game.settlement.intact(f.id)&&distance(f,s.player)<heatRadius(f))?`+${healingAmount(s)} HP in ${(3-(s.player.heatTime??0)).toFixed(1)}s`:'';
+    updateFurnaceUpgrade(this.root,this.game,()=>this.upgradeFurnace());
+    this.root.querySelector('#warmth-readout')!.textContent=`WARMTH ${Math.round(s.player.warmth)}%`;
     const structure=this.game.settlement.structures().filter(b=>distance(b,s.player)<5&&this.game.settlement.integrity(b).stage!=='gone').sort((a,b)=>distance(a,s.player)-distance(b,s.player))[0];
-    this.root.querySelector('#structure-status')!.textContent=structure?`${structure.id==='home'?'Home furnace':structure.generated?'Village house':BUILDINGS[structure.type].name} / ${this.game.settlement.integrity(structure).stage} / ${Math.ceil(this.game.settlement.integrity(structure).hp)} HP`:'';
+    this.root.querySelector('#structure-status')!.textContent=structure?`${structure.id==='home'?'Home furnace':structure.generated?'Village house':BUILDINGS[structure.type].name} / ${this.game.settlement.integrity(structure).stage} / ${Math.ceil(this.game.settlement.integrity(structure).hp)} HP${structure.construction!==undefined?' / building '+structure.construction.toFixed(1)+'s':''}`:'';
     const c = s.combat, equipped = c.weapons.find(w => w.id === c.equipped&&w.uses>0);
     this.root.querySelector('#health')!.textContent = `${Math.ceil(s.player.hp)} / ${maxPlayerHP(s)} HP`;
     (this.root.querySelector('.hp-meter i') as HTMLElement).style.width = `${s.player.hp/maxPlayerHP(s)*100}%`;
@@ -197,6 +202,12 @@ export class App {
     (this.root.querySelector('.warmth-meter i') as HTMLElement).style.width = `${s.player.warmth}%`;
     this.root.classList.toggle('danger', s.player.warmth < 25); this.root.querySelector('.survival')!.classList.toggle('safe', sheltered(s));
     if(this.game.dead&&!this.root.querySelector('.death-modal'))this.showDeath();
+  }
+  private upgradeFurnace(){
+    if(this.game.paused||this.game.dead)return;
+    const info=this.game.furnaceUpgrade();
+    if(!info.ok){this.game.notify(info.error!);flashMissing(this.root,info.missing);this.refresh();return;}
+    this.report(this.game.upgradeFurnace(info.furnace!.id));
   }
   private showDeath() {
     const s=this.game.state,f=s.furnaces.find(f=>f.id===s.respawnFurnaceId&&this.game.settlement.intact(f.id))??s.furnaces.find(f=>this.game.settlement.intact(f.id))??s.furnaces[0];

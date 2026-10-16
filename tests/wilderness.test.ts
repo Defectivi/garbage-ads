@@ -30,10 +30,10 @@ test('wolf bite deals 7 then 4 each second for 12 seconds; repeat bites refresh 
  g.state.player.hp=100;wolf.hp=50;(g.combat as any).bite(wolf,target());g.state.combat.statuses.player.wolfBleed=2;g.state.combat.statuses.player.wolfTick=.7;(g.combat as any).bite(wolf,target());assert.equal(g.state.combat.statuses.player.wolfBleed,12);assert.equal(g.state.combat.statuses.player.wolfTick,.7);assert.deepEqual(importJSON(exportFull(g.state)),g.state);
  g.state.player.invulnerable=5;delete g.state.combat.statuses.player;const hp=g.state.player.hp;(g.combat as any).bite(wolf,target());assert.equal(g.state.player.hp,hp);assert(!g.state.combat.statuses.player);
 });
-test('bear attacks deal 15 or 30 with approximately 50 percent criticals and three-second player stun',()=>{
- const g=fixture(),bear=Object.values(g.state.combat.actors).find(a=>a.type==='polar_bear')!;bear.hp=50;let criticals=0;
- for(let i=0;i<1000;i++){g.state.player.hp=100;g.state.player.stunned=0;(g.combat as any).bite(bear,{...g.state.player,id:'player',kind:'player'});const damage=100-g.state.player.hp;assert(damage===15||damage===30);if(damage===30){criticals++;assert.equal(g.state.player.stunned,3);}else assert.equal(g.state.player.stunned,3);}
- assert(criticals>450&&criticals<550);g.state.player.stunned=3;g.paused=false;assert(!g.combat.attackAssisted());const p={...g.state.player};g.update(.1,{x:1,z:0});assert.equal(g.state.player.x,p.x);updateExposure(g.state,3,false);assert.equal(g.state.player.stunned,0);
+test('bear attacks deal 15 or 30 with approximately 50 percent criticals and ten percent chance of a three-second stun',()=>{
+ const g=fixture(),bear=Object.values(g.state.combat.actors).find(a=>a.type==='polar_bear')!;bear.hp=50;let criticals=0,stuns=0;
+ for(let i=0;i<1000;i++){g.state.player.hp=100;g.state.player.stunned=0;(g.combat as any).bite(bear,{...g.state.player,id:'player',kind:'player'});const damage=100-g.state.player.hp;assert(damage===15||damage===30);if(damage===30)criticals++;if(g.state.player.stunned===3)stuns++;}
+ assert(criticals>450&&criticals<550);assert(stuns>70&&stuns<130);g.state.player.stunned=3;g.paused=false;assert(!g.combat.attackAssisted());const p={...g.state.player};g.update(.1,{x:1,z:0});assert.equal(g.state.player.x,p.x);updateExposure(g.state,3,false);assert.equal(g.state.player.stunned,0);
 });
 test('river exposure caps max HP, slows walking, escalates after five seconds and drains 25 warmth per three seconds',()=>{
  const g=fixture(),s=g.state;updateExposure(s,.1,true);assert.equal(maxPlayerHP(s),90);assert.equal(s.player.hp,90);assert.equal(movementMultiplier(s),.1);assert.equal(movementMultiplier(s,true),.5);

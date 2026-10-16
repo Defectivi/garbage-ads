@@ -50,7 +50,7 @@ test('fuel, upgrade and house feedback is emitted only for completed atomic tran
  assert(g.feed().ok);assert.equal(s.inventory.wood,before-1);assert.equal(g.actionEvents.at(-1)!.kind,'fuel');g.actionEvents.length=0;
  assert(!g.upgradeFurnace().ok);assert.equal(g.actionEvents.length,0);
  s.stockpile.wood=20;s.inventory.wood=10;assert(g.upgradeFurnace().ok);assert.equal(s.stockpile.wood,0);assert.equal(s.inventory.wood,0);assert.deepEqual(g.actionEvents.at(-1)!.costs,[{resource:'wood',amount:30,stock:20}]);
- s.inventory.wood=5;assert(g.build('hut',{x:8,z:4},0).ok);assert.equal(s.inventory.wood,0);assert.equal(g.actionEvents.at(-1)!.kind,'build');assert.equal(s.workers.length,1);
+ s.inventory.wood=20;assert(g.build('hut',{x:8,z:4},0).ok);assert.equal(s.inventory.wood,0);assert.equal(g.actionEvents.at(-1)!.kind,'build');assert.equal(s.workers.length,0);assert.equal(s.buildings.at(-1)!.construction,10);
  const count=g.actionEvents.length;assert(!g.build('hut',{x:0,z:0},0).ok);assert.equal(g.actionEvents.length,count);assert(!exportFull(s).includes('actionEvents'));
  assert.equal(furnaceTier(4),0);assert.equal(furnaceTier(5),1);assert.equal(furnaceTier(10),2);assert.equal(furnaceTier(15),3);
 });

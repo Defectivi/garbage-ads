@@ -26,9 +26,9 @@ test('molotov burns for ten seconds, converts wood and trees into gatherable cha
  assert.equal(g.state.combat.fires.length,0);assert.equal(g.nodeResource(n),'charcoal');g.state.player.x=n.x;g.state.player.z=n.z;assert(g.gather(n).ok);assert.equal(g.state.inventory.charcoal,1);
  assert.deepEqual(importJSON(exportFull(g.state)),g.state);
 });
-test('snow triples fuel consumption; charcoal doubles energy and halves burn rate; sprint doubles exposure',()=>{
+test('snow triples fuel consumption; charcoal fuel burns before wood; sprint doubles exposure',()=>{
  const s=newState(worldSpec(42),{difficulty:'survival'});s.player.x=1000;s.player.warmth=80;const b=structuredClone(s);updateSurvival(s,1);updateSurvival(b,1,true);assert(Math.abs((80-b.player.warmth)-2*(80-s.player.warmth))<1e-9);
- const f=s.furnaces[0];f.fuel=100;s.combat.weather.mode='snow';updateSurvival(s,1);assert.equal(f.fuel,97);f.charcoal=120;updateSurvival(s,1);assert.equal(f.charcoal,118.5);assert.equal(f.fuel,97);assert.equal(furnaceTier(4),0);assert.equal(furnaceTier(5),1);assert.equal(furnaceTier(6),1);assert.equal(furnaceTier(11),2);
+ const f=s.furnaces[0];f.fuel=100;s.combat.weather.mode='snow';updateSurvival(s,1);assert.equal(f.fuel,97);f.charcoal=120;updateSurvival(s,1);assert.equal(f.charcoal,117);assert.equal(f.fuel,97);assert.equal(furnaceTier(4),0);assert.equal(furnaceTier(5),1);assert.equal(furnaceTier(6),1);assert.equal(furnaceTier(11),2);
 });
 test('fixed villages spawn 3-5 guards, bandit groups 2-10, equipment drops approximate seven percent',()=>{
  const g=new Game(newState({...worldSpec(42),generationVersion:3}));g.combat.ensureEncounters();for(const v of g.world.villages().filter(v=>Math.hypot(v.x,v.z)<85)){const guards=Object.values(g.state.combat.actors).filter(a=>a.villageId===v.id);assert(guards.length>=3&&guards.length<=5);assert(g.state.furnaces.some(f=>f.id===v.id+':furnace'));}

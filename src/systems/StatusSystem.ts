@@ -1,6 +1,6 @@
 import {maxPlayerHP,type GameState} from '../game/GameState';
 export {maxPlayerHP} from '../game/GameState';
-import {heatRadius,structureIntact,inPlayerHeat} from './SurvivalSystem';
+import {heatRadius,structureIntact,inPlayerHeat,healingAmount} from './SurvivalSystem';
 import {distance} from '../world/WorldManager';
 export function movementMultiplier(state:GameState,sprint=false){return (state.player.stunned??0)>0?0:state.player.hypothermia?(sprint?.5:.1):1;}
 /** River exposure is simulation state. Bridges are dry; fire clears lingering cold, not a river's exposure. */
@@ -21,6 +21,6 @@ export function playerEffects(state:GameState):{id:string;label:string;detail:st
  if((status?.wolfBleed??0)>0)effects.push({id:'wolf-bleed',label:`WOLF BITE ${Math.ceil(status!.wolfBleed!)}s`,detail:'Bleeding / 4 damage each second'});
  if((status?.bleed??0)>0)effects.push({id:'bleed',label:`BLEEDING ${Math.ceil(status!.bleed)}s`,detail:'2 damage each second'});
  if((p.invulnerable??0)>0)effects.push({id:'shield',label:`SHIELDED ${p.invulnerable!.toFixed(1)}s`,detail:'Respawn protection'});
- if(inPlayerHeat(state))effects.push({id:'heat',label:'FURNACE PROTECTION',detail:'Incoming damage -50% / heals 25 HP every 3s'});
+ if(inPlayerHeat(state))effects.push({id:'heat',label:'FURNACE PROTECTION',detail:`Incoming damage -50% / heals ${healingAmount(state)} HP every 3s`});
  return effects;
 }

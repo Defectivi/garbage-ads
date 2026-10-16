@@ -1,3 +1,4 @@
+import {paintMap} from './MapPainter';
 import { showTrade } from './TradingUI';
 import type { App } from './App';
 import { BUILDINGS, RESOURCES, RESOURCE_IDS, type BuildingType } from '../data/definitions';
@@ -13,10 +14,9 @@ export class Panels {
 
   }
   building() {
-    const el = this.app.modal('Make a place in the snow', `<p>Build near your survivor on clear, dry ground. Costs use stored resources first, then carried supplies.</p><div class="building-list">${(Object.keys(BUILDINGS) as BuildingType[]).map(k => `<button data-building="${k}"><b>${BUILDINGS[k].name}</b><small>${resourceText(BUILDINGS[k].costs)}</small><span>${BUILDINGS[k].effect}</span></button>`).join('')}</div><button id="expand" class="secondary">Expand nearest furnace · 30 wood / +8 heat radius</button>`);
-    const fuel = document.createElement('button'); fuel.textContent = 'Fuel nearest furnace / 1 charcoal / 120 fuel / half burn rate'; el.querySelector('.modal-content')!.appendChild(fuel); fuel.onclick = () => { const p = this.app.game.state.player, f = [...this.app.game.state.furnaces].sort((a,b) => Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0]; const result=this.app.game.feed(f.id,'charcoal');this.app.report(result);if(result.ok)this.app.closeModal(); };
+    const el = this.app.modal('Make a place in the snow', `<p>Build near your survivor on clear, dry ground. Costs use stored resources first, then carried supplies.</p><div class="building-list">${(Object.keys(BUILDINGS) as BuildingType[]).map(k => `<button data-building="${k}"><b>${BUILDINGS[k].name}</b><small>${resourceText(BUILDINGS[k].costs)}</small><span>${BUILDINGS[k].effect}</span></button>`).join('')}</div>`);
+    const fuel = document.createElement('button'); fuel.textContent = 'Fuel nearest furnace / 1 charcoal / 30 base fuel seconds'; el.querySelector('.modal-content')!.appendChild(fuel); fuel.onclick = () => { const p = this.app.game.state.player, f = [...this.app.game.state.furnaces].sort((a,b) => Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0]; const result=this.app.game.feed(f.id,'charcoal');this.app.report(result);if(result.ok)this.app.closeModal(); };
     el.querySelectorAll<HTMLButtonElement>('[data-building]').forEach(b => b.addEventListener('click', () => { this.app.closeModal(); this.app.beginBuilding(b.dataset.building as BuildingType); }));
-    el.querySelector('#expand')!.addEventListener('click', () => { const f = [...this.app.game.state.furnaces].sort((a, b) => Math.hypot(a.x - this.app.game.state.player.x, a.z - this.app.game.state.player.z) - Math.hypot(b.x - this.app.game.state.player.x, b.z - this.app.game.state.player.z))[0]; const result=this.app.game.upgradeFurnace(f.id);this.app.report(result);if(result.ok)this.app.closeModal();this.app.refresh(); });
   }
   trade(ruin: Ruin, selected?: string) { showTrade(this.app,ruin,selected); }
   settings() {
@@ -43,12 +43,9 @@ export class Panels {
   map() {
     const game = this.app.game, p = game.state.player, ruin = game.world.ruin(0, 0)!;
     const known = game.state.discovered.filter(k => k.startsWith('ruin:')).map(k => { const [, x, z] = k.split(':'); return game.world.ruin(Number(x), Number(z)); }).filter(r => !!r).concat(game.world.villages());
-    const el = this.app.modal('A field guide to the north', `<p>North is up. The chart covers 256 × 256 units around you; the world continues beyond its edges. Blue marks rivers. Bridges every 64 east/west units keep you dry. You can wade across elsewhere, but river water causes lasting hypothermia; warm up beside an active furnace or fire.</p><canvas id="map-canvas" width="512" height="512"></canvas><div class="map-key"><span>● You</span><span>▲ Home</span><span>■ Discovered ruins</span></div><p id="map-rumour"></p><div id="known-places"></div>`);
+    const el = this.app.modal('A field guide to the north', `<p>North is up. The chart covers 256 × 256 units around you; the world continues beyond its edges. Deep blue marks rivers and lakes. Green pines are individual trees; gray contours mark hills. Bridges every 64 east/west units keep you dry. You can wade across elsewhere, but river water causes lasting hypothermia; warm up beside an active furnace or fire.</p><canvas id="map-canvas" width="512" height="512"></canvas><div class="map-key"><span class="key-water">Water / hypothermia</span><span class="key-forest">Pine forest</span><span class="key-hill">High ground</span><span class="key-village">Villages / gold</span><span>Ruins / brown</span><span class="key-player">You / red</span><span class="key-home">Home / navy</span></div><p id="map-rumour"></p><div id="known-places"></div>`);
     el.querySelector('#map-rumour')!.textContent = ruin && !game.state.discovered.includes(ruin.id) ? `A rumour of old rooftops: ${Math.round(ruin.x)} east, ${Math.abs(Math.round(ruin.z))} north of home.` : 'Follow blue fishing markers along accessible riverbanks. Search chests near ruined houses.';
     const list = el.querySelector('#known-places')!; for (const r of known) { const row = document.createElement('p'); row.textContent = `${r!.name} · ${Math.round(r!.x)}, ${Math.round(r!.z)}`; list.appendChild(row); }
-    const ctx = el.querySelector<HTMLCanvasElement>('#map-canvas')!.getContext('2d')!;
-    for (let x = 0; x < 512; x += 4) for (let z = 0; z < 512; z += 4) { const wx = p.x - 128 + x / 2, wz = p.z - 128 + z / 2, river = game.world.river(wx, wz); ctx.fillStyle = game.world.spec.config.riverDensity && river.distance < river.width ? river.crossing ? '#a18b6b' : '#5c96ad' : game.world.biome(wx, wz) === 'Pinewood' ? '#9bb9b1' : '#e1ece9'; ctx.fillRect(x, z, 4, 4); }
-    const dot = (x: number, z: number, color: string, size: number) => { ctx.fillStyle = color; ctx.fillRect((x - p.x + 128) * 2 - size / 2, (z - p.z + 128) * 2 - size / 2, size, size); };
-    dot(p.x, p.z, '#b15e36', 9); dot(0, 0, '#345463', 9); for (const r of known) dot(r!.x, r!.z, '#81644a', 8);
+    paintMap(el.querySelector<HTMLCanvasElement>('#map-canvas')!,game,known);
   }
 }

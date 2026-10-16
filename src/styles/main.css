@@ -499,3 +499,11 @@ h1,h2,h3,.modal h2,.death-modal h2{font-family:Consolas,'Courier New',monospace;
 @media(max-height:600px){#player-effects{top:120px;max-height:160px;width:230px}.effect-card span{display:none}.effect-card{padding:6px 9px}}
 
 @media(max-width:700px){#message{top:auto;bottom:355px;max-width:90%;font-size:12px}.survivor-frame>span{font-size:10px;text-align:center;width:100%;padding:0 2px}.playing header>span{margin-right:12px}.inventory-modal .inventory-footnote{gap:6px}}
+
+#furnace-upgrade{pointer-events:auto;margin-top:12px;border-top:1px solid #678b9470;padding-top:10px}#upgrade-furnace{display:flex;gap:9px;align-items:center;width:100%;padding:10px;background:#a8763d;color:#fff0d2;border-color:#d5ab72;text-align:left;font-size:13px}#upgrade-furnace.unavailable{background:#50616a;color:#c0c7c5;border-color:#71818a;box-shadow:none}#upgrade-furnace strong{font-weight:700}.upgrade-costs{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}.upgrade-costs>span{display:flex;align-items:center;gap:4px;font-size:12px;padding:3px;background:#31505c20}.upgrade-costs .item-icon{width:20px;height:20px}.upgrade-costs .cost-missing{color:#a94135}.upgrade-help{display:block;margin-top:7px;font-size:12px;line-height:1.4}.resource-shortage{outline:2px solid #e37562;background:#a8463b80}#warmth-readout{color:#c7dfb3}.health-line{flex-wrap:wrap}
+@media(max-width:700px){#furnace-upgrade{margin-top:8px;padding-top:8px}#upgrade-furnace{padding:8px 6px;font-size:12px}.upgrade-costs{gap:3px}.upgrade-costs .item-icon{width:17px;height:17px}.upgrade-help{font-size:11px}.upgrade-costs>span{padding:1px 3px}.survival{max-height:max(140px,calc(100dvh - 560px));overflow:auto}.health-line #weather{flex-basis:100%}}
+
+.map-key{display:flex;flex-wrap:wrap;gap:10px;line-height:1.5}.map-key span:before{content:"";display:inline-block;width:10px;height:10px;margin-right:6px;background:#745d58}.map-key .key-water:before{background:#387e9b}.map-key .key-forest:before{background:#467465;clip-path:polygon(50% 0,100% 100%,0 100%)}.map-key .key-hill:before{background:#788586}.map-key .key-village:before{background:#bd8740}#map-canvas{border:1px solid #79909a}
+
+.map-key .key-player:before{background:#c74d38}.map-key .key-home:before{background:#294e65}
+@media(max-width:700px){#message{top:auto;bottom:108px;max-width:180px;padding:8px 10px;line-height:1.35;z-index:6}}

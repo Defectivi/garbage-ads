@@ -13,7 +13,7 @@ try {
   assert.equal(await page.title(), 'FYWS: Frostbound');
   await page.locator('#seed').fill('0'); await page.locator('#new-world').click();
   await page.waitForFunction(() => window.__frostbound.game.state.elapsed > .2);
-  assert.match(await page.locator('#seed-hud').textContent(), /SEED 0 \/ GEN 4/);
+  assert.match(await page.locator('#seed-hud').textContent(), /SEED 0 \/ GEN 5/);
   await page.waitForFunction(() => window.__frostbound.renderer.chunks.has('2,0'));
   const outerResources = await page.evaluate(() => {
     const { game, renderer } = window.__frostbound, group = renderer.chunks.get('2,0');
@@ -69,8 +69,8 @@ try {
   // The same native drag on left terrain does nothing, right terrain orbits.
   for (const [x, shouldOrbit] of [[30, false], [290, true]]) {
     const before = await mobile.evaluate(() => window.__frostbound.renderer.yaw);
-    await touch('touchStart', [{ id: 2, x, y: 270 }]);
-    await touch('touchMove', [{ id: 2, x: x + 65, y: 270 }]); await touch('touchEnd', []);
+    await touch('touchStart', [{ id: 2, x, y: 410 }]);
+    await touch('touchMove', [{ id: 2, x: x + 65, y: 410 }]); await touch('touchEnd', []);
     const after = await mobile.evaluate(() => window.__frostbound.renderer.yaw);
     if (shouldOrbit) assert(Math.abs(after - before) > .4); else assert.equal(after, before);
   }

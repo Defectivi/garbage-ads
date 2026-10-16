@@ -113,10 +113,19 @@ export class Renderer {
         vertices.push(x, .12, za, x, .12, zb, x + 2, .12, zc, x, .12, zb, x + 2, .12, zd, x + 2, .12, zc);
       }
       if (vertices.length) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); geo.computeVertexNormals(); const water = this.mesh(geo, this.materials.water); water.castShadow = false; g.add(water); }
+      for(const lake of w.lakes({x:x0+size/2,z:z0+size/2}))if(Math.floor(lake.x/size)===data.cx&&Math.floor(lake.z/size)===data.cz){
+        const water=this.mesh(new THREE.CircleGeometry(1,64).rotateX(-Math.PI/2),this.materials.water,lake.x,.12,lake.z);water.scale.set(lake.rx,1,lake.rz);water.castShadow=false;water.name='lake-water';water.userData.lakeId=lake.id;g.add(water);
+      }
       for (let x = Math.ceil(x0 / 64) * 64; x < x0 + size; x += 64) { const r = w.river(x, z0 + size / 2); if (r.center < z0 || r.center >= z0 + size) continue; this.box(g, x, .45, r.center, 4.7, .4, r.width * 2 + 3, this.materials.wood); for (const side of [-1, 1]) this.box(g, x + side * 2.3, 1.05, r.center, .12, .16, r.width * 2 + 3, this.materials.snow); }
     }
     for (const r of [...data.ruins, ...w.villages().filter(v => Math.floor(v.x / size) === data.cx && Math.floor(v.z / size) === data.cz)]) this.addRuin(g, r);
     for (const f of data.fishing) { const post = this.mesh(new THREE.CylinderGeometry(.08, .08, 1.5, 5), this.materials.wood, f.x, w.height(f.x, f.z) + .75, f.z); g.add(post); this.box(g, f.x, w.height(f.x, f.z) + 1.35, f.z, .85, .4, .12, mat(0x5a94a6)); }
+    return g;
+  }
+  private constructionModel(){
+    const g=new THREE.Group();g.name='hut-construction';this.box(g,0,.15,0,4,.3,4,this.materials.wood);
+    for(const x of [-1.8,1.8])for(const z of [-1.8,1.8])this.box(g,x,1.5,z,.18,3,.18,this.materials.wood);
+    for(const z of [-1.8,1.8]){this.box(g,0,2.8,z,4,.18,.18,this.materials.wood);const brace=this.box(g,0,1.4,z,.14,4,.14,this.materials.wood);brace.rotation.z=.9;}
     return g;
   }
   private ruinedBuilding(type:BuildingType,rotation:number){
@@ -226,9 +235,10 @@ export class Renderer {
     for (const b of game.settlement.structures(p,game.state.settings.renderDistance)) {
       const integrity=game.settlement.integrity(b);if(integrity.stage==='gone'||Math.hypot(b.x-p.x,b.z-p.z)>(game.state.settings.renderDistance+1)*game.world.spec.config.chunkSize)continue;
       entityIds.add(b.id); let group = this.dynamic.get(b.id);
-      if(group&&group.userData.stage!==integrity.stage){this.dispose(group);this.dynamic.delete(b.id);group=undefined;}
-      if(!group){group=integrity.stage==='ruin'?this.ruinedBuilding(b.type,b.rotation):this.building(b.type,b.rotation);group.userData.stage=integrity.stage;group.userData.structureId=b.id;this.dynamic.set(b.id,group);this.entities.add(group);}
+      if(group&&(group.userData.stage!==integrity.stage||group.userData.constructing!==!!b.construction)){this.dispose(group);this.dynamic.delete(b.id);group=undefined;}
+      if(!group){group=b.construction&&integrity.stage==='intact'?this.constructionModel():integrity.stage==='ruin'?this.ruinedBuilding(b.type,b.rotation):this.building(b.type,b.rotation);group.userData.stage=integrity.stage;group.userData.constructing=!!b.construction;group.userData.structureId=b.id;this.dynamic.set(b.id,group);this.entities.add(group);}
       const max=STRUCTURE_HP[b.type]*(integrity.stage==='ruin'?.25:1),occupants=Object.values(game.state.changes.refuges??{}).filter(r=>r.houseId===b.id&&r.phase==='hidden').length;
+      group.userData.construction=b.construction;group.scale.y=b.construction&&integrity.stage==='intact'?.35+.65*(1-b.construction/10):1;
       group.userData.hp=integrity.hp;group.userData.occupants=occupants;this.structureBar(group,integrity.hp/max,integrity.hp<max||occupants>0);
       group.position.set(b.x, game.world.height(b.x, b.z), b.z);
       if (b.type === 'furnace'&&integrity.stage==='intact') {

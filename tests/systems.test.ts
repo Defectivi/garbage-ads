@@ -44,10 +44,10 @@ test('movement, gathering wood and stone, furnace fuel and cold exposure are con
   game.state.player.x = 18; const warmth = game.state.player.warmth; game.update(.1, { x: 1, z: 0 }); assert(game.state.player.x > 18); assert(game.state.player.warmth < warmth);
 });
 test('build, save, unload and revisit retain placed structure and depleted nodes', () => {
-  const game = new Game(newState(worldSpec(42))); assert(game.build('hut', { x: 8, z: 4 }, 0).ok); assert.equal(game.state.inventory.wood, 7); assert.equal(game.state.workers.length, 1);
+  const game = new Game(newState(worldSpec(42)));game.state.inventory.wood=27; assert(game.build('hut', { x: 8, z: 4 }, 0).ok); assert.equal(game.state.inventory.wood, 7); assert.equal(game.state.workers.length, 0);
   const snapshot = exportFull(game.state), before = game.state.inventory.wood; assert(!game.build('hut', { x: 0, z: 0 }, 0).ok); assert.equal(game.state.inventory.wood, before);
   game.state.changes.nodes['starter:wood'] = 0; for (let x = -150; x <= 150; x++) game.world.chunk(x, 9); const node = game.world.chunk(0, 0).nodes.find(n => n.id === 'starter:wood')!; assert.equal(game.nodeRemaining(node), 0);
-  const loaded = new Game(importJSON(snapshot)); assert.deepEqual(loaded.state.buildings, game.state.buildings); assert.equal(loaded.state.workers.length, 1);
+  const loaded = new Game(importJSON(snapshot)); assert.deepEqual(loaded.state.buildings, game.state.buildings); assert.equal(loaded.state.workers.length, 0);
 });
 test('river identifies wet crossings and dry bridges; valid fishing yields consumable inventory', () => {
   const game = new Game(newState(worldSpec(42))); game.paused = false; const r = game.world.river(12, 48); assert(game.world.isWater(12, r.center)); assert(!game.world.isWater(0, game.world.river(0, 48).center));
@@ -61,10 +61,10 @@ test('generated ruins support persistent chest salvage and real NPC barter', () 
   const loaded = new Game(importJSON(exportFull(game.state))); assert.equal(loaded.npc(r).inventory.metal, game.npc(r).inventory.metal); assert(loaded.state.changes.containers.includes(r.id));
 });
 test('a hut worker harvests finite timber and delivers it physically into storage', () => {
-  const game = new Game(newState(worldSpec(42))); game.paused = false; assert(game.build('hut', { x: 8, z: 4 }, 0).ok);
+  const game = new Game(newState(worldSpec(42))); game.paused = false;game.state.inventory.wood=20; assert(game.build('hut', { x: 8, z: 4 }, 0).ok);
   for (let i = 0; i < 1500 && game.state.stockpile.wood === 0; i++) game.update(.05);
   assert(game.state.stockpile.wood > 0, JSON.stringify(game.state.workers));
   assert(Object.keys(game.state.changes.nodes).length > 0);
   const loaded = new Game(importJSON(exportFull(game.state))); loaded.paused = false;
-  for (let i = 0; i < 100; i++) loaded.update(.05); assert(loaded.state.workers.length === 1);
+  for (let i = 0; i < 100; i++) loaded.update(.05); assert(loaded.state.workers.length === 2);
 });

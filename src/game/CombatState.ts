@@ -1,6 +1,6 @@
 import type { Point } from './GameState';
 import type { ActorType, Weapon, WeaponType } from '../data/weapons';
-export interface Actor extends Point { id: string; type: ActorType; hp: number; weapon: WeaponType | null; groupId: string; villageId: string | null; homeX: number; homeZ: number; heading: number; cooldown: number; roamTimer: number; targetX: number; targetZ: number; alerted: boolean; heatInside?: boolean; pursuitId?:string; retreating?:boolean }
+export interface Actor extends Point { id: string; type: ActorType; hp: number; weapon: WeaponType | null; groupId: string; villageId: string | null; homeX: number; homeZ: number; heading: number; cooldown: number; roamTimer: number; targetX: number; targetZ: number; alerted: boolean; heatInside?: boolean; heatBurn?:number; pursuitId?:string; retreating?:boolean }
 export interface Projectile extends Point { id: string; kind: 'arrow' | 'pellet' | 'bottle' | 'swing'; ownerId: string; targetX: number; targetZ: number; fromX: number; fromZ: number; age: number; duration: number; damage: number; weapon?: WeaponType|'punch'; weaponId?: string; hitIds?: string[]; volleyId?: string; wearCharged?: boolean }
 export interface Fire extends Point { id: string; ownerId: string; remaining: number; tick: number; charred: boolean }
 export interface Drop extends Point { id: string; weapon: WeaponType; uses: number }

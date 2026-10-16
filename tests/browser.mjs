@@ -8,6 +8,8 @@ const errors = []; page.on('pageerror', e => errors.push(e.stack)); mkdirSync('t
 try {
   await page.goto('http://localhost:5173'); await page.locator('#seed').fill('42'); await page.screenshot({ path: 'test-results/v2-menu.png' });
   await page.locator('#new-world').click(); await page.waitForTimeout(700);
+  // This suite exercises world/economy flows; combat and NPC sheltering have dedicated suites.
+  await page.evaluate(()=>{const g=window.__frostbound.game;g.combat.ensureEncounters();for(const a of Object.values(g.state.combat.actors))a.hp=0;g.combat.ensureEncounters=()=>{};});
   const before = await page.evaluate(() => ({ ...window.__frostbound.game.state.player }));
   await page.keyboard.down('d'); await page.waitForTimeout(400); await page.keyboard.up('d'); await page.waitForTimeout(100);
   const after = await page.evaluate(() => window.__frostbound.game.state.player); assert(Math.hypot(after.x - before.x, after.z - before.z) > .5);
@@ -32,7 +34,7 @@ try {
   await page.waitForFunction(before=>window.__frostbound.game.state.inventory.wood===before+1,wood);
   await page.evaluate(() => window.walk({ x: -4, z: 3 })); await page.keyboard.press('f'); await page.waitForFunction(()=>window.__frostbound.game.state.inventory.stone>0);
   await page.evaluate(() => window.walk({ x: 0, z: 3 })); const fuel = await page.evaluate(() => window.__frostbound.game.state.furnaces[0].fuel); await page.keyboard.press('f'); assert(await page.evaluate(() => window.__frostbound.game.state.furnaces[0].fuel) > fuel);
-  await page.locator('#build').click(); await page.locator('[data-building="hut"]').click();
+  await page.evaluate(()=>window.__frostbound.game.state.inventory.wood=20);await page.locator('#build').click(); await page.locator('[data-building="hut"]').click();
   await page.locator('#rotate-building').click(); await page.locator('#place-building').click();
   assert.equal(await page.evaluate(() => window.__frostbound.game.state.buildings.length), 1);
   await page.locator('#inventory').click(); await page.locator('#stash').click(); await page.locator('.close-modal').click();

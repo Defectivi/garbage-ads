@@ -1,6 +1,6 @@
 # Wilderness update
 
-New expeditions use generation 4. Hearthwatch (128, 8), Stonehaven (-144, -32) and Northpass (192, 176) are all at least 120 units from the spawn. Existing generations retain their terrain and village coordinates. Packed paths connect village doorways, market areas and entrances, routing around the furnace. Generation-4 villages clear natural resource deposits from the central square; village supply piles remain collectible.
+New expeditions use generation 5; generation 4 introduced distant village sites. Hearthwatch (128, 8), Stonehaven (-144, -32) and Northpass (192, 176) are all at least 120 units from the spawn. Existing generations retain their terrain and village coordinates. Packed paths connect village doorways, market areas and entrances, routing around the furnace. Generation-4 villages clear natural resource deposits from the central square; village supply piles remain collectible.
 
 Player and worker harvesting now takes one second per action, including chopping trees, breaking boulders and collecting exposed materials. Cosmetic flights still follow authoritative single awards.
 
@@ -10,7 +10,7 @@ Player and worker harvesting now takes one second per action, including chopping
 - Wolf bites deal 7 direct damage, then 4 bleed damage each second for 12 seconds. Another bite refreshes the duration without stacking the damage rate or restarting the current tick. Machete bleeding remains a separate 2-damage effect. Furnace defenses and respawn immunity still apply.
 - Wolves do not use the ordinary pursuit cutoff. A wolf pursuing the player continues outside the normal nearby AI radius. Distant non-player encounters hibernate with their wolf target retained until the player returns, matching the world's local simulation scope.
 - Other roaming enemies give up beyond 40 units from their target and return to their original area. They also abandon pursuit outside the 70-unit player simulation radius. New encounters can still occur while traveling.
-- Bears deal 15 damage, with a deterministic 50% critical chance for 30. Every successful bear hit stuns the player for 3 seconds; movement, new attacks, current melee and gathering are disabled during the stun. Immunity prevents both damage and the stun.
+- Bears deal 15 damage, with a deterministic 50% critical chance for 30. Each successful bear hit has a 10% chance to stun the player for 3 seconds; movement, new attacks, current melee and gathering are disabled during the stun. Immunity prevents both damage and the stun.
 
 ## Rivers and hypothermia
 

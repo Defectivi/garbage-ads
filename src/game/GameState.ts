@@ -4,13 +4,13 @@ import { DEFAULT_SETTINGS, type WorldSpec, type Settings } from './GameConfig';
 import { freshCombat, type CombatState } from './CombatState';
 export interface Point { x: number; z: number }
 export interface Furnace extends Point { id: string; fuel: number; level: number; charcoal: number }
-export interface Building extends Point { id: string; type: BuildingType; rotation: number }
-export interface Worker extends Point { id: string; hutId: string; hp: number; sourceId: string | null; load: number; progress: number; state: 'seeking' | 'gathering' | 'returning' | 'blocked' }
+export interface Building extends Point { id: string; type: BuildingType; rotation: number; construction?:number }
+export interface Worker extends Point { id: string; hutId: string; hp: number; sourceId: string | null; load: number; resource?:'wood'|'stone'|'fish'; progress: number; state: 'seeking' | 'gathering' | 'returning' | 'blocked' }
 export interface NPCState { inventory: Balances; hp: number }
 export interface GameState {
   world: WorldSpec;
   respawnFurnaceId?: string;
-  player: Point & { warmth: number; heading: number; hp: number; invulnerable?:number; heatTime?:number; stunned?:number; hypothermia?:{level:1|2;waterTime:number;tick:number} };
+  player: Point & { warmth: number; heading: number; hp: number; invulnerable?:number; heatTime?:number; recentDamage?:number; stunned?:number; hypothermia?:{level:1|2;waterTime:number;tick:number} };
   combat: CombatState;
   inventory: Balances; stockpile: Balances;
   furnaces: Furnace[]; buildings: Building[]; workers: Worker[];

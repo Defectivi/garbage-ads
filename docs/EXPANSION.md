@@ -8,7 +8,7 @@ New expeditions construct fresh state and immediately replace the local save. Th
 
 New players have no weapon and can punch for 2 HP with a one-second cooldown. Punches work with existing assisted targeting, actual-contact collision and damage numbers, without durability. The player/NPC rigs include a punch clip. Existing usable owned weapons remain available normally.
 
-Inside any active furnace range, three uninterrupted seconds restore 25 HP, repeating every three seconds up to the current maximum (90 while hypothermic, otherwise 100). Leaving an active range or extinguishing its heat resets the interval. Overlapping furnaces do not stack healing. Merely being near an unlit furnace does not heal. Dead players do not self-revive.
+Inside any active furnace range, three uninterrupted seconds restore 25 HP (10 HP when damaged inside heat during the last three seconds), repeating every three seconds up to the current maximum (90 while hypothermic, otherwise 100). Leaving an active range or extinguishing its heat resets the interval. Overlapping furnaces do not stack healing. Merely being near an unlit furnace does not heal. Dead players do not self-revive.
 
 Hostiles inside an active player-owned heat zone retain the 10%-maximum-HP entry penalty, take twice subsequent damage (including fire and bleed) and move at half speed. The entry penalty itself is not doubled. Peaceful guards are excluded until hostile. Village heat heals the player but does not confer the player's owned-zone combat defenses. The player retains 50% incoming damage reduction in owned heat zones.
 
@@ -37,7 +37,7 @@ Hut and storehouse HP match the explicit request; shelter/furnace HP and salvage
 
 Only intact huts support their workers; only intact storehouses add capacity or accept storage interactions. Ruined/destroyed furnaces lose fuel and heat. Furnace/save records and worker identities are retained as soft-deleted structures for compatibility. A destroyed bound furnace falls back to an intact furnace during recovery when available.
 
-Damaged civilian traders, workers and village guards move to a nearby intact house (workers prefer their own hut), enter shelter, and disappear from exposed combat targets. They wait 12 seconds and then walk back. A ruined house ejects its occupants. Sheltered traders cannot trade until they return. Injured guards stop attacking while retreating, hiding and returning; healthy guards keep defending. Guards resume defense after returning, and attacking a guard still alerts the village. Enemies retain their roaming/combat behavior. The changes do not introduce an additional ordinary-villager population beyond the game's existing civilians and workers.
+Damaged civilian traders and village guards, plus workers below 50 HP, move to a nearby intact house (workers prefer their own hut), enter shelter, and disappear from exposed combat targets. They wait 12 seconds and then walk back. A ruined house ejects its occupants. Sheltered traders cannot trade until they return. Injured guards stop attacking while retreating, hiding and returning; healthy guards keep defending. Guards resume defense after returning, and attacking a guard still alerts the village. Enemies retain their roaming/combat behavior. The changes do not introduce an additional ordinary-villager population beyond the game's existing civilians and workers.
 
 ## Scattered village loot
 

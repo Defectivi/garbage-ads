@@ -1,6 +1,6 @@
 import { BUILDINGS } from '../data/definitions';
 import { bladeSegment, meleeDuration, segmentDistance, segmentSegmentDistance, projectileHeight } from '../game/CombatGeometry';
-import { heatRadius, inPlayerHeat, playerHeatSources } from './SurvivalSystem';
+import { heatRadius, inPlayerHeat, playerHeatSources, structureIntact } from './SurvivalSystem';
 import type { Game } from '../game/Game';
 import type { Point } from '../game/GameState';
 import { ACTOR_HP, WEAPONS, type ActorType, type WeaponType } from '../data/weapons';
@@ -84,7 +84,7 @@ export class CombatSystem {
     const enemy=this.c.actors[target.id];
     if(enemy&&this.hostile(enemy)&&inPlayerHeat(this.s,enemy)&&ownerId!=='furnace')amount*=2;
     if (target.id === 'player' && inPlayerHeat(this.s)) amount *= .5;
-    if (target.id === 'player') this.s.player.hp = Math.max(0, this.s.player.hp - amount);
+    if (target.id === 'player'){this.s.player.hp = Math.max(0, this.s.player.hp - amount);if(amount>0&&this.s.furnaces.some(f=>structureIntact(this.s,f.id)&&distance(f,this.s.player)<heatRadius(f)))this.s.player.recentDamage=3;}
     else if (this.c.actors[target.id]) {
       const actor = this.c.actors[target.id], wasAlive = actor.hp > 0; actor.hp = Math.max(0, actor.hp - amount);
       if (ownerId === 'player') { actor.alerted = true; for (const member of Object.values(this.c.actors)) if (member.groupId === actor.groupId) member.alerted = true; }
@@ -104,7 +104,8 @@ export class CombatSystem {
       if (target.villageId && ownerId === 'player' && !this.c.villageAlerts.includes(target.villageId)) this.c.villageAlerts.push(target.villageId);
     }
     if((target.kind==='npc'||enemy?.type==='guard')&&before<=amount&&this.s.changes.refuges)delete this.s.changes.refuges[target.id];
-    if((target.kind==='npc'||enemy?.type==='guard')&&before>amount&&ownerId!=='bleed')this.game.settlement.flee(target.id,target);
+    const hurtWorker=this.s.workers.find(w=>w.id===target.id);
+    if((target.kind==='npc'||enemy?.type==='guard')&&before>amount&&(ownerId!=='bleed'||!!hurtWorker)&&(!hurtWorker||hurtWorker.hp<50))this.game.settlement.flee(target.id,target);
     if(this.damageEvents.length>=64)this.damageEvents.shift();
     this.damageEvents.push({x:target.x,z:target.z,amount:Math.min(before,amount),targetId:target.id,bleed:ownerId==='bleed'});
     if (bleed&&before>amount) this.c.statuses[target.id] = { ...this.c.statuses[target.id],bleed: 10, tick: 0 };
@@ -141,7 +142,7 @@ export class CombatSystem {
     const dx=Math.sin(actor.heading),dz=Math.cos(actor.heading),back=actor.type==='wolf'?.68:.8,front=actor.type==='wolf'?1.1:1.3,radius=actor.type==='wolf'?.45:.7;
     return segmentSegmentDistance(a,b,{x:actor.x-dx*back,z:actor.z-dz*back},{x:actor.x+dx*front,z:actor.z+dz*front})<=radius+padding;
   }
-  private blocked(a:Point,b:Point,targetId?:string){return this.game.solids(b).some(s=>(!('id'in s)||s.id!==targetId)&&distance(s,a)>s.radius+.2&&segmentDistance(s,a,b)<s.radius);}
+  private blocked(a:Point,b:Point,targetId?:string){return this.game.solids(b).some(s=>(!('id'in s)||s.id!==targetId)&&distance(s,a)>s.radius+.2&&segmentDistance(s,a,b)<s.radius)||!this.game.world.visible(a,b);}
   private canHit(ownerId: string, target: CombatUnit) {
     if (ownerId === target.id || target.hp <= 0) return false;
     if (ownerId === 'player') return true;
@@ -230,10 +231,10 @@ export class CombatSystem {
     const units=this.units(),snow = weather.mode === 'snow';
     for (const actor of Object.values(this.c.actors)) {
       if(actor.hp<=0)continue;
+      if(this.game.settlement.refuge(actor.id)?.phase!=='hidden'){this.heatEntry(actor);this.heatBurn(actor,dt);}
+      if(actor.hp<=0)continue;
       if(distance(actor,this.s.player)>70&&!(actor.type==='wolf'&&actor.pursuitId==='player')){if(actor.type!=='wolf'){delete actor.pursuitId;actor.alerted=false;actor.retreating=true;}continue;}
       actor.cooldown = Math.max(0, actor.cooldown - dt); actor.roamTimer = Math.max(0, actor.roamTimer - dt);
-      if(this.game.settlement.refuge(actor.id)?.phase!=='hidden')this.heatEntry(actor);
-      if(actor.hp<=0)continue;
       if(this.game.settlement.refuge(actor.id)){this.velocities.delete(actor.id);continue;}
       const guard = actor.type === 'guard';
       const wolf=actor.type==='wolf';
@@ -241,7 +242,7 @@ export class CombatSystem {
       let target=actor.pursuitId?targets.find(u=>u.id===actor.pursuitId):undefined;
       if(target&&!wolf&&distance(target,actor)>40){actor.retreating=true;actor.alerted=false;target=undefined;delete actor.pursuitId;}
       if(actor.retreating){if(distance(actor,{x:actor.homeX,z:actor.homeZ})>4){this.walk(actor,{x:actor.homeX,z:actor.homeZ},dt,1.8);continue;}actor.retreating=false;}
-      if(!target)target=targets.filter(u=>distance(u,actor)<(actor.alerted?30:snow?27:guard?16:18)&&(!wolf||u.kind!=='building')&&!this.blocked(actor,u,u.id)).sort((a,b)=>distance(a,actor)-distance(b,actor)||a.id.localeCompare(b.id))[0];
+      if(!target)target=targets.filter(u=>distance(u,actor)<(actor.alerted?30:snow?27:guard?16:18)&&(!wolf||u.kind!=='building')).sort((a,b)=>distance(a,actor)-distance(b,actor)||a.id.localeCompare(b.id)).find(u=>!this.blocked(actor,u,u.id));
       if(target)actor.pursuitId=target.id;else delete actor.pursuitId;
       const weapon = actor.weapon, range = weapon ? WEAPONS[weapon].range : 1.65;
       if (target) {
@@ -264,12 +265,17 @@ export class CombatSystem {
     const lost=this.damage(target,actor.type==='wolf'?7:actor.type==='polar_bear'?(critical?30:15):5,actor.id);
     if(!lost)return;
     if(actor.type==='wolf')this.c.statuses[target.id]={...this.c.statuses[target.id],bleed:this.c.statuses[target.id]?.bleed??0,tick:this.c.statuses[target.id]?.tick??0,wolfBleed:12,wolfTick:this.c.statuses[target.id]?.wolfTick??0};
-    if(actor.type==='polar_bear'&&target.id==='player')this.s.player.stunned=3;
+    if(actor.type==='polar_bear'&&target.id==='player'&&derive(this.s.world.seeds.wildlife,'bear-stun',this.c.sequence++)%10===0)this.s.player.stunned=3;
   }
   private face(actor: Actor, angle: number, dt: number) {
     actor.heading += Math.atan2(Math.sin(angle - actor.heading), Math.cos(angle - actor.heading)) * (1 - Math.exp(-dt * 8));
   }
   private hostile(actor:Actor){return actor.type!=='guard'||!!actor.villageId&&this.c.villageAlerts.includes(actor.villageId);}
+  private heatBurn(actor:Actor,dt:number){
+    if(!this.hostile(actor)||!inPlayerHeat(this.s,actor)){actor.heatBurn=0;return;}
+    actor.heatBurn=(actor.heatBurn??0)+dt;
+    while(actor.heatBurn>=1-1e-8&&actor.hp>0){actor.heatBurn=Math.max(0,actor.heatBurn-1);this.damage({...actor,kind:actor.type==='guard'?'guard':'enemy'},12,'furnace');}
+  }
   private heatEntry(actor: Actor) {
     const hostile = actor.type !== 'guard' || !!actor.villageId && this.c.villageAlerts.includes(actor.villageId);
     const sources = playerHeatSources(this.s);

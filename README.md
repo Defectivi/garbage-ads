@@ -32,8 +32,8 @@ The built application is in `dist/`; preview serves it at **http://localhost:417
 
 1. Enter a **world seed from 0 to 65535**, randomize it, or enter the current world.
 2. **F** starts a one-second gathering action within three units. Hold it to repeatedly gather timber, stone, or metal. Guaranteed wood and stone sources are beside home.
-3. Approach a furnace and press F to burn **one wood for 60 seconds of fuel**. Heating rings indicate actual warmth recovery. Initial fuel lasts 100 seconds.
-4. Open **Build**. A **hut costs 5 wood** and recruits a working woodcutter. Storehouses, trail shelters, and outpost furnaces have distinct functional effects. Preview, rotate, confirm or cancel construction.
+3. Approach a furnace and press F to burn **one wood for 10 base seconds or one charcoal for 30** (charcoal is selected first). Heating rings indicate actual warmth recovery. Initial fuel lasts 100 seconds.
+4. Open **Build**. A **hut costs 20 wood**, takes 10 simulation seconds to build, and recruits two workers for wood, stone and fish. Press **T** near a furnace to upgrade; the HUD shows costs and shortages. Storehouses, trail shelters, and outpost furnaces have distinct functional effects. Preview, rotate, confirm or cancel construction.
 5. The map gives a rumour of a generated settlement. Follow it, search the chest, and interact with the trader. Gold purchases and direct resource barter are supported.
 6. Follow a riverbank to a **blue fishing post**. Interact and remain still for four seconds to catch fish. Fish can restore warmth or be traded.
 7. Use **Save / JSON** to save locally, download full worlds, or create/import fresh sandbox starting configurations.
@@ -153,7 +153,7 @@ All mesh artwork and synthesized sounds are original procedural work. Bundled DM
 
 ## Combat and whiteouts
 
-Start a new expedition for terrain generation 4 and its three distant fixed villages: Hearthwatch (128, 8), Stonehaven (-144, -32), and Northpass (192, 176). Each has packed paths connecting houses, trading areas and the entrance. Older saves preserve their village sites. Villages have traders, 3-5 armed guards, and a furnace. Old terrain-generation-1 saves keep their original terrain and ruins. Bandits roam in groups of 2-10; polar bears and arsonists also patrol. Guards fight enemies and retaliate when you attack their village.
+Start a new expedition for terrain generation 5 and its three distant fixed villages: Hearthwatch (128, 8), Stonehaven (-144, -32), and Northpass (192, 176). Each has packed paths connecting houses, trading areas and the entrance. Older saves preserve their village sites. Villages have traders, 3-5 armed guards, and a furnace. Old terrain-generation-1 saves keep their original terrain and ruins. Bandits roam in groups of 2-10; polar bears and arsonists also patrol. Guards fight enemies and retaliate when you attack their village.
 
 Move with the keyboard or joystick to set facing; that direction is retained when you stop. Left click and the touch Attack button assist a nearby reachable hostile; otherwise attacks follow your facing. Space attacks forward. Mouse movement does not redirect the survivor. Equip from the weapon rack, keys 1-6, or the Rucksack equipment list. Hold Shift to sprint (9 rather than 6 units/sec), or hold the touch Sprint button; exposure consumes twice the warmth. New survivors start unarmed with a 2-damage punch; weapons can be traded or found in village supplies. Traders sell all six weapons using carried resources, and defeated armed actors have a deterministic 7% equipment drop chance. Collect drops with F. Melee weapons wear once per successful enemy-hitting swing, with 100 such hits. Ranged weapons have 100 shots and unlimited ammo; enemy weapons never wear out.
 
@@ -168,7 +168,7 @@ Move with the keyboard or joystick to set facing; that direction is retained whe
 
 One world unit is one tile. Sword, machete and shotgun values reflect the latest requested buffs; bow damage, machete cooldown and molotov cooldown/DOT retain their previous tuning. All values live in `src/data/weapons.ts` and `src/systems/CombatSystem.ts`. Player, traders, and workers have 100 HP; bears/wolves 50, bandits/guards 125, arsonists 75. Combat defeat opens the recovery dialog.
 
-Fire converts timber nodes and standing trees into gatherable charcoal after ten seconds. Charcoal adds 120 furnace energy (wood adds 60) and consumes energy at half the wood rate, giving four times the total heating duration per unit. Use the Build panel charcoal-fuel button near a furnace. F feeds wood first, falling back to charcoal. A whiteout starts after 90 seconds, lasts 55 seconds, triples fuel consumption, reduces visibility, and increases enemy detection distance. Clear intervals thereafter last 90-150 seconds. Furnace reinforcement and chimney models change at every fifth furnace level (levels 5, 10, 15, 20, 25).
+Fire converts timber nodes and standing trees into gatherable charcoal after ten seconds. Charcoal adds 30 base fuel seconds; wood adds 10. Both use the level-adjusted burn interval, and F consumes charcoal first. A whiteout starts after 90 seconds, lasts 55 seconds, triples fuel consumption, reduces visibility, and increases enemy detection distance. Clear intervals thereafter last 90-150 seconds. Furnace reinforcement and chimney models change at every fifth furnace level through level 50; heat radius stops growing after level 20. See the [complete upgrade cost table](docs/FURNACE_UPGRADES.md).
 
 Save format 2 includes HP, actors, equipment durability, projectiles, fire, bleed, drops, weather, village hostility, and burned terrain. Format 1 files migrate with full health, a starter sword, and zero charcoal. Full saves retain combat state; sandbox imports reset encounters but retain the configured starting equipment. JSON imports validate all combat fields before replacing the active world.
 
@@ -210,8 +210,10 @@ Left click assists the nearest reachable hostile within weapon reach (ranged ass
 
 ## Furnace recovery and settlement expansion
 
-Active furnace ranges heal 25 HP every three uninterrupted seconds. Owned heat zones also double damage taken by hostiles and halve their movement, alongside entry damage and player protection. Respawning grants five seconds of immunity. New expeditions reset every upgrade and start unarmed.
+Active furnace ranges heal 25 HP every three uninterrupted seconds, reduced to 10 when recently attacked inside heat; three damage-free seconds restore 25. Owned heat zones also double damage taken by hostiles and halve their movement, alongside entry damage, 12 HP/second burning, and player protection. Respawning grants five seconds of immunity. New expeditions reset every upgrade and start unarmed.
 
-Harvesting takes one second; standing trees shake/fall into finite logs, and large boulders split into smaller stones. Damaged civilians shelter in houses. Huts have 1,000 HP and storehouses 2,000; destroyed structures become quarter-health ruins, then finite salvage. Buildings are bleed-immune. Village supply piles roll 50% food, 40% materials and 10% random weapons. See [expansion rules and verification](docs/EXPANSION.md).
+Harvesting takes one second; standing trees shake/fall into finite logs, and large boulders split into smaller stones. Traders and guards shelter when hurt. Workers shelter below 50 HP and recover inside their hut. Huts have 1,000 HP and storehouses 2,000; destroyed structures become quarter-health ruins, then finite salvage. Buildings are bleed-immune. Village supply piles roll 50% food, 40% materials and 10% random weapons. See [expansion rules and verification](docs/EXPANSION.md).
 
 Wilderness update: wolves hunt in packs of 3-12, bears deal 15/30 damage and stun, and wading causes persistent hypothermia. E toggles inventory; M closes inventory or toggles the map. Larger block typography and status cards show current effects. See [wilderness rules and validation](docs/WILDERNESS.md).
+
+The latest [camp progression update](docs/CAMP_PROGRESSION.md) adds the T upgrade HUD, fifty furnace levels, construction, mixed-resource workers, stronger hills, hypothermic lakes and a forest/elevation map. Generation 1-4 saves retain their original terrain.
