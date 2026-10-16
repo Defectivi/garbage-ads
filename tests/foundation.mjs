@@ -17,11 +17,12 @@ try {
   await page.waitForFunction(() => window.__frostbound.renderer.chunks.has('2,0'));
   const outerResources = await page.evaluate(() => {
     const { game, renderer } = window.__frostbound, group = renderer.chunks.get('2,0');
-    const expected = game.nodesInChunk(game.world.chunk(2,0)).filter(n => !game.world.isWater(n.x,n.z) && game.nodeRemaining(n) > 0).length;
+    const expected = game.nodesInChunk(game.world.chunk(2,0)).filter(n => n.kind!=='tree'&&!game.world.isWater(n.x,n.z) && game.nodeRemaining(n) > 0).length;
     const rendered = group.children.filter(o => o.isInstancedMesh && (o.geometry.type === 'DodecahedronGeometry' || o.geometry.parameters.radiusTop === .4)).reduce((sum,o) => sum + o.count, 0);
-    return { expected, rendered };
+    const trees=game.nodesInChunk(game.world.chunk(2,0)).filter(n=>n.kind==='tree').length,treeParts=group.children.filter(o=>o.isInstancedMesh&&o.userData.treeIds).map(o=>o.count);
+    return { expected, rendered,trees,treeParts };
   });
-  assert(outerResources.expected > 0); assert.equal(outerResources.rendered, outerResources.expected);
+  assert(outerResources.expected > 0); assert.equal(outerResources.rendered, outerResources.expected);assert(outerResources.treeParts.every(n=>n===outerResources.trees));if(outerResources.trees)assert.equal(outerResources.treeParts.length,7);
   const position = () => page.evaluate(() => ({ x: window.__frostbound.game.state.player.x, z: window.__frostbound.game.state.player.z }));
   await page.evaluate(() => { window.__frostbound.renderer.yaw = 0; });
   const start = await position();
@@ -29,11 +30,11 @@ try {
   assert((await position()).z < start.z - .3);
   // Native right mouse gesture must rotate without firing on release.
   const yaw = await page.evaluate(() => window.__frostbound.renderer.yaw);
-  const uses = await page.evaluate(() => window.__frostbound.game.state.combat.weapons[0].uses);
+  const attackStamp = await page.evaluate(() => window.__frostbound.game.combat.lastAttack);
   await page.mouse.move(1100, 550); await page.mouse.down({ button: 'right' });
   await page.mouse.move(1190, 550, { steps: 5 }); await page.mouse.up({ button: 'right' });
   assert(Math.abs(await page.evaluate(() => window.__frostbound.renderer.yaw) - yaw) > .5);
-  assert.equal(await page.evaluate(() => window.__frostbound.game.state.combat.weapons[0].uses), uses);
+  assert.equal(await page.evaluate(() => window.__frostbound.game.combat.lastAttack), attackStamp);
   await page.mouse.wheel(0, 100000); assert.equal(await page.evaluate(() => window.__frostbound.renderer.zoom), 65);
   await page.mouse.wheel(0, -100000); assert.equal(await page.evaluate(() => window.__frostbound.renderer.zoom), 16);
   // Losing focus clears velocity as well as keys; it must not resume a held action.
@@ -45,7 +46,7 @@ try {
   const typingPosition = await position();
   await page.locator('#import-text').focus(); await page.keyboard.type('wasd e 123456 space');
   assert.deepEqual(await position(), typingPosition);
-  assert.equal(await page.evaluate(() => window.__frostbound.game.state.combat.weapons[0].uses), uses);
+  assert.equal(await page.evaluate(() => window.__frostbound.game.combat.lastAttack), attackStamp);
   await page.keyboard.press('Escape');
   await page.screenshot({ path: 'test-results/phase1-desktop.png' });
 

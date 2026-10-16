@@ -20,7 +20,8 @@
     "test:settlement": "node tests/settlement.mjs",
     "test:projectiles": "node tests/projectiles.mjs",
     "test:recovery": "node tests/recovery.mjs",
-    "test:hits": "node tests/hits.mjs"
+    "test:hits": "node tests/hits.mjs",
+    "test:expansion": "node tests/expansion.mjs"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.3.0",

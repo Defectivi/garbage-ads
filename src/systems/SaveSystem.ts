@@ -1,3 +1,4 @@
+import { STRUCTURE_HP } from '../data/settlement';
 import { balances, BUILDINGS, RESOURCE_IDS, type Balances, type BuildingType } from '../data/definitions';
 import { GENERATION_VERSION, type Settings, type WorldSpec } from '../game/GameConfig';
 import { newState, type GameState, type Point } from '../game/GameState';
@@ -53,7 +54,7 @@ function validateCombat(v: unknown): CombatState {
   for (const key of ['encounters', 'villageAlerts', 'charredNodes', 'charredTrees'] as const) fresh[key] = array(raw[key], key, 50000).map(v => id(v, key));
   fresh.projectiles = array(raw.projectiles, 'projectiles', 1000).map(v => {
     const p = record(v, 'projectile'); if (!['arrow', 'pellet', 'bottle', 'swing'].includes(String(p.kind))) throw new Error('Unknown projectile kind.');
-    return { id: id(p.id, 'projectile.id'), ownerId: id(p.ownerId, 'ownerId'), kind: p.kind as CombatState['projectiles'][number]['kind'], ...point(p, 'projectile'), targetX: num(p.targetX, 'targetX', -1e6, 1e6), targetZ: num(p.targetZ, 'targetZ', -1e6, 1e6), fromX: num(p.fromX, 'fromX', -1e6, 1e6), fromZ: num(p.fromZ, 'fromZ', -1e6, 1e6), age: num(p.age, 'age', 0, 10), duration: num(p.duration, 'duration', .01, 10), damage: num(p.damage, 'damage', 0, 100), ...(p.weapon===undefined?{}:{weapon:weaponType(p.weapon)}), ...(p.weaponId===undefined?{}:{weaponId:id(p.weaponId,'projectile.weaponId')}), ...(p.hitIds===undefined?{}:{hitIds:array(p.hitIds,'hitIds',2000).map(v=>id(v,'hitId'))}), ...(p.volleyId===undefined?{}:{volleyId:id(p.volleyId,'volleyId')}), ...(p.wearCharged===undefined?{}:{wearCharged:bool(p.wearCharged,'wearCharged')}) };
+    return { id: id(p.id, 'projectile.id'), ownerId: id(p.ownerId, 'ownerId'), kind: p.kind as CombatState['projectiles'][number]['kind'], ...point(p, 'projectile'), targetX: num(p.targetX, 'targetX', -1e6, 1e6), targetZ: num(p.targetZ, 'targetZ', -1e6, 1e6), fromX: num(p.fromX, 'fromX', -1e6, 1e6), fromZ: num(p.fromZ, 'fromZ', -1e6, 1e6), age: num(p.age, 'age', 0, 10), duration: num(p.duration, 'duration', .01, 10), damage: num(p.damage, 'damage', 0, 100), ...(p.weapon===undefined?{}:{weapon:p.weapon==='punch'?'punch' as const:weaponType(p.weapon)}), ...(p.weaponId===undefined?{}:{weaponId:id(p.weaponId,'projectile.weaponId')}), ...(p.hitIds===undefined?{}:{hitIds:array(p.hitIds,'hitIds',2000).map(v=>id(v,'hitId'))}), ...(p.volleyId===undefined?{}:{volleyId:id(p.volleyId,'volleyId')}), ...(p.wearCharged===undefined?{}:{wearCharged:bool(p.wearCharged,'wearCharged')}) };
   });
   fresh.fires = array(raw.fires, 'fires', 500).map(v => { const f = record(v, 'fire'); return { ...point(f, 'fire'), id: id(f.id, 'fire.id'), ownerId: id(f.ownerId, 'ownerId'), remaining: num(f.remaining, 'fire.remaining', 0, 10), tick: num(f.tick, 'fire.tick', 0, 1), charred: bool(f.charred, 'charred') }; });
   fresh.drops = array(raw.drops, 'drops', 1000).map(v => { const d = record(v, 'drop'); return { ...point(d, 'drop'), id: id(d.id, 'drop.id'), weapon: weaponType(d.weapon), uses: num(d.uses, 'drop.uses', 0, 100, true) }; });
@@ -94,7 +95,7 @@ export function importJSON(text: string, expectedMode?: 'full-save' | 'sandbox-c
   }
   const raw = record(doc.state, 'state'), settings = validateSettings(raw.settings), player = record(raw.player, 'player'), changes = record(raw.changes, 'changes');
   const state = newState(world, settings);
-  state.player = { ...point(player, 'player'), warmth: num(player.warmth, 'warmth', 0, 100), hp: num(player.hp, 'hp', 0, 100), heading: num(player.heading, 'heading', -1000000, 1000000) };
+  state.player = { ...point(player, 'player'), warmth: num(player.warmth, 'warmth', 0, 100), hp: num(player.hp, 'hp', 0, 100), heading: num(player.heading, 'heading', -1000000, 1000000), ...(player.invulnerable===undefined?{}:{invulnerable:num(player.invulnerable,'invulnerable',0,5)}), ...(player.heatTime===undefined?{}:{heatTime:num(player.heatTime,'heatTime',0,3)}) };
   state.combat = validateCombat(raw.combat);
   state.inventory = validateBalances(raw.inventory, settings); state.stockpile = validateBalances(raw.stockpile, settings, 'stockpile');
   state.elapsed = num(raw.elapsed, 'elapsed', 0, 1e12); state.nextId = num(raw.nextId, 'nextId', 1, 1e9, true);
@@ -114,11 +115,30 @@ export function importJSON(text: string, expectedMode?: 'full-save' | 'sandbox-c
   });
   if (new Set(state.workers.map(w => w.hutId)).size !== state.workers.length) throw new Error('Only one worker per hut is supported.');
   const maxBuilt = Math.max(0, ...state.buildings.map(b => Number(b.id.split(':')[1]) || 0)); if (state.nextId <= maxBuilt) throw new Error('nextId must exceed existing building numbers.');
+  if(changes.terrain!==undefined){const terrain=record(changes.terrain,'terrain');if(Object.keys(terrain).length>50000)throw new Error('Too many terrain changes.');for(const [key,value] of Object.entries(terrain)){if(value!=='felled'&&value!=='broken')throw new Error('Unknown terrain change.');state.changes.terrain![id(key,'terrain.id')]=value;}}
   state.changes.nodes = numericMap(changes.nodes, 'changes.nodes'); state.changes.fishing = numericMap(changes.fishing, 'changes.fishing');
   state.changes.containers = array(changes.containers, 'containers').map(v => id(v, 'container')); state.discovered = array(raw.discovered, 'discovered').map(v => id(v, 'discovered'));
   if (state.discovered.some(k => k !== 'home' && !/^ruin:-?\d{1,4}:-?\d{1,4}$/.test(k) && !new WorldManager(world).villages().some(v => v.id === k))) throw new Error('Unknown discovered location ID.');
   const npcs = record(changes.npcs, 'npcs'); if (Object.keys(npcs).length > 10000) throw new Error('Too many NPC records.');
   for (const [key, value] of Object.entries(npcs)) state.changes.npcs[id(key, 'npc.id')] = { inventory: validateBalances(record(value, 'NPC').inventory, settings, 'NPC inventory'), hp: num(record(value, 'NPC').hp, 'NPC.hp', 0, 100) };
+  const worldManager=new WorldManager(world);
+  const resolveStructure=(key:string)=>{
+    const placed=state.buildings.find(b=>b.id===key);if(placed)return placed;
+    const furnace=state.furnaces.find(f=>f.id===key);if(furnace)return{...furnace,type:'furnace' as const};
+    const match=/^house:(village:[a-z]+|ruin:-?\d+:-?\d+):(\d+)$/.exec(key);if(!match)return undefined;
+    const settlement=match[1].startsWith('village:')?worldManager.villages().find(v=>v.id===match[1]):worldManager.ruin(Number(match[1].split(':')[1]),Number(match[1].split(':')[2]));
+    return settlement&&Number(match[2])<settlement.houses?{type:'hut' as const}:undefined;
+  };
+  if(changes.structures!==undefined){const structures=record(changes.structures,'structures');if(Object.keys(structures).length>10000)throw new Error('Too many structure changes.');for(const [key,value]of Object.entries(structures)){
+    id(key,'structure.id');const structure=resolveStructure(key);if(!structure)throw new Error('Unknown structure.');const raw=record(value,'integrity');if(!['intact','ruin','gone'].includes(String(raw.stage)))throw new Error('Invalid structure stage.');const stage=raw.stage as 'intact'|'ruin'|'gone',hp=num(raw.hp,'structure.hp',0,STRUCTURE_HP[structure.type]);if(stage==='gone'&&hp!==0||stage!=='gone'&&hp===0||stage==='ruin'&&hp>STRUCTURE_HP[structure.type]*.25)throw new Error('Invalid structure HP for its stage.');state.changes.structures![key]={stage,hp};
+  }}
+  if(changes.refuges!==undefined){const refuges=record(changes.refuges,'refuges');if(Object.keys(refuges).length>12000)throw new Error('Too many sheltering NPCs.');for(const[key,value]of Object.entries(refuges)){
+    id(key,'refuge.npc');const npcKey=key.startsWith('npc:')?key.slice(4):'',ruin=/^ruin:(-?\d+):(-?\d+)$/.exec(npcKey),knownNpc=worldManager.villages().some(v=>v.id===npcKey)||!!ruin&&!!worldManager.ruin(Number(ruin[1]),Number(ruin[2]));if(!state.workers.some(w=>w.id===key)&&!knownNpc)throw new Error('Unknown sheltered NPC.');const raw=record(value,'refuge'),houseId=id(raw.houseId,'houseId');if(!resolveStructure(houseId))throw new Error('Shelter does not exist.');if(!['fleeing','hidden','returning'].includes(String(raw.phase)))throw new Error('Invalid refuge phase.');state.changes.refuges![key]={...point(raw,'refuge'),houseId,homeX:num(raw.homeX,'homeX',-1e6,1e6),homeZ:num(raw.homeZ,'homeZ',-1e6,1e6),remaining:num(raw.remaining,'refuge.remaining',0,12),phase:raw.phase as 'fleeing'|'hidden'|'returning'};
+  }}
+  if(changes.lootTaken!==undefined){state.changes.lootTaken=array(changes.lootTaken,'lootTaken',50000).map(v=>id(v,'lootTaken'));if(state.changes.lootTaken.some(key=>!worldManager.villages().some(v=>Array.from({length:6},(_,i)=>`supplies:${v.id}:${i}`).includes(key))))throw new Error('Unknown village loot pile.');if(new Set(state.changes.lootTaken).size!==state.changes.lootTaken.length)throw new Error('Duplicate looted pile.');}
+  if(changes.groundLoot!==undefined){const loot=record(changes.groundLoot,'groundLoot');if(Object.keys(loot).length>5000)throw new Error('Too many loot piles.');for(const[key,value]of Object.entries(loot)){
+    id(key,'loot.id');const raw=record(value,'loot');if(raw.id!==key)throw new Error('Loot ID does not match key.');const resources=record(raw.resources,'loot.resources'),items:Partial<Balances>={};if(Object.keys(resources).some(key=>!RESOURCE_IDS.includes(key as keyof Balances)))throw new Error('Unknown loot material.');for(const resource of RESOURCE_IDS)if(resources[resource]!==undefined)items[resource]=num(resources[resource],'loot.quantity',0,9999,true);state.changes.groundLoot![key]={id:key,...point(raw,'loot'),resources:items,...(raw.weapon===undefined?{}:{weapon:weaponType(raw.weapon)})};
+  }}
   return state;
 }
 export function saveLocal(state: GameState): ResultMessage {

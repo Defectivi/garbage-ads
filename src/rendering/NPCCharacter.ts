@@ -37,7 +37,7 @@ export class NPCCharacter {
     this.play(moving?'walk':'idle');if(this.base&&moving)this.base.setEffectiveTimeScale(T.MathUtils.clamp(this.speed/(bear?1.5:1.8),.4,1.5));
     if(this.weaponType!==(weapon??undefined)) { if(this.weapon)disposeWeapon(this.weapon);this.weapon=undefined;this.weaponType=weapon??undefined;if(weapon&&!bear){this.weapon=weaponMesh(weapon,true);if(weapon==='shotgun')this.weapon.scale.setScalar(.8);if(['wooden_sword','spear','machete'].includes(weapon))this.weapon.rotation.x=weapon==='spear'?0:Math.PI;this.asset!.getObjectByName(weapon==='bow'?'HandL':'HandR')?.add(this.weapon);}}
     if(this.action&&this.upper&&this.upper.time>=this.upper.getClip().duration-.02)this.action=false;
-    if(attack>this.lastAttack){this.lastAttack=attack;if(clock-attack<.8)this.play(bear?'attack':weapon??'gather',true,true);}
+    if(attack>this.lastAttack){this.lastAttack=attack;if(clock-attack<.8)this.play(bear?'attack':weapon??'punch',true,true);}
     if(!this.action&&bear&&this.upper){this.upper.fadeOut(.15);this.upper=undefined;}
     if(!this.action&&!bear)this.play(working?'gather':moving?'arms_walk':'arms_idle',true);
     this.mixer!.update(dt);

@@ -1,3 +1,6 @@
+import { STRUCTURE_HP } from '../data/settlement';
+import { weaponMesh } from './WeaponModels';
+import type { LootPile } from '../systems/SettlementSystem';
 import { SnowWeather } from './SnowWeather';
 import { NPCCharacter } from './NPCCharacter';
 import { characterStyle } from '../data/characters';
@@ -19,6 +22,8 @@ export class Renderer {
   readonly playerCharacter = new PlayerCharacter(); private player = this.playerCharacter.object; private dynamic = new Map<string, THREE.Group>();
   private residents = new Map<string,NPCCharacter>();
   private preview?: THREE.Group; private ray = new THREE.Raycaster(); private sun: THREE.DirectionalLight;
+  private falls:{group:THREE.Group;age:number}[]=[];
+  private shaking?:{id:string;entries:{mesh:THREE.InstancedMesh;index:number;matrix:THREE.Matrix4}[]};
   private weather = new SnowWeather(); private snowfall = this.weather.points;
   private reducedMotion=matchMedia('(prefers-reduced-motion: reduce)'); private combatVisual = new CombatRenderer();
   private materials = { snow: mat(0xe4edf0), dark: mat(0x314e5b), wood: mat(0x87664b), ice: mat(0x658d9f), metal: mat(0x5a7279), fire: mat(0xffa343, { emissive: 0xff781c, emissiveIntensity: 1.6 }), water: mat(0x407e9c, { roughness: .25, metalness: .25, transparent: true, opacity: .87 }) };
@@ -67,10 +72,11 @@ export class Renderer {
     }
     group.rotation.y = rotation; return group;
   }
-  private instance(group: THREE.Group, geometry: THREE.BufferGeometry, material: THREE.Material, points: { x: number; y: number; z: number; sx?: number; sy?: number; sz?: number; rotation?: number }[]) {
+  private instance(group: THREE.Group, geometry: THREE.BufferGeometry, material: THREE.Material, points: { x: number; y: number; z: number; sx?: number; sy?: number; sz?: number; rotation?: number; id?:string }[]) {
     if (!points.length) { geometry.dispose(); return; }
     const mesh = new THREE.InstancedMesh(geometry, material, points.length), o = new THREE.Object3D();
     points.forEach((p, i) => { o.position.set(p.x, p.y, p.z); o.scale.set(p.sx ?? 1, p.sy ?? 1, p.sz ?? 1); o.rotation.y = p.rotation ?? 0; o.updateMatrix(); mesh.setMatrixAt(i, o.matrix); });
+    if(points.some(p=>p.id))mesh.userData.treeIds=points.map(p=>p.id);
     mesh.castShadow = true; mesh.receiveShadow = true; mesh.instanceMatrix.needsUpdate = true; group.add(mesh);
   }
   private chunk(data: Chunk) {
@@ -80,16 +86,16 @@ export class Renderer {
     for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), z = pos.getZ(i), y = w.height(x, z); pos.setY(i, y); const river = w.river(x, z); color.setHex(y < .1 && river.distance < river.width + 2 ? 0x839ea9 : 0xe0ebef); color.multiplyScalar(1 - Math.max(0, y) * .007); colors.push(color.r, color.g, color.b); }
     terrain.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); terrain.computeVertexNormals();
     const ground = this.mesh(terrain, mat(0xffffff, { vertexColors: true })); ground.castShadow = false; g.add(ground);
-    const trees = data.trees.filter((_, i) => !this.game.state.combat.charredTrees.includes(`tree:${data.cx}:${data.cz}:${i}`)).map(t => ({ ...t, y: w.height(t.x, t.z) }));
-    this.instance(g, new THREE.CylinderGeometry(.16, .25, 2.2, 5), this.materials.wood, trees.map(t => ({ x: t.x, y: t.y + t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
+    const trees = data.trees.map((t,i)=>({...t,id:`tree:${data.cx}:${data.cz}:${i}`})).filter((t) => !this.game.state.combat.charredTrees.includes(t.id)&&this.game.state.changes.terrain?.[t.id]!=='felled').map(t => ({ ...t, y: w.height(t.x, t.z) }));
+    this.instance(g, new THREE.CylinderGeometry(.16, .25, 2.2, 5), this.materials.wood, trees.map(t => ({ id:t.id, x: t.x, y: t.y + t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
     for (let layer = 0; layer < 3; layer++) {
       const scale = 1 - layer * .23;
-      this.instance(g, new THREE.ConeGeometry(1.7 * scale, 2.5, 7), this.materials.dark, trees.map(t => ({ x: t.x, y: t.y + (2.5 + layer * 1.25) * t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
-      this.instance(g, new THREE.ConeGeometry(1.78 * scale, 2.35, 7), this.materials.snow, trees.map(t => ({ x: t.x, y: t.y + (2.75 + layer * 1.25) * t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
+      this.instance(g, new THREE.ConeGeometry(1.7 * scale, 2.5, 7), this.materials.dark, trees.map(t => ({ id:t.id, x: t.x, y: t.y + (2.5 + layer * 1.25) * t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
+      this.instance(g, new THREE.ConeGeometry(1.78 * scale, 2.35, 7), this.materials.snow, trees.map(t => ({ id:t.id, x: t.x, y: t.y + (2.75 + layer * 1.25) * t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
     }
     const nodes = this.game.nodesInChunk(data);
     for (const resource of ['wood', 'stone', 'metal', 'charcoal'] as const) {
-      const points = nodes.filter(n => this.game.nodeResource(n) === resource && this.game.nodeRemaining(n) > 0 && !w.isWater(n.x, n.z)).map(n => ({ x: n.x, y: w.height(n.x, n.z) + .45, z: n.z, sx: resource === 'wood' ? 1.3 : .9, sy: resource === 'wood' ? .5 : .8, sz: .7, rotation: n.x }));
+      const points = nodes.filter(n => n.kind!=='tree'&&this.game.nodeResource(n) === resource && this.game.nodeRemaining(n) > 0 && !w.isWater(n.x, n.z)).map(n => ({ x: n.x, y: w.height(n.x, n.z) + (n.kind==='boulder'?1.1:.45), z: n.z, sx: n.kind==='boulder'?1.8:n.kind==='fragment'?.45:resource === 'wood' ? 1.3 : .9, sy: n.kind==='boulder'?1.6:n.kind==='fragment'?.4:resource === 'wood' ? .5 : .8, sz:n.kind==='boulder'?1.6:n.kind==='fragment'?.45:.7, rotation: n.x }));
       this.instance(g, resource === 'wood' ? new THREE.CylinderGeometry(.4, .4, 2, 7).rotateZ(Math.PI / 2) : new THREE.DodecahedronGeometry(.85, 0), resource === 'charcoal' ? this.materials.dark : this.materials[resource === 'wood' ? 'wood' : resource === 'stone' ? 'ice' : 'metal'], points);
     }
     if (w.spec.config.riverDensity > 0) {
@@ -107,20 +113,56 @@ export class Renderer {
     for (const f of data.fishing) { const post = this.mesh(new THREE.CylinderGeometry(.08, .08, 1.5, 5), this.materials.wood, f.x, w.height(f.x, f.z) + .75, f.z); g.add(post); this.box(g, f.x, w.height(f.x, f.z) + 1.35, f.z, .85, .4, .12, mat(0x5a94a6)); }
     return g;
   }
+  private ruinedBuilding(type:BuildingType,rotation:number){
+    const group=this.building('ruin',rotation);group.name=`ruined-${type}`;
+    if(type==='storage'){for(let i=0;i<3;i++)this.box(group,-1+i,.45,.5,.65,.65,.7,this.materials.ice);this.box(group,0,.1,0,4.8,.25,4.3,this.materials.metal);}
+    if(type==='furnace'){const shell=this.mesh(new THREE.CylinderGeometry(.7,1.15,1.1,8),this.materials.metal,0,.65);group.add(shell);const chimney=this.box(group,.5,.4,.4,.5,.5,2.6,this.materials.dark);chimney.rotation.y=.65;}
+    if(type==='shelter'){group.scale.y=.6;for(const side of [-1,1]){const post=this.box(group,side*1.3,.6,0,.2,1.4,.2,this.materials.wood);post.rotation.z=side*.4;}}
+    return group;
+  }
+  private structureBar(group:THREE.Group,fraction:number,damaged:boolean){
+    let bar=group.getObjectByName('structure-health') as THREE.Group|undefined;
+    if(!bar){bar=new THREE.Group();bar.name='structure-health';bar.position.y=5.4;const background=this.box(bar,0,0,0,3,.13,.03,this.materials.dark);background.castShadow=false;const fill=this.box(bar,0,0,.025,3,.075,.02,mat(0xe7b16c));fill.name='integrity-fill';fill.castShadow=false;group.add(bar);}
+    const fill=bar.getObjectByName('integrity-fill')!;fill.scale.x=fraction;fill.position.x=-1.5+fraction*1.5;bar.quaternion.copy(group.quaternion).invert().multiply(this.camera.quaternion);bar.visible=damaged;
+  }
+  private lootModel(pile:LootPile){
+    const g=new THREE.Group();g.name='supply-pile';g.userData.lootId=pile.id;
+    const weapon=!!pile.weapon,food=pile.category==='food',color=weapon?0xe1b76a:food?0xd9a37c:0x89b1ad;
+    this.box(g,0,.22,0,.65,.44,.6,this.materials.wood);this.box(g,0,.45,0,.72,.07,.65,this.materials.metal);
+    if(pile.weapon){const mesh=weaponMesh(pile.weapon,true);mesh.position.y=.8;mesh.rotation.z=-.65;g.add(mesh);}
+    else{const bundle=this.mesh(new THREE.DodecahedronGeometry(.27,0),mat(color),0,.65);bundle.scale.set(1,.75,.65);g.add(bundle);}
+    const ring=this.mesh(new THREE.RingGeometry(.52,.58,20).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.75,depthWrite:false}),0,.04);ring.castShadow=false;g.add(ring);return g;
+  }
+  private treeModel(scale:number){
+    const g=new THREE.Group();g.add(this.mesh(new THREE.CylinderGeometry(.16,.25,2.2,5),this.materials.wood,0,scale));
+    g.children[0].scale.setScalar(scale);
+    for(let layer=0;layer<3;layer++){const size=1-layer*.23;const leaves=this.mesh(new THREE.ConeGeometry(1.7*size,2.5,7),this.materials.dark,0,(2.5+layer*1.25)*scale),snow=this.mesh(new THREE.ConeGeometry(1.78*size,2.35,7),this.materials.snow,0,(2.75+layer*1.25)*scale);leaves.scale.setScalar(scale);snow.scale.setScalar(scale);g.add(leaves,snow);}return g;
+  }
+  private terrainFeedback(dt:number){
+    const node=this.game.gathering?.node,reduced=this.reducedMotion.matches;
+    if(this.shaking?.id!==node?.id){if(this.shaking)for(const e of this.shaking.entries)if(e.mesh.parent){e.mesh.setMatrixAt(e.index,e.matrix);e.mesh.instanceMatrix.needsUpdate=true;}this.shaking=undefined;}
+    if(node?.kind==='tree'&&!this.shaking){const entries:{mesh:THREE.InstancedMesh;index:number;matrix:THREE.Matrix4}[]=[];for(const chunk of this.chunks.values())chunk.traverse(o=>{if(o instanceof THREE.InstancedMesh){const index=(o.userData.treeIds as string[]|undefined)?.indexOf(node.id)??-1;if(index>=0){const matrix=new THREE.Matrix4();o.getMatrixAt(index,matrix);entries.push({mesh:o,index,matrix});}}});this.shaking={id:node.id,entries};}
+    if(this.shaking&&!reduced){const offset=Math.sin(this.game.state.elapsed*45)*.045;for(const e of this.shaking.entries)if(e.mesh.parent){const matrix=e.matrix.clone();matrix.elements[12]+=offset;e.mesh.setMatrixAt(e.index,matrix);e.mesh.instanceMatrix.needsUpdate=true;}}
+    for(const event of this.game.terrainEvents.splice(0)){
+      for(const chunk of this.chunks.values())chunk.traverse(o=>{if(o instanceof THREE.InstancedMesh){const ids=o.userData.treeIds as string[]|undefined;if(!ids)return;for(let i=0;i<ids.length;i++)if(ids[i]===event.id){o.setMatrixAt(i,new THREE.Matrix4().makeScale(0,0,0));o.instanceMatrix.needsUpdate=true;}}});
+      if(!reduced){if(this.falls.length>=8)this.dispose(this.falls.shift()!.group);const group=this.treeModel(event.scale);group.position.set(event.x,this.game.world.height(event.x,event.z),event.z);group.rotation.y=Math.atan2(event.x-this.game.state.player.x,event.z-this.game.state.player.z)+Math.PI/2;group.name='falling-tree';this.scene.add(group);this.falls.push({group,age:0});}
+    }
+    this.falls=this.falls.filter(f=>{f.age+=this.game.paused?0:dt;f.group.rotation.z=-(Math.min(1,f.age/.9)**2)*Math.PI/2;if(f.age>=1){this.dispose(f.group);return false;}return true;});
+  }
   private addRuin(g: THREE.Group, r: Ruin) {
     const w = this.game.world;
-    for (let i = 0; i < r.houses; i++) { const h = this.building(r.id.startsWith('village:') || i % 2 ? 'hut' : 'ruin', i % 2 ? .1 : -.1); h.position.set(r.x + (i - 1) * 6, w.height(r.x + (i - 1) * 6, r.z - 3), r.z - 3); g.add(h); }
+
     const chest = this.game.state.changes.containers.includes(r.id) ? this.materials.dark : this.materials.wood;
     this.box(g, r.container.x, w.height(r.container.x, r.container.z) + .5, r.container.z, 1.4, .9, 1, chest);
     this.box(g, r.trader.x, w.height(r.trader.x, r.trader.z) + 2.6, r.trader.z, .45, .45, .1, mat(0xf4cf7c, { emissive: 0xaa7524 }));
   }
   private dispose(group: THREE.Group) {
-    group.traverse(o => { if (o instanceof THREE.Mesh) { if (o instanceof THREE.InstancedMesh) o.dispose(); o.geometry.dispose(); const mats = Array.isArray(o.material) ? o.material : [o.material]; for (const m of mats) if (!Object.values(this.materials).includes(m as THREE.MeshStandardMaterial)) m.dispose(); } }); group.removeFromParent();
+    group.traverse(o => { if (o instanceof THREE.Mesh||o instanceof THREE.Line) { if (o instanceof THREE.InstancedMesh) o.dispose(); o.geometry.dispose(); const mats = Array.isArray(o.material) ? o.material : [o.material]; for (const m of mats) if (!Object.values(this.materials).includes(m as THREE.MeshStandardMaterial)) m.dispose(); } }); group.removeFromParent();
   }
   refreshChunks() { for (const id of this.chunks.keys()) this.dirtyChunks.add(id); }
   private clearChunks() { for (const g of this.chunks.values()) this.dispose(g); this.chunks.clear(); this.dirtyChunks.clear(); }
   resize() { const w = this.host.clientWidth, h = this.host.clientHeight; this.webgl.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
-  setGame(game: Game) { this.game = game; this.combatVisual.clear(); this.playerCharacter.reset(); for (const visual of this.residents.values()) visual.dispose(); this.residents.clear(); this.clearChunks(); this.dispose(this.entities); this.entities = new THREE.Group(); this.scene.add(this.entities); this.dynamic.clear(); this.target.set(game.state.player.x, 1, game.state.player.z); }
+  setGame(game: Game) { for(const fall of this.falls)this.dispose(fall.group);this.falls=[];this.shaking=undefined;this.game = game; this.combatVisual.clear(); this.playerCharacter.reset(); for (const visual of this.residents.values()) visual.dispose(); this.residents.clear(); this.clearChunks(); this.dispose(this.entities); this.entities = new THREE.Group(); this.scene.add(this.entities); this.dynamic.clear(); this.target.set(game.state.player.x, 1, game.state.player.z); }
   screenPoint(point: { x: number; z: number }) {
     const v = new THREE.Vector3(point.x, this.game.world.height(point.x, point.z) + 1.2, point.z).project(this.camera);
     if (v.z < -1 || v.z > 1 || Math.abs(v.x) > 1.2 || Math.abs(v.y) > 1.2) return undefined;
@@ -156,6 +198,7 @@ export class Renderer {
     const sx = Math.round(p.x / shadowStep) * shadowStep, sz = Math.round(p.z / shadowStep) * shadowStep;
     this.sun.position.set(sx - 22, 35, sz + 15); this.sun.target.position.set(sx, 0, sz);
     this.playerCharacter.update(game, dt, aiming);
+    this.terrainFeedback(dt);
     const needed = game.world.around(p, game.state.settings.renderDistance), ids = new Set(needed.map(c => c.id));
     for (const [id, g] of this.chunks) if (!ids.has(id)) { this.dispose(g); this.chunks.delete(id); this.dirtyChunks.delete(id); }
     // Budget generation to two rendered chunks per frame.
@@ -165,11 +208,15 @@ export class Renderer {
       if (previous) this.dispose(previous);
     }
     const entityIds = new Set<string>();
-    for (const b of [...game.state.buildings, ...game.state.furnaces.filter(f => !game.state.buildings.some(b => b.id === f.id)).map(f => ({ ...f, type: 'furnace' as const, rotation: 0 }))]) {
+    for (const b of game.settlement.structures(p,game.state.settings.renderDistance)) {
+      const integrity=game.settlement.integrity(b);if(integrity.stage==='gone'||Math.hypot(b.x-p.x,b.z-p.z)>(game.state.settings.renderDistance+1)*game.world.spec.config.chunkSize)continue;
       entityIds.add(b.id); let group = this.dynamic.get(b.id);
-      if (!group) { group = this.building(b.type, b.rotation); this.dynamic.set(b.id, group); this.entities.add(group); }
+      if(group&&group.userData.stage!==integrity.stage){this.dispose(group);this.dynamic.delete(b.id);group=undefined;}
+      if(!group){group=integrity.stage==='ruin'?this.ruinedBuilding(b.type,b.rotation):this.building(b.type,b.rotation);group.userData.stage=integrity.stage;group.userData.structureId=b.id;this.dynamic.set(b.id,group);this.entities.add(group);}
+      const max=STRUCTURE_HP[b.type]*(integrity.stage==='ruin'?.25:1),occupants=Object.values(game.state.changes.refuges??{}).filter(r=>r.houseId===b.id&&r.phase==='hidden').length;
+      group.userData.hp=integrity.hp;group.userData.occupants=occupants;this.structureBar(group,integrity.hp/max,integrity.hp<max||occupants>0);
       group.position.set(b.x, game.world.height(b.x, b.z), b.z);
-      if (b.type === 'furnace') {
+      if (b.type === 'furnace'&&integrity.stage==='intact') {
         const furnace = game.state.furnaces.find(f => f.id === b.id)!; const active = furnace.fuel + furnace.charcoal > 0;
         const tier = furnaceTier(furnace.level);
         if (group.userData.tier !== tier) { const old = group.getObjectByName('reinforcement'); if (old) this.dispose(old as THREE.Group); const upgrade = new THREE.Group(); upgrade.name = 'reinforcement';
@@ -188,16 +235,19 @@ export class Renderer {
         }
       }
     }
+    for(const pile of game.settlement.loot(p)){
+      const key=`loot:${pile.id}`;entityIds.add(key);let group=this.dynamic.get(key);if(!group){group=this.lootModel(pile);this.dynamic.set(key,group);this.entities.add(group);}group.position.set(pile.x,game.world.height(pile.x,pile.z),pile.z);
+    }
     const residentIds = new Set<string>();
     for(const settlement of game.world.settlements(p,game.state.settings.renderDistance)) {
       const npc=game.npc(settlement),size=game.world.spec.config.chunkSize; if(npc.hp<=0||!this.chunks.has(`${Math.floor(settlement.trader.x/size)},${Math.floor(settlement.trader.z/size)}`))continue; residentIds.add(npc.id);
       let visual=this.residents.get(npc.id);if(!visual){visual=new NPCCharacter(characterStyle('trader',npc.id,settlement.variant).id);this.residents.set(npc.id,visual);this.entities.add(visual.object);}
-      visual.update(settlement.trader,game.world.walkHeight(settlement.trader.x,settlement.trader.z),.4,game.paused?0:dt,game.state.elapsed);
+      const point=game.settlement.position(npc.id,settlement.trader),refuge=game.settlement.refuge(npc.id),dx=point.x-visual.object.position.x,dz=point.z-visual.object.position.z;visual.update(point,game.world.walkHeight(point.x,point.z),Math.hypot(dx,dz)>.01?Math.atan2(dx,dz):visual.object.rotation.y,game.paused?0:dt,game.state.elapsed);visual.object.visible=visual.ready&&refuge?.phase!=='hidden';visual.object.userData.refuge=refuge?.phase;
     }
     for(const worker of game.state.workers) {
       if(worker.hp<=0)continue;residentIds.add(worker.id);let visual=this.residents.get(worker.id);
       if(!visual){visual=new NPCCharacter(characterStyle('worker',worker.id).id);this.residents.set(worker.id,visual);this.entities.add(visual.object);}
-      visual.update(worker,game.world.walkHeight(worker.x,worker.z),Math.atan2(p.x-worker.x,p.z-worker.z),game.paused?0:dt,game.state.elapsed,null,-100,worker.state==='gathering');
+      const refuge=game.settlement.refuge(worker.id),dx=worker.x-visual.object.position.x,dz=worker.z-visual.object.position.z;visual.update(worker,game.world.walkHeight(worker.x,worker.z),Math.hypot(dx,dz)>.01?Math.atan2(dx,dz):visual.object.rotation.y,game.paused?0:dt,game.state.elapsed,null,-100,worker.state==='gathering'&&!refuge);visual.object.visible=visual.ready&&refuge?.phase!=='hidden';visual.object.userData.refuge=refuge?.phase;
     }
     for(const [id,visual] of this.residents)if(!residentIds.has(id)){visual.dispose();this.residents.delete(id);}
     for (const [id, group] of this.dynamic) if (!entityIds.has(id)) { this.dispose(group); this.dynamic.delete(id); }

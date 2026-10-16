@@ -10,7 +10,7 @@ import {exportFull,importJSON} from '../src/systems/SaveSystem';
 function isolated() { const g = new Game(newState(worldSpec(42))); g.paused=false; g.combat.ensureEncounters(); for(const a of Object.values(g.state.combat.actors)) a.hp=0; return g; }
 test('weapon cadence, 100 uses, infinite ammo and HP definitions',()=>{
  const g=isolated();
- for(const type of WEAPON_IDS){g.state.combat.weapons=[{id:'test',type,uses:100}];g.state.combat.equipped='test';g.state.combat.cooldown=0;assert(g.combat.attack({x:0,z:10}));assert.equal(g.state.combat.cooldown,WEAPONS[type].cooldown);assert.equal(g.state.combat.weapons[0].uses,WEAPONS[type].type==='melee'?100:99);assert(!g.combat.attack({x:0,z:10}));g.state.combat.cooldown=0;g.state.combat.weapons[0].uses=0;assert(!g.combat.attack({x:0,z:10}));}
+ for(const type of WEAPON_IDS){g.state.combat.weapons=[{id:'test',type,uses:100}];g.state.combat.equipped='test';g.state.combat.cooldown=0;assert(g.combat.attack({x:0,z:10}));assert.equal(g.state.combat.cooldown,WEAPONS[type].cooldown);assert.equal(g.state.combat.weapons[0].uses,WEAPONS[type].type==='melee'?100:99);assert(!g.combat.attack({x:0,z:10}));g.state.combat.cooldown=0;g.state.combat.weapons[0].uses=0;assert(g.combat.attack({x:0,z:10}));assert.equal(g.state.combat.projectiles.at(-1)!.weapon,'punch');}
  assert.deepEqual(ACTOR_HP,{polar_bear:50,bandit:125,arsonist:75,guard:125}); assert(shotgunDamage(.5)>shotgunDamage(2.9));
 });
 test('machete applies 25 damage and exactly ten bleed ticks and guard retaliation persists',()=>{
@@ -38,6 +38,6 @@ test('fixed villages spawn 3-5 guards, bandit groups 2-10, equipment drops appro
 });
 test('legacy format 1 migrates safely and malformed combat imports are rejected',()=>{
  const s=newState(worldSpec(42));const doc=JSON.parse(exportFull(s));doc.formatVersion=1;doc.world.generationVersion=1;delete doc.state.combat;delete doc.state.player.hp;delete doc.state.inventory.charcoal;delete doc.state.stockpile.charcoal;for(const f of doc.state.furnaces)delete f.charcoal;
- const restored=importJSON(JSON.stringify(doc));assert.equal(restored.world.generationVersion,1);assert.equal(restored.player.hp,100);assert.equal(restored.inventory.charcoal,0);assert.equal(restored.combat.weapons[0].uses,100);
- for(const mutate of [(d:any)=>d.state.combat.weapons[0].uses=101,(d:any)=>d.state.player.hp=101,(d:any)=>d.state.combat.weather.mode='rain',(d:any)=>d.state.combat.equipped='missing']){const next=JSON.parse(exportFull(s));mutate(next);assert.throws(()=>importJSON(JSON.stringify(next)));}
+ const restored=importJSON(JSON.stringify(doc));assert.equal(restored.world.generationVersion,1);assert.equal(restored.player.hp,100);assert.equal(restored.inventory.charcoal,0);assert.equal(restored.combat.weapons.length,0);
+ for(const mutate of [(d:any)=>d.state.combat.weapons=[{id:'bad',type:'bow',uses:101}],(d:any)=>d.state.player.hp=101,(d:any)=>d.state.combat.weather.mode='rain',(d:any)=>d.state.combat.equipped='missing']){const next=JSON.parse(exportFull(s));mutate(next);assert.throws(()=>importJSON(JSON.stringify(next)));}
 });

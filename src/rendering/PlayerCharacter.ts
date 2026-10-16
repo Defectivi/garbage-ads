@@ -59,13 +59,13 @@ export class PlayerCharacter {
     const angle=Math.atan2(Math.sin(p.heading-this.object.rotation.y),Math.cos(p.heading-this.object.rotation.y));
     this.object.rotation.y+=angle*(1-Math.exp(-dt*16));
     if(!this.ready)return;
-    const equipped=game.state.combat.weapons.find(w=>w.id===game.state.combat.equipped);
+    const equipped=game.state.combat.weapons.find(w=>w.id===game.state.combat.equipped&&w.uses>0);
     if(this.equipped!==(equipped?.id??'')) {
       this.oneShot=false;this.upper?.fadeOut(.12);this.upper=undefined;
       if(this.held)disposeWeapon(this.held);this.held=undefined;this.equipped=equipped?.id??'';this.type=equipped?.type;
       if(equipped){const socket=this.asset!.getObjectByName(equipped.type==='bow'?'HandL':'HandR');this.held=weaponMesh(equipped.type,true);if(equipped.type==='shotgun')this.held.scale.setScalar(.8);if(['wooden_sword','machete','spear'].includes(equipped.type))this.held.rotation.x=equipped.type==='spear'?0:Math.PI;socket?.add(this.held);}
     }
-    const dead=p.hp<=0;
+    const dead=game.dead;
     if(dead){if(this.base?.getClip().name!=='death'){this.oneShot=false;this.upper?.fadeOut(.1);this.transition('death',false,true);}this.mixer!.update(dt);this.object.userData.animation='death';this.hp=p.hp;return;}
     const locomotion=this.speed>.2?(this.speed>7?'sprint':'walk'):'idle';
     this.transition(locomotion);
@@ -73,7 +73,7 @@ export class PlayerCharacter {
     if(this.oneShot&&this.upper&&this.upper.time>=this.upper.getClip().duration-.02)this.oneShot=false;
     if(!game.paused&&game.combat.lastAttack>this.attackStamp) {
       this.attackStamp=game.combat.lastAttack;this.object.rotation.y=p.heading;
-      if(elapsed-this.attackStamp<.5&&this.type)this.transition(this.type,true,true);
+      if(elapsed-this.attackStamp<.5)this.transition(this.type??'punch',true,true);
     } else if(!game.paused&&game.lastGather>this.gatherStamp) {
       this.gatherStamp=game.lastGather;if(elapsed-this.gatherStamp<.5)this.transition('gather',true,true);
     }

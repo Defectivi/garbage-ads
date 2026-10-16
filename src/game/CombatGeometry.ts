@@ -1,8 +1,9 @@
 import type { Point } from './GameState';
 
-export const meleeDuration=(weapon:string)=>weapon==='wooden_sword'?.55:weapon==='machete'?.6:.65;
+export const meleeDuration=(weapon:string)=>weapon==='punch'?.45:weapon==='wooden_sword'?.55:weapon==='machete'?.6:.65;
 export function meleePath(weapon:string,progress:number){
   const t=Math.max(0,Math.min(1,progress)),u=Math.max(0,Math.min(1,(t-.12)/.6)),sweep=u*u*(3-2*u);
+  if(weapon==='punch')return {x:.22,y:1.4,z:.2+Math.sin(Math.PI*t)*.45,dx:0,dy:0,dz:1,length:.15};
   if(weapon==='spear')return {x:.28,y:1.13,z:.12+Math.sin(Math.PI*t*t*(3-2*t))*.48,dx:0,dy:.04,dz:1,length:1.48};
   const angle=1.25-sweep*2.65;
   return {x:Math.sin(angle)*.48,y:1.15+Math.sin(sweep*Math.PI)*.06,z:.22+Math.cos(angle)*.3,dx:Math.sin(angle),dy:-.12,dz:Math.cos(angle),length:weapon==='machete'?.8:.82};

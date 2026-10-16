@@ -81,7 +81,7 @@ export class App {
   }
   enter() {
     this.clearInput(); this.mode = 'game'; this.played = true; this.game.paused = false; this.root.className = 'playing'; this.keys.clear(); this.audio.enabled = this.game.state.settings.sound; this.audio.unlock(); this.audio.ambience(true);
-    this.root.innerHTML = `<header><b>${uiIcon('mountain')} FROSTBOUND</b><span id="seed-hud"></span><button id="menu" aria-label="Pause game">Ⅱ <span>Pause</span></button></header><div id="resources" class="resource-bar" aria-label="Carried resources"></div><section class="survival"><div class="exposure-heading">${uiIcon('flame')}<strong id="warmth"></strong></div><div class="warmth-meter"><i></i></div><span id="fuel"></span><small id="location"></small></section><button id="interaction" class="interaction"><kbd>F</kbd><span></span></button><section class="combat-hud"><div class="health-line"><b id="health"></b><span id="weather"></span></div><div class="hp-meter"><i></i></div><div id="weapon-rack"></div><small id="weapon-state"></small><small id="furnace-defense"></small><button id="attack-button">ATTACK <kbd>SPACE</kbd></button><button id="sprint-button">SPRINT <kbd>SHIFT</kbd></button></section><div id="message" role="status"></div><footer><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move / F interact / E inventory / Shift+S save</footer>`;
+    this.root.innerHTML = `<header><b>${uiIcon('mountain')} FROSTBOUND</b><span id="seed-hud"></span><button id="menu" aria-label="Pause game">Ⅱ <span>Pause</span></button></header><div id="resources" class="resource-bar" aria-label="Carried resources"></div><section class="survival"><div class="exposure-heading">${uiIcon('flame')}<strong id="warmth"></strong></div><div class="warmth-meter"><i></i></div><span id="fuel"></span><small id="location"></small><small id="recovery-state"></small><small id="structure-status"></small></section><button id="interaction" class="interaction"><kbd>F</kbd><span></span></button><section class="combat-hud"><div class="health-line"><b id="health"></b><span id="weather"></span></div><div class="hp-meter"><i></i></div><div id="weapon-rack"></div><small id="weapon-state"></small><small id="furnace-defense"></small><button id="attack-button">ATTACK <kbd>SPACE</kbd></button><button id="sprint-button">SPRINT <kbd>SHIFT</kbd></button></section><div id="message" role="status"></div><footer><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move / F interact / E inventory / Shift+S save</footer>`;
     this.root.querySelector('#menu')!.addEventListener('click', () => this.pause()); this.root.querySelector('#interaction')!.addEventListener('click', () => this.interact());
     const toolbar = document.createElement('nav'); toolbar.className = 'toolbar'; toolbar.setAttribute('aria-label', 'Field kit'); toolbar.innerHTML = [['inventory', 'pack', 'Rucksack', 'E'], ['build', 'build', 'Build', 'B'], ['map', 'map', 'Map', 'M'], ['saves', 'save', 'World files', 'P'], ['settings', 'settings', 'Settings', '']].map(([id, art, label, key]) => `<button id="${id}" title="${label}${key ? ` (${key})` : ''}" aria-label="${label}">${uiIcon(art)}<span>${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`).join('');
     this.root.appendChild(toolbar); toolbar.querySelector('#inventory')!.addEventListener('click', () => this.panels.inventory()); toolbar.querySelector('#build')!.addEventListener('click', () => this.panels.building()); toolbar.querySelector('#map')!.addEventListener('click', () => this.panels.map()); toolbar.querySelector('#saves')!.addEventListener('click', () => this.panels.saves()); toolbar.querySelector('#settings')!.addEventListener('click', () => this.panels.settings());
@@ -111,7 +111,7 @@ export class App {
   closeModal() { if(this.mode==='game'&&this.game.dead)return; this.root.querySelector('.modal-backdrop')?.remove(); this.clearInput(); if (this.mode === 'game') { this.game.paused = false; this.audio.enabled = this.game.state.settings.sound; this.audio.ambience(true); } }
   error(e: unknown) { const message = e instanceof Error ? e.message : String(e); this.game.notify(message); const status = this.root.querySelector('#dialog-status') ?? this.root.querySelector('#menu-error'); if (status) status.textContent = message; }
   report(result: Result) { if (!result.ok) this.error(result.error); else { this.audio.tone('collect'); const el = this.root.querySelector('#dialog-status'); if (el) el.textContent = this.game.message; } this.refresh(); }
-  replaceWorld(state: GameState) { this.collectionEffects.clear(); this.damageEffects.clear(); this.cancelBuilding(); this.game = new Game(state); this.renderer.setGame(this.game); this.revision = -1; this.autosave = 0; this.enter(); }
+  replaceWorld(state: GameState) { const saved=saveLocal(state); this.collectionEffects.clear(); this.damageEffects.clear(); this.cancelBuilding(); this.game = new Game(state); this.renderer.setGame(this.game); this.revision = -1; this.autosave = 0; this.enter();if(!saved.ok)this.error(saved.message); }
   private offerWorld(state: GameState, message: string) { const el = this.modal('A new chapter?', '<p id="replace-description"></p><div class="button-row"><button id="confirm-world" class="primary">Confirm replacement</button><button id="cancel-world">Cancel</button></div>'); el.querySelector('#replace-description')!.textContent = `${message} Seed ${state.world.seed}, generation ${state.world.generationVersion}.`; el.querySelector('#confirm-world')!.addEventListener('click', () => this.replaceWorld(state)); el.querySelector('#cancel-world')!.addEventListener('click', () => this.closeModal()); }
   private pause() {
     const el = this.modal('The wilderness can wait.', '<p>Simulation is paused. Your fire and workers will wait.</p><p class="control-hints">Desktop: WASD / arrows move, hold Shift to sprint, right-drag to orbit, wheel to zoom. Touch: left joystick moves; drag the right half of the world to orbit. Hold Sprint; use + / - to zoom. Attack uses the equipped weapon; F / Interact uses the nearby prompt. E opens inventory, B builds, M opens the map, Shift+S saves locally. Movement sets facing. Left click and touch Attack assist nearby hostiles; Space attacks forward.</p><div class="button-row"><button id="resume" class="primary">Resume</button><button id="pause-save">Save locally</button><button id="reset-world">Reset this world</button><button id="exit-menu">Exit to Menu</button></div>');
@@ -126,31 +126,34 @@ export class App {
   private confirmBuilding() { if (!this.placement) return; const p = this.placement, r = this.game.build(p.type, p.point, p.rotation); this.report(r); if (r.ok) this.cancelBuilding(); }
   private cancelBuilding() { this.placement = undefined; this.root.querySelector('.placement-bar')?.remove(); this.renderer.showPreview(null); }
   interact() {
-    if (this.mode !== 'game' || this.game.paused) return;
+    if (this.mode !== 'game' || this.game.paused||this.game.gathering) return;
     if (this.placement) { this.confirmBuilding(); return; }
     const context = this.context(); if (!context) return;
     if(context.kind==='furnace')this.game.bindFurnace(context.id!);
-    if (context.kind === 'drop') this.game.combat.pickup(context.id!);
+    if(context.kind==='loot')this.report(this.game.settlement.pickup(context.id!));
+    else if (context.kind === 'drop') this.game.combat.pickup(context.id!);
     else if (context.kind === 'trader') this.panels.trade(context.ruin!);
     else if (context.kind === 'storage') this.panels.inventory();
-    else { const result = context.kind === 'node' ? this.game.gather(context.node!) : context.kind === 'furnace' ? this.game.feed(context.id, this.game.state.inventory.wood + this.game.state.stockpile.wood > 0 ? 'wood' : 'charcoal') : context.kind === 'fishing' ? this.game.startFishing(context.spot!) : this.game.search(context.ruin!); this.report(result); }
+    else { const result = context.kind === 'node' ? this.game.startGather(context.node!) : context.kind === 'furnace' ? this.game.feed(context.id, this.game.state.inventory.wood + this.game.state.stockpile.wood > 0 ? 'wood' : 'charcoal') : context.kind === 'fishing' ? this.game.startFishing(context.spot!) : this.game.search(context.ruin!); this.report(result); }
+    if(context.kind==='node'&&context.node?.kind==='tree'&&!matchMedia('(prefers-reduced-motion: reduce)').matches)navigator.vibrate?.(18);
     this.actionTimer = .45; this.refresh();
   }
   private context() {
     const p = this.game.state.player, chunks = this.game.world.around(p);
-    type Context = { kind: 'drop' | 'node' | 'furnace' | 'trader' | 'chest' | 'fishing' | 'storage'; label: string; d: number; id?: string; node?: ReturnType<Game['nodes']>[number]; spot?: typeof chunks[number]['fishing'][number]; ruin?: typeof chunks[number]['ruins'][number] };
+    type Context = { kind:'loot'| 'drop' | 'node' | 'furnace' | 'trader' | 'chest' | 'fishing' | 'storage'; label: string; d: number; id?: string; node?: ReturnType<Game['nodes']>[number]; spot?: typeof chunks[number]['fishing'][number]; ruin?: typeof chunks[number]['ruins'][number] };
     const candidates: Context[] = [];
     for (const n of this.game.nodes()) if (distance(n, p) < 3 && this.game.nodeRemaining(n) > 0 && !this.game.world.isWater(n.x, n.z)) candidates.push({ kind: 'node', label: `Gather ${this.game.nodeResource(n)} · hold F`, d: distance(n, p), node: n });
-    for (const f of this.game.state.furnaces) if (distance(f, p) < 4) candidates.push({ kind: 'furnace', label: `Feed furnace / set respawn${this.game.state.respawnFurnaceId===f.id?' / bound':''}`, d: distance(f, p), id: f.id });
+    for (const f of this.game.state.furnaces) if (this.game.settlement.intact(f.id)&&distance(f, p) < 4) candidates.push({ kind: 'furnace', label: `Feed furnace / set respawn${this.game.state.respawnFurnaceId===f.id?' / bound':''}`, d: distance(f, p), id: f.id });
     for (const c of chunks) {
       for (const f of c.fishing) if (distance(f, p) < 3) candidates.push({ kind: 'fishing', label: `Fish here · 4 seconds · ${Math.max(0, f.availability - (this.game.state.changes.fishing[f.id] ?? 0))} available`, d: distance(f, p), spot: f });
       for (const r of this.game.world.settlements(p).filter(r => Math.floor(r.x / this.game.world.spec.config.chunkSize) === c.cx && Math.floor(r.z / this.game.world.spec.config.chunkSize) === c.cz)) {
-        if (this.game.npc(r).hp > 0 && distance(r.trader, p) < 4) candidates.push({ kind: 'trader', label: `Trade with ${this.game.npc(r).name}`, d: distance(r.trader, p) - .5, ruin: r });
+        if (this.game.npc(r).hp > 0&&!this.game.settlement.refuge(`npc:${r.id}`) && distance(r.trader, p) < 4) candidates.push({ kind: 'trader', label: `Trade with ${this.game.npc(r).name}`, d: distance(r.trader, p) - .5, ruin: r });
         if (distance(r.container, p) < 3 && !this.game.state.changes.containers.includes(r.id)) candidates.push({ kind: 'chest', label: 'Search abandoned supply chest', d: distance(r.container, p), ruin: r });
       }
     }
-    for (const b of this.game.state.buildings) if (b.type === 'storage' && distance(b, p) < 4) candidates.push({ kind: 'storage', label: 'Open shared storage', d: distance(b, p) });
+    for (const b of this.game.state.buildings) if (b.type === 'storage'&&this.game.settlement.intact(b.id) && distance(b, p) < 4) candidates.push({ kind: 'storage', label: 'Open shared storage', d: distance(b, p) });
     for (const drop of this.game.state.combat.drops) if (distance(drop,p) < 3) candidates.push({kind:'drop', id:drop.id, label:`Pick up ${WEAPONS[drop.weapon].name}`, d:distance(drop,p)-3});
+    for(const pile of this.game.settlement.loot(p))if(distance(pile,p)<3)candidates.push({kind:'loot',id:pile.id,label:pile.weapon?`Take ${WEAPONS[pile.weapon].name}`:`Collect supplies / ${Object.entries(pile.resources).map(([r,n])=>`${n} ${r}`).join(', ')}`,d:distance(pile,p)-2});
     const priority = (kind: Context['kind']) => ['trader', 'chest', 'fishing', 'storage'].includes(kind) ? 4 : 0;
     return candidates.sort((a, b) => a.d - priority(a.kind) - b.d + priority(b.kind))[0];
   }
@@ -172,16 +175,19 @@ export class App {
     this.root.querySelector('#warmth')!.textContent = `${Math.round(temperature(s))}°C · Warmth ${Math.round(s.player.warmth)}%`;
     this.root.querySelector('#fuel')!.textContent = `Home · ${Math.ceil(s.furnaces[0].fuel + s.furnaces[0].charcoal * 2)}s fuel · Level ${s.furnaces[0].level}`;
     this.root.querySelector('#location')!.textContent = `${this.game.world.biome(s.player.x, s.player.z)} / ${Math.round(s.player.x)}, ${Math.round(s.player.z)}`;
-    const c = s.combat, equipped = c.weapons.find(w => w.id === c.equipped);
+    this.root.querySelector('#recovery-state')!.textContent=(s.player.invulnerable??0)>0?`RESPAWN SHIELD / ${s.player.invulnerable!.toFixed(1)}s`:s.player.hp<100&&s.furnaces.some(f=>this.game.settlement.intact(f.id)&&distance(f,s.player)<(f.fuel+f.charcoal>0?12+(f.level-1)*8:0))?`+25 HP in ${(3-(s.player.heatTime??0)).toFixed(1)}s`:'';
+    const structure=this.game.settlement.structures().filter(b=>distance(b,s.player)<5&&this.game.settlement.integrity(b).stage!=='gone').sort((a,b)=>distance(a,s.player)-distance(b,s.player))[0];
+    this.root.querySelector('#structure-status')!.textContent=structure?`${structure.id==='home'?'Home furnace':structure.generated?'Village house':BUILDINGS[structure.type].name} / ${this.game.settlement.integrity(structure).stage} / ${Math.ceil(this.game.settlement.integrity(structure).hp)} HP`:'';
+    const c = s.combat, equipped = c.weapons.find(w => w.id === c.equipped&&w.uses>0);
     this.root.querySelector('#health')!.textContent = `${Math.ceil(s.player.hp)} / 100 HP`;
     (this.root.querySelector('.hp-meter i') as HTMLElement).style.width = `${s.player.hp}%`;
     this.root.querySelector('#weather')!.textContent = c.weather.mode === 'snow' ? 'WHITEOUT / FUEL x3' : `CLEAR / ${Math.ceil(c.weather.remaining)}s`;
     const rack = this.root.querySelector('#weapon-rack')!; const rackHTML = c.weapons.filter(w => w.uses > 0).map((w,i) => `<button data-weapon="${w.id}" class="${w.id === c.equipped ? 'selected' : ''}" title="${WEAPONS[w.type].name}"><kbd>${i < 6 ? i+1 : ''}</kbd><b>${WEAPONS[w.type].name}</b><small>${w.uses}/100</small></button>`).join('');
     if (rack.innerHTML !== rackHTML) { rack.innerHTML = rackHTML; rack.querySelectorAll<HTMLButtonElement>('[data-weapon]').forEach(b => b.onclick = () => { c.equipped = b.dataset.weapon!; this.refresh(); }); }
-    this.root.querySelector('#weapon-state')!.textContent = equipped ? `${WEAPONS[equipped.type].name} / ${equipped.uses} uses / ${c.cooldown > 0 ? c.cooldown.toFixed(1)+'s' : 'READY'} / ${equipped&&WEAPONS[equipped.type].type==='melee'?'wear on enemy hit':'unlimited ammo'}` : 'Buy equipment from a trader';
-    this.root.querySelector('#furnace-defense')!.textContent = inPlayerHeat(s) ? 'FURNACE SHELTER / 50% less damage / enemies lose 10% max HP on entry' : '';
+    this.root.querySelector('#weapon-state')!.textContent = equipped ? `${WEAPONS[equipped.type].name} / ${equipped.uses} uses / ${c.cooldown > 0 ? c.cooldown.toFixed(1)+'s' : 'READY'} / ${equipped&&WEAPONS[equipped.type].type==='melee'?'wear on enemy hit':'unlimited ammo'}` : `Unarmed / 2 damage / ${c.cooldown>0?c.cooldown.toFixed(1)+'s':'READY'}`;
+    this.root.querySelector('#furnace-defense')!.textContent = inPlayerHeat(s) ? 'FURNACE / incoming damage -50% / enemies: damage taken x2, speed -50%' : '';
     const context = this.context(); const button = this.root.querySelector<HTMLButtonElement>('#interaction')!;
-    button.querySelector('span')!.textContent = this.game.fishing ? `Fishing… ${Math.ceil(this.game.fishing.remaining)}s` : this.placement ? 'Confirm building placement' : context ? context.label : ''; button.disabled = !context && !this.placement || !!this.game.fishing; button.hidden = !context && !this.placement && !this.game.fishing;
+    button.querySelector('span')!.textContent = this.game.gathering ? `Gathering / ${this.game.gathering.remaining.toFixed(1)}s` : this.game.fishing ? `Fishing… ${Math.ceil(this.game.fishing.remaining)}s` : this.placement ? 'Confirm building placement' : context ? context.label : ''; button.disabled = !context && !this.placement || !!this.game.fishing||!!this.game.gathering; button.hidden = !context && !this.placement && !this.game.fishing&&!this.game.gathering;
     const message = this.root.querySelector<HTMLElement>('#message')!;
     if (this.lastMessage !== this.game.message) { this.lastMessage = this.game.message; this.messageTime = performance.now(); message.textContent = this.game.message; }
     message.classList.toggle('visible', performance.now() - this.messageTime < 4000);
@@ -190,7 +196,7 @@ export class App {
     if(this.game.dead&&!this.root.querySelector('.death-modal'))this.showDeath();
   }
   private showDeath() {
-    const s=this.game.state,f=s.furnaces.find(f=>f.id===s.respawnFurnaceId)??s.furnaces[0];
+    const s=this.game.state,f=s.furnaces.find(f=>f.id===s.respawnFurnaceId&&this.game.settlement.intact(f.id))??s.furnaces.find(f=>this.game.settlement.intact(f.id))??s.furnaces[0];
     const el=this.modal('Your fire is still waiting.', `<div class="death-emblem">${uiIcon('flame')}</div><p class="death-cause">${s.player.hp<=0?'You fell in the wilderness.':'The cold finally caught up with you.'}</p><p>Your settlement, discoveries and world changes remain. Choose how your expedition continues.</p><div class="death-location"><span>RECOVERY FURNACE</span><strong>${f.id==='home'?'Starting refuge':`Furnace at ${Math.round(f.x)}, ${Math.round(f.z)}`}</strong></div><div class="death-actions"><button id="recover" class="primary"><strong>Go Back</strong><span>Lose 50% of carried and stored supplies. Restore health and warmth.</span></button><button id="death-home"><strong>Return to Home</strong><span>Auto saves progress and returns to the title menu.</span></button><button id="death-new" class="death-destructive"><strong>New World</strong><span>Overwrites the local save with a fresh expedition.</span></button></div><small class="death-note">Recovery keeps equipment and buildings. Odd resource stacks round down; existing debts remain.</small>`);
     el.classList.add('death-modal');el.querySelector('.close-modal')?.remove();el.querySelector('.eyebrow')!.textContent='FROSTBOUND / EXPEDITION INTERRUPTED';el.querySelector<HTMLButtonElement>('#recover')!.focus();
     el.querySelector('#recover')!.addEventListener('click',()=>{if(this.game.recover()){this.renderer.playerCharacter.reset();this.closeModal();const result=saveLocal(this.game.state);if(!result.ok)this.game.notify(result.message);this.refresh();}else this.error(this.game.message);});
@@ -202,7 +208,7 @@ export class App {
     const x = this.stick.x + (this.keys.has('d') || this.keys.has('arrowright') ? 1 : 0) - (this.keys.has('a') || this.keys.has('arrowleft') ? 1 : 0), z = this.stick.z + (this.keys.has('s') || this.keys.has('arrowdown') ? 1 : 0) - (this.keys.has('w') || this.keys.has('arrowup') ? 1 : 0), yaw = this.renderer.yaw;
     this.game.update(dt, { ...cameraRelativeMovement(x, z, yaw), sprint: this.keys.has('shift') || this.sprintTouch });
     if (!this.game.paused && !this.placement && (this.firing || this.keys.has(' '))) this.attack(this.firing&&this.assistAttack);
-    this.actionTimer -= dt; if (!this.game.paused && (this.keys.has('f') || this.touchAction) && this.actionTimer <= 0 && this.context()?.kind === 'node') this.interact();
+    this.actionTimer -= dt; if (!this.game.paused && !this.game.gathering && (this.keys.has('f') || this.touchAction) && this.actionTimer <= 0 && this.context()?.kind === 'node') this.interact();
     if (this.revision !== this.game.revision) { this.revision = this.game.revision; this.renderer.refreshChunks(); }
     this.renderer.update(dt, time / 1000, !!(x || z) && !this.game.paused, this.aiming);
     if (this.game.collectionEvents.length) {

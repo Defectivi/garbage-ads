@@ -85,7 +85,7 @@ test('movement is stable at 30/60/120 FPS and clearing input removes residual ve
   assert(simulate(60, true).state.player.z > simulate(60).state.player.z);
   high.stopMovement(); const before = { ...high.state.player };
   high.update(1 / 60); assert.equal(high.state.player.x, before.x); assert.equal(high.state.player.z, before.z);
-  high.paused = true; high.update(1, { x: 1, z: 1 }); assert.deepEqual(high.state.player, before);
+  const pausedBefore={...high.state.player};high.paused = true; high.update(1, { x: 1, z: 1 }); assert.deepEqual(high.state.player, pausedBefore);
 });
 
 test('chunks regenerate after cache eviction at distant positive and negative coordinates', () => {

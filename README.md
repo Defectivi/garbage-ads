@@ -31,7 +31,7 @@ The built application is in `dist/`; preview serves it at **http://localhost:417
 ## Start exploring
 
 1. Enter a **world seed from 0 to 65535**, randomize it, or enter the current world.
-2. **F** gathers resources within three units. Hold it to repeatedly gather timber, stone, or metal. Guaranteed wood and stone sources are beside home.
+2. **F** starts a three-second gathering action within three units. Hold it to repeatedly gather timber, stone, or metal. Guaranteed wood and stone sources are beside home.
 3. Approach a furnace and press F to burn **one wood for 60 seconds of fuel**. Heating rings indicate actual warmth recovery. Initial fuel lasts 100 seconds.
 4. Open **Build**. A **hut costs 5 wood** and recruits a working woodcutter. Storehouses, trail shelters, and outpost furnaces have distinct functional effects. Preview, rotate, confirm or cancel construction.
 5. The map gives a rumour of a generated settlement. Follow it, search the chest, and interact with the trader. Gold purchases and direct resource barter are supported.
@@ -59,7 +59,7 @@ The built application is in `dist/`; preview serves it at **http://localhost:417
 
 The joystick returns smoothly to neutral. Right-side camera gestures begin on terrain, so buttons and the left joystick do not rotate the camera. Blur and pause clear movement, sprint and held attacks. Attacks share the combat system, cooldown, durability and damage rules across mouse, keyboard and touch.
 
-**Planned controls, not yet implemented:** fixed weapon bindings 1=bow, 2=shotgun, 3=Molotov, 4=wooden sword, 5=spear, 6=machete; dedicated F/Pickup; touch ranged Aim; pinch zoom; I/M toggle-to-close. Current pickup uses the E/Interact prompt. Mouse wheel always zooms. Inventory and map open with I/M and close with Escape.
+**Planned controls, not yet implemented:** fixed weapon bindings 1=bow, 2=shotgun, 3=Molotov, 4=wooden sword, 5=spear, 6=machete; dedicated F/Pickup; touch ranged Aim; pinch zoom; I/M toggle-to-close. Current pickup uses the F/Interact prompt. Mouse wheel always zooms. Inventory and map open with E/M (I remains an inventory alias) and close with Escape.
 
 Tap/click terrain to reposition a selected building preview. Placement is limited to 15 units from the survivor and rejects deep water, steep slopes, solid overlaps, occupied player space, the home delivery apron, and essential trader/chest/fishing access. Costs spend positive stored resources first, then carried resources. Failed/cancelled purchases do not spend anything.
 
@@ -155,7 +155,7 @@ All mesh artwork and synthesized sounds are original procedural work. Bundled DM
 
 Start a new expedition for terrain generation 3 and its three fixed villages: Hearthwatch (40, 8), Stonehaven (-72, -32), and Northpass (132, 112). Villages have traders, 3-5 armed guards, and a furnace. Old terrain-generation-1 saves keep their original terrain and ruins. Bandits roam in groups of 2-10; polar bears and arsonists also patrol. Guards fight enemies and retaliate when you attack their village.
 
-Move with the keyboard or joystick to set facing; that direction is retained when you stop. Left click and the touch Attack button assist a nearby reachable hostile; otherwise attacks follow your facing. Space attacks forward. Mouse movement does not redirect the survivor. Equip from the weapon rack, keys 1-6, or the Rucksack equipment list. Hold Shift to sprint (9 rather than 6 units/sec), or hold the touch Sprint button; exposure consumes twice the warmth. Starter equipment is a wooden sword. Traders sell all six weapons using carried resources, and defeated armed actors have a deterministic 7% equipment drop chance. Collect drops with F. Melee weapons wear once per successful enemy-hitting swing, with 100 such hits. Ranged weapons have 100 shots and unlimited ammo; enemy weapons never wear out.
+Move with the keyboard or joystick to set facing; that direction is retained when you stop. Left click and the touch Attack button assist a nearby reachable hostile; otherwise attacks follow your facing. Space attacks forward. Mouse movement does not redirect the survivor. Equip from the weapon rack, keys 1-6, or the Rucksack equipment list. Hold Shift to sprint (9 rather than 6 units/sec), or hold the touch Sprint button; exposure consumes twice the warmth. New survivors start unarmed with a 2-damage punch; weapons can be traded or found in village supplies. Traders sell all six weapons using carried resources, and defeated armed actors have a deterministic 7% equipment drop chance. Collect drops with F. Melee weapons wear once per successful enemy-hitting swing, with 100 such hits. Ranged weapons have 100 shots and unlimited ammo; enemy weapons never wear out.
 
 | Weapon | Damage | Cooldown | Effect |
 | --- | --- | --- | --- |
@@ -207,3 +207,9 @@ Furnace interaction immediately binds recovery to that furnace, including villag
 ## Assisted attacks and visible hits
 
 Left click assists the nearest reachable hostile within weapon reach (ranged assist capped at 12 units); peaceful guards are excluded from assist. Blade collision follows the same sweep used by the model pose, arrows include their full shaft/head extent, shotgun pellets collide during flight with one damage application per target per volley, and low-flying Molotov contact causes impact damage and fire. Actual HP loss appears as bounded world-projected damage numbers, including bleed and protection reductions. See [combat hit details](docs/HITS.md).
+
+## Furnace recovery and settlement expansion
+
+Active furnace ranges heal 25 HP every three uninterrupted seconds. Owned heat zones also double damage taken by hostiles and halve their movement, alongside entry damage and player protection. Respawning grants five seconds of immunity. New expeditions reset every upgrade and start unarmed.
+
+Harvesting takes three seconds; standing trees shake/fall into finite logs, and large boulders split into smaller stones. Damaged civilians shelter in houses. Huts have 1,000 HP and storehouses 2,000; destroyed structures become quarter-health ruins, then finite salvage. Buildings are bleed-immune. Village supply piles roll 50% food, 40% materials and 10% random weapons. See [expansion rules and verification](docs/EXPANSION.md).

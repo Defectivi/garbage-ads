@@ -73,3 +73,7 @@ Movement-led facing, hit-based melee wear and blade poses, independently wrapped
 ## Subsequent user-directed assisted attacks and hit feedback
 
 Nearest-hostile assistance on left click/touch Attack, visible actual-damage numbers, shared blade sweep collision, projectile contact, one-hit durability/volley deduplication and the requested weapon buffs are implemented and tested. See [HITS.md](HITS.md) for behavior and results. The local commit also includes the earlier uncommitted foundation, presentation, settlement and recovery increments so the asset/runtime dependencies are complete. Remaining roadmap phases are still pending.
+
+## Subsequent user-directed survival, resource and settlement expansion
+
+Implemented in three checked increments: fresh-world/unarmed/healing/heat-debuff/respawn rules; timed collection and staged natural resources; and persistent building integrity, civilian sheltering and scattered village loot. The user clarified repeating healing and that weighted loot is scattered around villages. Buildings are bleed-immune; armed guards keep defending under the optional clarification default. See [EXPANSION.md](EXPANSION.md) for assumptions, save validation, behavior and verification. This does not mark the remaining original roadmap phases complete.

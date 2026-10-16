@@ -2,7 +2,7 @@ import { SeededRNG, derive, noise, smooth } from '../utils/SeededRNG';
 import type { WorldSpec } from '../game/GameConfig';
 import type { Point } from '../game/GameState';
 import type { Resource } from '../data/definitions';
-export interface Node extends Point { id: string; resource: Resource; amount: number; radius: number }
+export interface Node extends Point { id: string; resource: Resource; amount: number; radius: number; kind?:'tree'|'boulder'|'fragment'|'log'; scale?:number }
 export interface Tree extends Point { scale: number }
 export interface Ruin extends Point { id: string; name: string; variant: number; houses: number; trader: Point; container: Point }
 export interface Village extends Ruin { guardCount: number }

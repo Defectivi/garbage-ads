@@ -76,7 +76,7 @@ try {
   await mobile.waitForSelector('.collection-flight');assert((await mobile.locator('.collection-flight').count())<=12);
   await mobile.waitForTimeout(1300);assert.equal(await mobile.locator('.collection-flight').count(),0);assert.equal(await mobile.evaluate(()=>window.__frostbound.game.state.inventory.wood),73);
   const reduced=await browser.newPage({reducedMotion:'reduce'});attach(reduced);await reduced.goto('http://localhost:5173');await reduced.locator('#enter-world').click();
-  await reduced.evaluate(()=>{const a=window.__frostbound;a.game.state.player.x=3.4;a.game.state.player.z=4;a.refresh();});await reduced.keyboard.press('f');await reduced.waitForTimeout(150);
+  await reduced.evaluate(()=>{const a=window.__frostbound;a.game.state.player.x=3.4;a.game.state.player.z=4;a.refresh();});await reduced.keyboard.press('f');await reduced.waitForFunction(()=>window.__frostbound.game.state.inventory.wood===13);
   assert.equal(await reduced.locator('.collection-flight').count(),0);assert.equal(await reduced.evaluate(()=>window.__frostbound.game.state.inventory.wood),13);
   assert.equal(await reduced.locator('[data-resource="wood"] b').evaluate(el=>el.getAnimations().length),0);
   const fallback=await browser.newPage();attach(fallback);await fallback.route('**/models/wayfarer.glb',route=>route.abort());await fallback.goto('http://localhost:5173');

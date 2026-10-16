@@ -1,3 +1,4 @@
+import { BUILDINGS } from '../data/definitions';
 import { bladeSegment, meleeDuration, segmentDistance, segmentSegmentDistance, projectileHeight } from '../game/CombatGeometry';
 import { heatRadius, inPlayerHeat, playerHeatSources } from './SurvivalSystem';
 import type { Game } from '../game/Game';
@@ -8,7 +9,7 @@ import { SeededRNG, derive } from '../utils/SeededRNG';
 import { distance } from '../world/WorldManager';
 import { transact } from './InventorySystem';
 
-export interface CombatUnit extends Point { id: string; hp: number; kind: 'player' | 'guard' | 'enemy' | 'npc'; villageId?: string | null }
+export interface CombatUnit extends Point { id: string; hp: number; kind: 'player' | 'guard' | 'enemy' | 'npc'|'building'; radius?:number; villageId?: string | null }
 export function shotgunDamage(range: number) { return Math.round(12 + 83 * (1 - Math.min(3, Math.max(0, range)) / 3)); }
 export function equipmentDrops(seed: number, id: string) { return derive(seed, `equipment:${id}`) / 4294967296 < .07; }
 
@@ -64,13 +65,23 @@ export class CombatSystem {
   units(): CombatUnit[] {
     const units: CombatUnit[] = [{ ...this.s.player, id: 'player', kind: 'player' }];
     for (const a of Object.values(this.c.actors)) if (a.hp > 0 && distance(a, this.s.player) < 85) units.push({ ...a, kind: a.type === 'guard' ? 'guard' : 'enemy' });
-    for (const w of this.s.workers) if (w.hp > 0 && distance(w, this.s.player) < 85) units.push({ ...w, kind: 'npc' });
-    for (const r of this.game.world.settlements(this.s.player, 2)) { const npc = this.game.npc(r); if (npc.hp > 0) units.push({ ...r.trader, id: npc.id, hp: npc.hp, kind: 'npc', villageId: r.id.startsWith('village:') ? r.id : null }); }
+    for (const w of this.s.workers) if (w.hp > 0 && distance(w, this.s.player) < 85&&this.game.settlement.refuge(w.id)?.phase!=='hidden') units.push({ ...w, ...this.game.settlement.position(w.id,w),kind: 'npc' });
+    for (const r of this.game.world.settlements(this.s.player, 2)) { const npc = this.game.npc(r); if (npc.hp > 0&&this.game.settlement.refuge(npc.id)?.phase!=='hidden') units.push({ ...this.game.settlement.position(npc.id,r.trader), id: npc.id, hp: npc.hp, kind: 'npc', villageId: r.id.startsWith('village:') ? r.id : null }); }
+    for(const building of this.game.settlement.structures()){
+      const integrity=this.game.settlement.integrity(building);if(integrity.stage!=='gone'&&distance(building,this.s.player)<85)units.push({...building,hp:integrity.hp,kind:'building',radius:BUILDINGS[building.type].radius});
+    }
     return units;
   }
   damage(target: CombatUnit, amount: number, ownerId: string, bleed = false) {
+    if(target.kind==='building'){
+      if(ownerId==='bleed')return;
+      const lost=this.game.settlement.damage(target.id,amount,target);
+      if(lost>0){if(this.damageEvents.length>=64)this.damageEvents.shift();this.damageEvents.push({x:target.x,z:target.z,amount:lost,targetId:target.id,bleed:false});}return;
+    }
     const before=target.id==='player'?this.s.player.hp:this.c.actors[target.id]?.hp??this.s.workers.find(w=>w.id===target.id)?.hp??target.hp;
-    if (before <= 0) return;
+    if (before <= 0 || target.id==='player'&&(this.s.player.invulnerable??0)>0) return;
+    const enemy=this.c.actors[target.id];
+    if(enemy&&this.hostile(enemy)&&inPlayerHeat(this.s,enemy)&&ownerId!=='furnace')amount*=2;
     if (target.id === 'player' && inPlayerHeat(this.s)) amount *= .5;
     if (target.id === 'player') this.s.player.hp = Math.max(0, this.s.player.hp - amount);
     else if (this.c.actors[target.id]) {
@@ -91,6 +102,8 @@ export class CombatSystem {
       }
       if (target.villageId && ownerId === 'player' && !this.c.villageAlerts.includes(target.villageId)) this.c.villageAlerts.push(target.villageId);
     }
+    if(target.kind==='npc'&&before<=amount&&this.s.changes.refuges)delete this.s.changes.refuges[target.id];
+    if(target.kind==='npc'&&before>amount&&ownerId!=='bleed')this.game.settlement.flee(target.id,target);
     if(this.damageEvents.length>=64)this.damageEvents.shift();
     this.damageEvents.push({x:target.x,z:target.z,amount:Math.min(before,amount),targetId:target.id,bleed:ownerId==='bleed'});
     if (bleed&&before>amount) this.c.statuses[target.id] = { bleed: 10, tick: 0 };
@@ -98,45 +111,45 @@ export class CombatSystem {
   attack(target: Point): boolean {
     if (this.game.paused || this.game.dead || this.c.cooldown > 0) return false;
     const weapon = this.c.weapons.find(w => w.id === this.c.equipped && w.uses > 0);
-    if (!weapon) { this.game.notify('Equip a weapon. Traders sell replacements.'); return false; }
-    const def = WEAPONS[weapon.type]; this.c.cooldown = def.cooldown; this.lastAttack = this.s.elapsed;
-    this.fireWeapon('player', this.s.player, target, weapon.type,weapon.id);
-    if(def.type !== 'melee') weapon.uses--;
-    if (weapon.uses === 0) this.game.notify(`${def.name} is worn out after 100 uses. Equip a replacement.`);
+    this.game.gathering=undefined;
+    const type=weapon?.type??'punch',def=type==='punch'?{type:'melee',cooldown:1,range:1,damage:2}:WEAPONS[type];
+    this.c.cooldown=def.cooldown;this.lastAttack=this.s.elapsed;
+    this.fireWeapon('player',this.s.player,target,type,weapon?.id);
+    if(weapon&&def.type!=='melee'){weapon.uses--;if(weapon.uses===0)this.game.notify(`${WEAPONS[weapon.type].name} is worn out. Equip a replacement.`);}
     return true;
   }
   attackAssisted():boolean {
     if(this.game.paused||this.game.dead||this.c.cooldown>0)return false;
     const p=this.s.player,weapon=this.c.weapons.find(w=>w.id===this.c.equipped&&w.uses>0);
-    if(!weapon)return this.attack(p);
-    const range=Math.min(12,WEAPONS[weapon.type].range);
-    const target=this.units().filter(u=>(u.kind==='enemy'||u.kind==='guard'&&!!u.villageId&&this.c.villageAlerts.includes(u.villageId))&&distance(u,p)<=range+this.hurtRadius(u)&&this.assistReach(p,u,weapon.type)&&!this.blocked(p,u)).sort((a,b)=>distance(a,p)-distance(b,p)||a.id.localeCompare(b.id))[0];
+    const type=weapon?.type??'punch',range=type==='punch'?1:Math.min(12,WEAPONS[type].range);
+    const target=this.units().filter(u=>(u.kind==='enemy'||u.kind==='guard'&&!!u.villageId&&this.c.villageAlerts.includes(u.villageId))&&distance(u,p)<=range+this.hurtRadius(u)&&this.assistReach(p,u,type)&&!this.blocked(p,u,u.id)).sort((a,b)=>distance(a,p)-distance(b,p)||a.id.localeCompare(b.id))[0];
     if(target)p.heading=Math.atan2(target.x-p.x,target.z-p.z);
     return this.attack(target??{x:p.x+Math.sin(p.heading)*12,z:p.z+Math.cos(p.heading)*12});
   }
-  private assistReach(origin:Point,unit:CombatUnit,weapon:WeaponType){
-    if(WEAPONS[weapon].type!=='melee')return true;
+  private assistReach(origin:Point,unit:CombatUnit,weapon:WeaponType|'punch'){
+    if(weapon!=='punch'&&WEAPONS[weapon].type!=='melee')return true;
     const heading=Math.atan2(unit.x-origin.x,unit.z-origin.z);
     for(let t=.1;t<=.8;t+=.025){const blade=bladeSegment(origin,heading,weapon,t);if(this.touches(unit,blade.a,blade.b))return true;}return false;
   }
-  private hurtRadius(unit:CombatUnit){return this.c.actors[unit.id]?.type==='polar_bear'?1.95:.65;}
+  private hurtRadius(unit:CombatUnit){if(unit.kind==='building')return unit.radius??2;return this.c.actors[unit.id]?.type==='polar_bear'?1.95:.65;}
   private touches(unit:CombatUnit,a:Point,b:Point,padding=.1){
+    if(unit.kind==='building')return segmentDistance(unit,a,b)<=(unit.radius??2)+padding;
     const actor=this.c.actors[unit.id];
     if(actor?.type!=='polar_bear')return segmentDistance(unit,a,b)<=.65+padding;
     const dx=Math.sin(actor.heading),dz=Math.cos(actor.heading);
     return segmentSegmentDistance(a,b,{x:actor.x-dx*.8,z:actor.z-dz*.8},{x:actor.x+dx*1.3,z:actor.z+dz*1.3})<=.7+padding;
   }
-  private blocked(a:Point,b:Point){return this.game.solids(b).some(s=>distance(s,a)>s.radius+.2&&distance(s,b)>s.radius+.2&&segmentDistance(s,a,b)<s.radius);}
+  private blocked(a:Point,b:Point,targetId?:string){return this.game.solids(b).some(s=>(!('id'in s)||s.id!==targetId)&&distance(s,a)>s.radius+.2&&segmentDistance(s,a,b)<s.radius);}
   private canHit(ownerId: string, target: CombatUnit) {
     if (ownerId === target.id || target.hp <= 0) return false;
     if (ownerId === 'player') return true;
     const owner = this.c.actors[ownerId];
     return owner?.type === 'guard' ? target.kind === 'enemy' || target.kind === 'player' && !!owner.villageId && this.c.villageAlerts.includes(owner.villageId) : target.kind !== 'enemy';
   }
-  fireWeapon(ownerId: string, from: Point, target: Point, weapon: WeaponType, weaponId?:string) {
+  fireWeapon(ownerId: string, from: Point, target: Point, weapon: WeaponType|'punch', weaponId?:string) {
     if (ownerId !== 'player') this.actorAttacks.set(ownerId, this.s.elapsed);
     // `from` can be an Actor or Player: never spread it into a shot, since its id would replace the projectile id.
-    const def = WEAPONS[weapon], d = distance(from, target), dx = (target.x - from.x) / (d || 1), dz = (target.z - from.z) / (d || 1);
+    const def = weapon==='punch'?{type:'melee' as const,cooldown:1,range:1,damage:2}:WEAPONS[weapon], d = distance(from, target), dx = (target.x - from.x) / (d || 1), dz = (target.z - from.z) / (d || 1);
     if (def.type === 'melee') {
       const damage = weapon === 'spear' ? 3 + derive(this.s.world.seeds.wildlife, ownerId, this.c.sequence++, 0) % 8 : def.damage;
       this.c.projectiles.push({id:this.nextId('swing'),ownerId,kind:'swing',x:from.x,z:from.z,fromX:from.x,fromZ:from.z,targetX:from.x+dx*def.range,targetZ:from.z+dz*def.range,age:0,duration:meleeDuration(weapon),damage,weapon,...(weaponId?{weaponId}:{}),hitIds:[],wearCharged:false});
@@ -159,7 +172,7 @@ export class CombatSystem {
       for(let i=0;i<=steps;i++){
         const phase=previous+(t-previous)*i/steps;if(phase<.1||phase>.8)continue;
         const blade=bladeSegment(owner,owner.heading,p.weapon,phase);
-        for(const unit of units)if(!hits.includes(unit.id)&&this.touches(unit,blade.a,blade.b)&&!this.blocked(owner,unit)){
+        for(const unit of units)if(!hits.includes(unit.id)&&this.touches(unit,blade.a,blade.b)&&!this.blocked(owner,unit,unit.id)){
           hits.push(unit.id);this.damage(unit,p.damage,p.ownerId,p.weapon==='machete');
           if(p.ownerId==='player'&&!p.wearCharged&&(unit.kind==='enemy'||unit.kind==='guard')){
             const weapon=this.c.weapons.find(w=>w.id===p.weaponId);if(weapon&&weapon.uses>0){weapon.uses--;if(weapon.uses===0)this.game.notify(`${WEAPONS[weapon.type].name} is worn out. Equip a replacement.`);}p.wearCharged=true;
@@ -172,7 +185,7 @@ export class CombatSystem {
     if(p.kind==='arrow'||p.kind==='pellet'&&p.damage>0){
       const n=Math.hypot(p.targetX-p.fromX,p.targetZ-p.fromZ)||1,dx=(p.targetX-p.fromX)/n,dz=(p.targetZ-p.fromZ)/n;
       const a={x:old.x-dx*(p.kind==='arrow'?.52:.04),z:old.z-dz*(p.kind==='arrow'?.52:.04)},b={x:p.x+dx*(p.kind==='arrow'?.63:.04),z:p.z+dz*(p.kind==='arrow'?.63:.04)};
-      const hit=this.units().filter(u=>this.canHit(p.ownerId,u)&&!(p.hitIds??[]).includes(u.id)&&this.touches(u,a,b,.06)&&!this.blocked(old,u)).sort((a,b)=>distance(a,old)-distance(b,old))[0];
+      const hit=this.units().filter(u=>this.canHit(p.ownerId,u)&&!(p.hitIds??[]).includes(u.id)&&this.touches(u,a,b,.06)&&!this.blocked(old,u,u.id)).sort((a,b)=>distance(a,old)-distance(b,old))[0];
       if(hit){
         this.damage(hit,p.kind==='pellet'?shotgunDamage(distance({x:p.fromX,z:p.fromZ},hit)):p.damage,p.ownerId);
         if(p.volleyId)for(const shot of this.c.projectiles)if(shot.volleyId===p.volleyId){shot.hitIds??=[];if(!shot.hitIds.includes(hit.id))shot.hitIds.push(hit.id);}
@@ -194,8 +207,8 @@ export class CombatSystem {
   }
   private charTimber(point: Point) {
     for (const chunk of this.game.world.around(point)) {
-      for (const n of chunk.nodes) if (n.resource === 'wood' && distance(n, point) <= 4 && this.game.nodeRemaining(n) > 0 && !this.c.charredNodes.includes(n.id)) this.c.charredNodes.push(n.id);
-      chunk.trees.forEach((tree, i) => { const id = `tree:${chunk.id.replace(',', ':')}:${i}`; if (distance(tree, point) <= 4 && !this.c.charredTrees.includes(id)) this.c.charredTrees.push(id); });
+      for (const n of this.game.nodesInChunk(chunk)) if (n.resource === 'wood' && distance(n, point) <= 4 && this.game.nodeRemaining(n) > 0 && !this.c.charredNodes.includes(n.id)) this.c.charredNodes.push(n.id);
+      chunk.trees.forEach((tree, i) => { const id = `tree:${chunk.id.replace(',', ':')}:${i}`; if (distance(tree, point) <= 4 && !this.c.charredTrees.includes(id)&&this.s.changes.terrain?.[id]!=='felled') this.c.charredTrees.push(id); });
     }
     this.game.revision++;
   }
@@ -237,6 +250,7 @@ export class CombatSystem {
   private face(actor: Actor, angle: number, dt: number) {
     actor.heading += Math.atan2(Math.sin(angle - actor.heading), Math.cos(angle - actor.heading)) * (1 - Math.exp(-dt * 8));
   }
+  private hostile(actor:Actor){return actor.type!=='guard'||!!actor.villageId&&this.c.villageAlerts.includes(actor.villageId);}
   private heatEntry(actor: Actor) {
     const hostile = actor.type !== 'guard' || !!actor.villageId && this.c.villageAlerts.includes(actor.villageId);
     const sources = playerHeatSources(this.s);
@@ -245,6 +259,7 @@ export class CombatSystem {
     actor.heatInside = inside;
   }
   private walk(actor: Actor, target: Point, dt: number, speed: number) {
+    if(this.hostile(actor)&&inPlayerHeat(this.s,actor))speed*=.5;
     const d = distance(actor,target), oldVelocity = this.velocities.get(actor.id) ?? {x:0,z:0};
     const dx = d > .5 ? (target.x-actor.x)/d*speed : 0, dz = d > .5 ? (target.z-actor.z)/d*speed : 0;
     const blend = 1-Math.exp(-dt*5), vx = oldVelocity.x+(dx-oldVelocity.x)*blend, vz = oldVelocity.z+(dz-oldVelocity.z)*blend;

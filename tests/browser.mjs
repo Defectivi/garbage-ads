@@ -29,8 +29,8 @@ try {
     window.walk({ x: 3.8, z: 4 });
   });
   const wood = await page.evaluate(() => window.__frostbound.game.state.inventory.wood); await page.keyboard.press('f');
-  assert.equal(await page.evaluate(() => window.__frostbound.game.state.inventory.wood), wood + 1);
-  await page.evaluate(() => window.walk({ x: -4, z: 3 })); await page.keyboard.press('f'); assert(await page.evaluate(() => window.__frostbound.game.state.inventory.stone) > 0);
+  await page.waitForFunction(before=>window.__frostbound.game.state.inventory.wood===before+1,wood);
+  await page.evaluate(() => window.walk({ x: -4, z: 3 })); await page.keyboard.press('f'); await page.waitForFunction(()=>window.__frostbound.game.state.inventory.stone>0);
   await page.evaluate(() => window.walk({ x: 0, z: 3 })); const fuel = await page.evaluate(() => window.__frostbound.game.state.furnaces[0].fuel); await page.keyboard.press('f'); assert(await page.evaluate(() => window.__frostbound.game.state.furnaces[0].fuel) > fuel);
   await page.locator('#build').click(); await page.locator('[data-building="hut"]').click();
   await page.locator('#rotate-building').click(); await page.locator('#place-building').click();

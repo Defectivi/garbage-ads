@@ -15,7 +15,7 @@ test('original survivor has one weighted garment mesh, a human rig, grounded fee
   assert.equal(asset.scene.getObjectByName('HandR')!.parent!.name,'ElbowR');
   const weights=mesh.geometry.getAttribute('skinWeight');for(let i=0;i<weights.count;i++)assert(Math.abs(weights.getX(i)+weights.getY(i)+weights.getZ(i)+weights.getW(i)-1)<1e-6);
   mesh.geometry.computeBoundingBox();assert(mesh.geometry.boundingBox!.min.y>=0);assert(mesh.geometry.boundingBox!.max.y<2.2);
-  for(const name of ['idle','walk','sprint','gather','wooden_sword','spear','machete','bow','shotgun','molotov','hurt','death'])assert(asset.animations.some(a=>a.name===name));
+  for(const name of ['idle','walk','sprint','gather','punch','wooden_sword','spear','machete','bow','shotgun','molotov','hurt','death'])assert(asset.animations.some(a=>a.name===name));
   const mixer=new T.AnimationMixer(asset.scene),knee=asset.scene.getObjectByName('KneeL')!,before=knee.quaternion.clone();
   mixer.clipAction(asset.animations.find(a=>a.name==='walk')!).play();mixer.update(.25);assert(!knee.quaternion.equals(before));
   mixer.stopAllAction();mixer.uncacheRoot(asset.scene);mesh.geometry.dispose();(mesh.material as T.Material).dispose();mesh.skeleton.dispose();
