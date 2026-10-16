@@ -2,7 +2,7 @@ import { segmentDistance } from '../game/CombatGeometry';
 import type { Game } from '../game/Game';
 import type { Building,Point } from '../game/GameState';
 import { BUILDINGS,RESOURCE_IDS,type Balances } from '../data/definitions';
-import type { WeaponType } from '../data/weapons';
+import {weaponUses,type WeaponType } from '../data/weapons';
 import { villageLoot,structureMaxHP,SALVAGE_AMOUNT } from '../data/settlement';
 import { transact,type Result } from './InventorySystem';
 import { distance } from '../world/WorldManager';
@@ -27,7 +27,8 @@ export class SettlementSystem {
     const lost=Math.min(old.hp,amount),next:Integrity={...old,hp:Math.max(0,old.hp-amount)};
     if(next.hp===0){
       if(old.stage==='intact'){next.stage='ruin';next.hp=structureMaxHP(structure)*.25;}
-      else{next.stage='gone';const n=SALVAGE_AMOUNT[structure.type];const loot=this.game.state.changes.groundLoot??(this.game.state.changes.groundLoot={});loot[`salvage:${id}`]={id:`salvage:${id}`,x:structure.x,z:structure.z,resources:{wood:n,stone:n}};}
+      else{next.stage='gone';const n=SALVAGE_AMOUNT[structure.type];const loot=this.game.state.changes.groundLoot??(this.game.state.changes.groundLoot={});loot[`salvage:${id}`]={id:`salvage:${id}`,x:structure.x,z:structure.z,resources:{wood:n,stone:n}};
+        if(structure.type==='storage'){const remains:Partial<Balances>={};for(const k of RESOURCE_IDS){const amount=Math.max(0,this.game.state.stockpile[k]);remains[k]=Math.floor(amount*.1);if(amount>0)this.game.state.stockpile[k]=0;}loot[`stored:${id}`]={id:`stored:${id}`,x:structure.x,z:structure.z,resources:remains};}}
       this.game.revision++;this.paths.clear();
     }
     (this.game.state.changes.structures??(this.game.state.changes.structures={}))[id]=next;
@@ -48,17 +49,18 @@ export class SettlementSystem {
     const g=this.game,pile=this.loot().find(p=>p.id===id);if(!pile||distance(pile,g.state.player)>3)return{ok:false,error:'Approach these supplies.'};
     if(pile.weapon&&g.state.combat.weapons.length>=500)return{ok:false,error:'Equipment storage is full.'};
     const result=transact([{account:g.state.inventory,delta:pile.resources,capacity:g.inventoryLimit}],g.state.settings);if(!result.ok)return result;
-    if(pile.weapon){const key=`weapon:${g.state.combat.sequence++}`;g.state.combat.weapons.push({id:key,type:pile.weapon,uses:100});g.state.combat.equipped=key;}
+    if(pile.weapon){const key=`weapon:${g.state.combat.sequence++}`;g.state.combat.weapons.push({id:key,type:pile.weapon,uses:pile.weapon==='molotov'?1:weaponUses(pile.weapon)});g.state.combat.equipped=key;}
     for(const resource of RESOURCE_IDS){const amount=pile.resources[resource]??0;if(amount>0){if(g.collectionEvents.length>=32)g.collectionEvents.shift();g.collectionEvents.push({resource,amount,x:pile.x,z:pile.z});}}
     if(g.state.changes.groundLoot?.[id])delete g.state.changes.groundLoot[id];else(g.state.changes.lootTaken??(g.state.changes.lootTaken=[])).push(id);
     g.notify(pile.weapon?`Found and equipped ${pile.weapon.replaceAll('_',' ')}.`:'Supplies collected.');return{ok:true};
   }
+  burning(point:Point & {type?:keyof typeof BUILDINGS}){return this.game.state.combat.fires.some(f=>f.remaining>0&&distance(f,point)<=4+(point.type?BUILDINGS[point.type].radius:0));}
   refuge(id:string){return this.game.state.changes.refuges?.[id];}
   position(id:string,fallback:Point):Point{return this.refuge(id)??fallback;}
   flee(id:string,point:Point){
     const g=this.game,worker=g.state.workers.find(w=>w.id===id),old=this.refuge(id);
     if(old){old.remaining=12;if(old.phase==='returning')old.phase='fleeing';return;}
-    const houses=this.structures(point,2).filter(b=>b.type!=='furnace'&&this.integrity(b).stage==='intact'&&!b.construction&&distance(b,point)<36).sort((a,b)=>(a.id===worker?.hutId?-100:distance(a,point))-(b.id===worker?.hutId?-100:distance(b,point)));
+    const houses=this.structures(point,2).filter(b=>b.type!=='furnace'&&b.type!=='shelter'&&!this.burning(b)&&this.integrity(b).stage==='intact'&&!b.construction&&distance(b,point)<36).sort((a,b)=>(a.id===worker?.hutId?-100:distance(a,point))-(b.id===worker?.hutId?-100:distance(b,point)));
     const house=houses[0];if(!house)return;
     (g.state.changes.refuges??(g.state.changes.refuges={}))[id]={houseId:house.id,x:point.x,z:point.z,homeX:point.x,homeZ:point.z,phase:'fleeing',remaining:12};this.paths.delete(id);
   }
@@ -67,9 +69,9 @@ export class SettlementSystem {
     for(const [id,refuge]of Object.entries(g.state.changes.refuges??{})){
       const actor=g.state.combat.actors[id];
       if(actor&&actor.hp<=0){delete g.state.changes.refuges![id];this.paths.delete(id);continue;}
-      if(distance(refuge,g.state.player)>100)continue;
+      if(distance(refuge,g.state.player)>100&&!g.state.workers.some(w=>w.id===id))continue;
       const house=this.structures(refuge,2).find(b=>b.id===refuge.houseId),worker=g.state.workers.find(w=>w.id===id);
-      if(!house||this.integrity(house).stage!=='intact'){refuge.phase='returning';this.paths.delete(id);}
+      if(!house||this.burning(house)||this.integrity(house).stage!=='intact'){refuge.phase='returning';this.paths.delete(id);}
       if(refuge.phase==='hidden'){if(worker)worker.hp=Math.min(100,worker.hp+dt*5);refuge.remaining=Math.max(0,refuge.remaining-dt);if(refuge.remaining<=0){refuge.phase='returning';this.paths.delete(id);}else continue;}
       const target=refuge.phase==='fleeing'?{x:house!.x-.7*Math.cos(house!.rotation)+(BUILDINGS[house!.type].radius+.5)*Math.sin(house!.rotation),z:house!.z+.7*Math.sin(house!.rotation)+(BUILDINGS[house!.type].radius+.5)*Math.cos(house!.rotation)}:{x:refuge.homeX,z:refuge.homeZ};
       if(distance(refuge,target)<.4){if(refuge.phase==='fleeing'){refuge.phase='hidden';refuge.remaining=12;}else delete g.state.changes.refuges![id];this.paths.delete(id);continue;}

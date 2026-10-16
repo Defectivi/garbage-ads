@@ -16,6 +16,7 @@ export class CombatRenderer {
   readonly group = new THREE.Group();
   private projectileModels = new ProjectileModels();
   private objects = new Map<string, THREE.Group>(); private characters = new Map<string,NPCCharacter>();
+  private spread=new THREE.Group();
   private geometry = { box: new THREE.BoxGeometry(1, 1, 1), sphere: new THREE.SphereGeometry(1, 7, 5), cylinder: new THREE.CylinderGeometry(1, 1, 1, 6), ring: new THREE.RingGeometry(3.7, 4, 48).rotateX(-Math.PI / 2), disc: new THREE.CircleGeometry(4, 32).rotateX(-Math.PI / 2) };
   private mats = { white: new THREE.MeshStandardMaterial({ color: 0xe6e9df }), black: new THREE.MeshStandardMaterial({ color: 0x28353d }), guard: new THREE.MeshStandardMaterial({ color: 0x3c6874 }), bandit: new THREE.MeshStandardMaterial({ color: 0x4d504a }), arsonist: new THREE.MeshStandardMaterial({ color: 0x9e5539 }), fur: new THREE.MeshStandardMaterial({ color: 0xbda788 }), red: new THREE.MeshBasicMaterial({ color: 0xce6e4e }), green: new THREE.MeshBasicMaterial({ color: 0x82b694 }), fire: new THREE.MeshBasicMaterial({ color: 0xff9437, transparent: true, opacity: .42, depthWrite: false }), core: new THREE.MeshBasicMaterial({ color: 0xffd16d }), dark: new THREE.MeshBasicMaterial({ color: 0x24363e }), gold: new THREE.MeshBasicMaterial({ color: 0xf3ce7c }) };
   private piece(g: THREE.Group, geometry: keyof CombatRenderer['geometry'], material: THREE.Material, x: number, y: number, z: number, sx: number, sy: number, sz: number) { const mesh = new THREE.Mesh(this.geometry[geometry], material); mesh.position.set(x, y, z); mesh.scale.set(sx, sy, sz); g.add(mesh); return mesh; }
@@ -26,10 +27,12 @@ export class CombatRenderer {
     const bar = new THREE.Group(); bar.name = 'health'; bar.position.y = bear ? 2.5 : 2.4;
     this.piece(bar, 'box', this.mats.dark, 0, 0, 0, 1.6, .14, .02); const fill = this.piece(bar, 'box', type === 'guard' ? this.mats.green : this.mats.red, 0, 0, .02, 1.5, .08, .02); fill.name = 'fill'; g.add(bar); return g;
   }
-  clear() { for (const visual of this.characters.values()) visual.dispose(); this.characters.clear(); for (const g of this.objects.values()) { const weapons: THREE.Object3D[] = []; g.traverse(o => { if (o.name === 'held-weapon') weapons.push(o); }); weapons.forEach(disposeWeapon); g.removeFromParent(); } this.objects.clear(); }
+  clear() { this.spread.traverse(o=>{if(o instanceof THREE.Mesh){o.geometry.dispose();(o.material as THREE.Material).dispose();}});this.spread.clear();this.spread.removeFromParent();for (const visual of this.characters.values()) visual.dispose(); this.characters.clear(); for (const g of this.objects.values()) { const weapons: THREE.Object3D[] = []; g.traverse(o => { if (o.name === 'held-weapon') weapons.push(o); }); weapons.forEach(disposeWeapon); g.removeFromParent(); } this.objects.clear(); }
   update(game: Game, camera: THREE.Camera, time: number, dt = 1/60) {
     const c = game.state.combat, needed = new Set<string>();
     const get = (id: string, make: () => THREE.Group) => { needed.add(id); let g = this.objects.get(id); if (!g) { g = make(); this.objects.set(id, g); this.group.add(g); } return g; };
+    if(!this.spread.children.length){this.spread.name='shotgun-spread';for(const [radius,angle,color]of [[3,Math.PI*2/9,0xe4be70],[2,Math.PI*4/27,0xe88842],[1,Math.PI*2/27,0xe65e38]]){const geo=new THREE.CircleGeometry(radius,24,-Math.PI/2-angle,angle*2).rotateX(-Math.PI/2);const mesh=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color,transparent:true,opacity:.22,depthWrite:false,side:THREE.DoubleSide}));this.spread.add(mesh);}this.group.add(this.spread);}
+    this.spread.visible=c.weapons.some(w=>w.id===c.equipped&&w.type==='shotgun'&&w.uses>0);this.spread.position.set(game.state.player.x,game.world.walkHeight(game.state.player.x,game.state.player.z)+.08,game.state.player.z);this.spread.rotation.y=game.state.player.heading;
     for (const actor of Object.values(c.actors).filter(a => a.hp > 0 && distance(a, game.state.player) < 55).sort((a, b) => distance(a, game.state.player) - distance(b, game.state.player)).slice(0, 40)) {
       const g = get(`actor:${actor.id}`, () => this.actor(actor.type, actor.weapon, actor.id));
       const visual=this.characters.get(actor.id)!,refuge=game.settlement.refuge(actor.id);
@@ -49,8 +52,8 @@ export class CombatRenderer {
 
     }
     for (const f of c.fires) {
-      const g = get(`fire:${f.id}`, () => { const group = new THREE.Group(); this.piece(group, 'disc', this.mats.fire, 0, .07, 0, 1, 1, 1); this.piece(group, 'ring', this.mats.red, 0, .08, 0, 1, 1, 1); for (let i = 0; i < 14; i++) { const a = i * 2.4, r = 1 + i % 3; this.piece(group, 'sphere', this.mats.core, Math.cos(a) * r, .5, Math.sin(a) * r, .16, .65, .16); } return group; });
-      g.position.set(f.x, game.world.height(f.x, f.z), f.z); g.children.slice(2).forEach((o, i) => { o.scale.y = .4 + Math.sin(time * 10 + i) * .3; });
+      const g = get(`fire:${f.id}`, () => { const group = new THREE.Group(); this.piece(group, 'disc', this.mats.fire, 0, .07, 0, 1, 1, 1); this.piece(group, 'ring', this.mats.red, 0, .08, 0, 1, 1, 1); for (let i = 0; i < 14; i++) { const a = i * 2.4, r = 1 + i % 3; this.piece(group, 'sphere', this.mats.core, Math.cos(a) * r, .5, Math.sin(a) * r, .16, .65, .16); } const glow=new THREE.PointLight(0xff9742,35,18,1.5);glow.position.y=1.5;group.add(glow);return group; });
+      g.position.set(f.x, game.world.height(f.x, f.z), f.z); g.children.slice(2).filter(o=>o instanceof THREE.Mesh).forEach((o, i) => { o.scale.y = .4 + Math.sin(time * 10 + i) * .3; });
     }
     for (const d of c.drops) {
       const g = get(`drop:${d.id}`, () => { const group = new THREE.Group(); group.add(weaponMesh(d.weapon)); this.piece(group, 'sphere', this.mats.gold, 0, .6, 0, .12, .12, .12); return group; }); g.position.set(d.x, game.world.height(d.x, d.z), d.z); g.rotation.y = time;

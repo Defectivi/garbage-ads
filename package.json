@@ -25,7 +25,8 @@
     "test:guards": "node tests/guard-shelter.mjs",
     "test:wilderness": "node tests/wilderness.mjs",
     "test:camp": "node tests/camp-progression.mjs",
-    "test:spawn": "node tests/spawn-visibility.mjs"
+    "test:spawn": "node tests/spawn-visibility.mjs",
+    "test:night": "node tests/balance-night.mjs"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.3.0",

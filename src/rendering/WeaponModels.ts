@@ -6,6 +6,7 @@ import type { WeaponType } from '../data/weapons';
 export function weaponMesh(type: WeaponType, inHand = false) {
   const group = new T.Group(); group.name = 'held-weapon'; group.userData.weapon = type;
   const materials = {
+    stone: new T.MeshStandardMaterial({color:0x899b9d,roughness:1}),
     steel: new T.MeshStandardMaterial({ color: 0x3d515e, metalness: .65, roughness: .4 }),
     edge: new T.MeshStandardMaterial({ color: 0xbacbd0, metalness: .7, roughness: .3 }),
     wood: new T.MeshStandardMaterial({ color: 0x93613b, roughness: .85 }),
@@ -18,11 +19,11 @@ export function weaponMesh(type: WeaponType, inHand = false) {
     const geometry=new T.ExtrudeGeometry(shape,{depth,bevelEnabled:true,bevelSize:.008,bevelThickness:.006,bevelSegments:1,steps:1});geometry.translate(0,0,-depth/2);return add(geometry,material);
   };
   const cylinder=(radius:number,length:number,material:T.Material,x=0,y=0,z=0)=>add(new T.CylinderGeometry(radius,radius,length,8),material,x,y,z);
-  if(type==='wooden_sword'||type==='machete') {
+  if(type==='stone_sword'||type==='wooden_sword'||type==='machete') {
     cylinder(.038,.22,materials.grip,0,-.06);
     cylinder(.045,.025,materials.brass,0,-.18);
     const guard=profile([[-.14,.04],[.14,.04],[.12,.085],[-.12,.085]],.065,type==='wooden_sword'?materials.wood:materials.steel);guard.position.y=.01;
-    profile(type==='wooden_sword'?[[-.065,.12],[.065,.12],[.055,.68],[0,.82],[-.055,.68]]:[[-.045,.12],[.055,.12],[.075,.53],[.11,.68],[.035,.8],[-.075,.68],[-.065,.3]],.045,type==='wooden_sword'?materials.wood:materials.edge);
+    profile(type!=='machete'?[[-.065,.12],[.065,.12],[.055,.68],[0,.82],[-.055,.68]]:[[-.045,.12],[.055,.12],[.075,.53],[.11,.68],[.035,.8],[-.075,.68],[-.065,.3]],.045,type==='wooden_sword'?materials.wood:type==='stone_sword'?materials.stone:materials.edge);
     if(type==='wooden_sword') profile([[-.012,.16],[.012,.16],[.008,.7],[-.008,.7]],.05,materials.brass);
     for(let i=0;i<4;i++)add(new T.TorusGeometry(.039,.006,3,8),materials.wood,0,-.13+i*.045).rotation.x=Math.PI/2;
   } else if(type==='spear') {

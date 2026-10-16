@@ -27,7 +27,7 @@ export class PlayerCharacter {
     if(this.disposed){this.disposeAsset(asset.scene);return;}
     this.asset=asset.scene;this.object.add(asset.scene);this.mixer=new T.AnimationMixer(asset.scene);
     asset.scene.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;if(o instanceof T.SkinnedMesh)o.frustumCulled=false;}});
-    const clips=[...asset.animations];
+    const clips=[...asset.animations];const stone=clips.find(c=>c.name==='wooden_sword')?.clone();if(stone){stone.name='stone_sword';clips.push(stone);}
     for(const name of ['bow','shotgun']) {
       const shot=clips.find(c=>c.name===name);if(!shot)continue;
       const tracks=shot.tracks.map(track=>new T.QuaternionKeyframeTrack(track.name,[0,1],[...track.values.slice(0,4),...track.values.slice(0,4)]));
@@ -63,7 +63,7 @@ export class PlayerCharacter {
     if(this.equipped!==(equipped?.id??'')) {
       this.oneShot=false;this.upper?.fadeOut(.12);this.upper=undefined;
       if(this.held)disposeWeapon(this.held);this.held=undefined;this.equipped=equipped?.id??'';this.type=equipped?.type;
-      if(equipped){const socket=this.asset!.getObjectByName(equipped.type==='bow'?'HandL':'HandR');this.held=weaponMesh(equipped.type,true);if(equipped.type==='shotgun')this.held.scale.setScalar(.8);if(['wooden_sword','machete','spear'].includes(equipped.type))this.held.rotation.x=equipped.type==='spear'?0:Math.PI;socket?.add(this.held);}
+      if(equipped){const socket=this.asset!.getObjectByName(equipped.type==='bow'?'HandL':'HandR');this.held=weaponMesh(equipped.type,true);if(equipped.type==='shotgun')this.held.scale.setScalar(.8);if(['stone_sword','wooden_sword','machete','spear'].includes(equipped.type))this.held.rotation.x=equipped.type==='spear'?0:Math.PI;socket?.add(this.held);}
     }
     const dead=game.dead;
     if(dead){if(this.base?.getClip().name!=='death'){this.oneShot=false;this.upper?.fadeOut(.1);this.transition('death',false,true);}this.mixer!.update(dt);this.object.userData.animation='death';this.hp=p.hp;return;}
@@ -84,7 +84,7 @@ export class PlayerCharacter {
     if(this.upper&&this.upper.getClip().name==='arms_idle')this.upper.setEffectiveTimeScale(motion?0:1);
     this.mixer!.update(game.paused?0:dt);
     if((aiming||this.oneShot)&&this.held&&(this.type==='bow'||this.type==='shotgun')&&this.upper?.getClip().name!=='hurt')this.rangedGrip(this.type);
-    if(this.held&&this.type&&['wooden_sword','machete','spear'].includes(this.type)){if(this.oneShot&&this.upper?.getClip().name===this.type)meleePose(this.object,this.asset!,this.held,this.type,this.upper.time/this.upper.getClip().duration);else this.held.rotation.set(this.type==='spear'?0:Math.PI,0,-.15);}
+    if(this.held&&this.type&&['stone_sword','wooden_sword','machete','spear'].includes(this.type)){if(this.oneShot&&this.upper?.getClip().name===this.type)meleePose(this.object,this.asset!,this.held,this.type,this.upper.time/this.upper.getClip().duration);else this.held.rotation.set(this.type==='spear'?0:Math.PI,0,-.15);}
     this.object.userData.animation=this.oneShot?this.upper?.getClip().name:locomotion;
     this.object.userData.upperAnimation=this.upper?.getClip().name;this.object.userData.weapon=this.type;
   }

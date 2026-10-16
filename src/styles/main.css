@@ -507,3 +507,7 @@ h1,h2,h3,.modal h2,.death-modal h2{font-family:Consolas,'Courier New',monospace;
 
 .map-key .key-player:before{background:#c74d38}.map-key .key-home:before{background:#294e65}
 @media(max-width:700px){#message{top:auto;bottom:108px;max-width:180px;padding:8px 10px;line-height:1.35;z-index:6}}
+
+.hunger-line{display:flex;align-items:center;gap:12px;margin:6px 0;font:700 12px Consolas,monospace;color:#e5bf7d}.hunger-meter{height:7px;background:#1b3039;flex:1}.hunger-meter i{display:block;height:100%;background:#c79853;transition:width .3s}
+
+#worker-inspection{position:fixed;z-index:20;pointer-events:none;padding:8px 12px;border:1px solid #e2bb79;background:#19313dee;color:#f9efd9;font:700 13px Consolas,monospace;box-shadow:0 3px 12px #0004}

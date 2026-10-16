@@ -1,3 +1,5 @@
+import {CITY_OFFERS} from '../data/cityStore';
+import {weaponUses} from '../data/weapons';
 import {paintMap} from './MapPainter';
 import { showTrade } from './TradingUI';
 import type { App } from './App';
@@ -19,6 +21,11 @@ export class Panels {
     el.querySelectorAll<HTMLButtonElement>('[data-building]').forEach(b => b.addEventListener('click', () => { this.app.closeModal(); this.app.beginBuilding(b.dataset.building as BuildingType); }));
   }
   trade(ruin: Ruin, selected?: string) { showTrade(this.app,ruin,selected); }
+  cityStore(id:string){
+    const g=this.app.game,store=g.state.buildings.find(b=>b.id===id);if(!store||g.settlement.burning(store)||!g.settlement.intact(id)){g.notify('The City Store is unavailable while burning or ruined.');return;}
+    const el=this.app.modal('City Store',`<p>Prices use carried gold. Weapons equip immediately; bundles go into your pack.</p><div class="shop-wallet">YOUR GOLD <strong>${g.state.inventory.gold}</strong></div><div class="weapon-shop">${CITY_OFFERS.map(o=>`<article class="weapon-offer"><h3>${o.name}</h3><p>${o.weapon?weaponUses(o.weapon)+' uses':'Supply bundle'}</p><button data-city-buy="${o.id}" ${g.state.inventory.gold<o.gold&&!g.state.settings.allowDebt?'disabled':''}>Buy / ${o.gold} gold</button></article>`).join('')}</div>`);el.classList.add('city-store-modal');
+    el.querySelectorAll<HTMLButtonElement>('[data-city-buy]').forEach(b=>b.onclick=()=>{const result=g.buyCity(id,b.dataset.cityBuy!);this.app.report(result);if(result.ok){const message=g.message;this.cityStore(id);document.getElementById('dialog-status')!.textContent=message;}});
+  }
   settings() {
     const s = this.app.game.state.settings;
     const el = this.app.modal('Travel at your own pace', `<p>Relaxed mode allows long journeys without cold defeat. Survival makes warmth a real constraint. Changing settings does not reset the world.</p><label>DIFFICULTY<select id="difficulty"><option value="relaxed" ${s.difficulty === 'relaxed' ? 'selected' : ''}>Relaxed exploration</option><option value="survival" ${s.difficulty === 'survival' ? 'selected' : ''}>Survival</option></select></label><div class="form-grid"><label>RENDER DISTANCE (CHUNKS)<input id="distance" type="number" min="1" max="3" value="${s.renderDistance}"></label><label>CARRIED LIMIT (0 = UNLIMITED)<input id="capacity" type="number" min="0" max="9999999" value="${s.inventoryLimit}"></label></div><label class="check"><input id="debt" type="checkbox" ${s.allowDebt ? 'checked' : ''}> Allow resource debt for costs and trades</label><label class="check"><input id="sound" type="checkbox" ${s.sound ? 'checked' : ''}> Synthesized sound</label><button id="apply-settings" class="primary">Apply settings</button>`);

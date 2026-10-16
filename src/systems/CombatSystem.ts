@@ -1,17 +1,18 @@
+import {isNight} from './DayNight';
 import {spawnProtected,SPAWN_RADIUS} from './SpawnProtection';
 import { BUILDINGS } from '../data/definitions';
 import { bladeSegment, meleeDuration, segmentDistance, segmentSegmentDistance, projectileHeight } from '../game/CombatGeometry';
 import { heatRadius, inPlayerHeat, playerHeatSources, structureIntact } from './SurvivalSystem';
 import type { Game } from '../game/Game';
 import type { Point } from '../game/GameState';
-import { ACTOR_HP, WEAPONS, type ActorType, type WeaponType } from '../data/weapons';
+import { ACTOR_HP, WEAPONS, weaponUses, type ActorType, type WeaponType } from '../data/weapons';
 import type { Actor, Projectile } from '../game/CombatState';
 import { SeededRNG, derive } from '../utils/SeededRNG';
 import { distance } from '../world/WorldManager';
 import { transact } from './InventorySystem';
 
 export interface CombatUnit extends Point { id: string; hp: number; kind: 'player' | 'guard' | 'enemy' | 'npc'|'building'; radius?:number; villageId?: string | null }
-export function shotgunDamage(range: number) { return Math.round(12 + 83 * (1 - Math.min(3, Math.max(0, range)) / 3)); }
+export function shotgunDamage(range:number,angle=0){const band=Math.max(range/3,Math.abs(angle)/(Math.PI*2/9));return band<=1/3?105:band<=2/3?50:15;}
 export function equipmentDrops(seed: number, id: string) { return derive(seed, `equipment:${id}`) / 4294967296 < .07; }
 
 
@@ -46,7 +47,8 @@ export class CombatSystem {
     }
     const cx = Math.floor(p.x / 64), cz = Math.floor(p.z / 64);
     for (let x = cx - 1; x <= cx + 1; x++) for (let z = cz - 1; z <= cz + 1; z++) {
-      const key = `encounter:${x}:${z}`; if (this.c.encounters.includes(key)) continue;
+      for(const wave of (isNight(this.s)?['day',`night:${Math.floor(this.s.elapsed/1200)}`]:['day'])){
+      const key = wave==='day'?`encounter:${x}:${z}`:`${wave}:encounter:${x}:${z}`; if (this.c.encounters.includes(key)) continue;
       if(this.s.spawnProtection&&this.s.spawnProtection.remaining>0&&distance({x:x*64+32,z:z*64+32},this.s.spawnProtection)<SPAWN_RADIUS+46)continue;
       this.c.encounters.push(key); const rng = new SeededRNG(derive(this.s.world.seeds.wildlife, 'encounter', x, z));
       const groups: { type: ActorType; count: number; x: number; z: number }[] = [
@@ -63,7 +65,7 @@ export class CombatSystem {
         const weapon = group.type === 'bandit' ? (['bow', 'shotgun', 'machete'] as const)[Math.floor(rng.next() * 3)] : group.type === 'arsonist' ? 'molotov' : null;
         this.spawn(`${key}:${group.type}:${i}`, group.type, point, `${key}:${group.type}`, weapon);
       }
-    }
+    }}
   }
   units(): CombatUnit[] {
     const units: CombatUnit[] = [{ ...this.s.player, id: 'player', kind: 'player' }];
@@ -84,6 +86,7 @@ export class CombatSystem {
     const before=target.id==='player'?this.s.player.hp:this.c.actors[target.id]?.hp??this.s.workers.find(w=>w.id===target.id)?.hp??target.hp;
     if (before <= 0 || target.id==='player'&&((this.s.player.invulnerable??0)>0||spawnProtected(this.s))) return 0;
     const enemy=this.c.actors[target.id];
+    if(enemy&&(enemy.type==='wolf'||enemy.type==='polar_bear')&&isNight(this.s))amount*=.75;
     if(enemy&&this.hostile(enemy)&&inPlayerHeat(this.s,enemy)&&ownerId!=='furnace')amount*=2;
     if (target.id === 'player' && inPlayerHeat(this.s)) amount *= .5;
     if (target.id === 'player'){this.s.player.hp = Math.max(0, this.s.player.hp - amount);if(amount>0&&this.s.furnaces.some(f=>structureIntact(this.s,f.id)&&distance(f,this.s.player)<heatRadius(f)))this.s.player.recentDamage=3;}
@@ -93,7 +96,7 @@ export class CombatSystem {
       if (actor.villageId && ownerId === 'player' && !this.c.villageAlerts.includes(actor.villageId)) this.c.villageAlerts.push(actor.villageId);
       if (wasAlive && actor.hp <= 0) {
         this.c.kills++; delete this.c.statuses[actor.id];
-        if (actor.weapon && equipmentDrops(this.s.world.seeds.loot, actor.id)) this.c.drops.push({ id: this.nextId('drop'), x: actor.x, z: actor.z, weapon: actor.weapon, uses: 100 });
+        if (actor.weapon && equipmentDrops(this.s.world.seeds.loot, actor.id)) this.c.drops.push({ id: this.nextId('drop'), x: actor.x, z: actor.z, weapon: actor.weapon, uses: actor.weapon==='molotov'?1:weaponUses(actor.weapon) });
         this.game.notify(`${actor.type === 'polar_bear' ? 'Polar bear' : actor.type === 'guard' ? 'Guard' : actor.type==='wolf'?'Wolf':'Raider'} defeated.`);
       }
     } else {
@@ -110,7 +113,7 @@ export class CombatSystem {
     if((target.kind==='npc'||enemy?.type==='guard')&&before>amount&&(ownerId!=='bleed'||!!hurtWorker)&&(!hurtWorker||hurtWorker.hp<50))this.game.settlement.flee(target.id,target);
     if(this.damageEvents.length>=64)this.damageEvents.shift();
     this.damageEvents.push({x:target.x,z:target.z,amount:Math.min(before,amount),targetId:target.id,bleed:ownerId==='bleed'});
-    if (bleed&&before>amount) this.c.statuses[target.id] = { ...this.c.statuses[target.id],bleed: 10, tick: 0 };
+    if (bleed&&before>amount) this.c.statuses[target.id] = { ...this.c.statuses[target.id],bleed: 7, tick: 0, bleedDamage:7 };
     return Math.min(before,amount);
   }
   attack(target: Point): boolean {
@@ -161,10 +164,10 @@ export class CombatSystem {
       this.c.projectiles.push({id:this.nextId('swing'),ownerId,kind:'swing',x:from.x,z:from.z,fromX:from.x,fromZ:from.z,targetX:from.x+dx*def.range,targetZ:from.z+dz*def.range,age:0,duration:meleeDuration(weapon),damage,weapon,...(weaponId?{weaponId}:{}),hitIds:[],wearCharged:false});
     } else if (def.type === 'pellet') {
       const volleyId=this.nextId('volley'),hitIds:string[]=[];
-      for(let i=-2;i<=2;i++){const a=Math.atan2(dx,dz)+i*Math.PI/9;this.c.projectiles.push({id:this.nextId('pellet'),ownerId,kind:'pellet',x:from.x,z:from.z,fromX:from.x,fromZ:from.z,targetX:from.x+Math.sin(a)*3,targetZ:from.z+Math.cos(a)*3,age:0,duration:.15,damage:def.damage,volleyId,hitIds});}
+      for(let i=-2;i<=2;i++){const a=Math.atan2(dx,dz)+i*Math.PI/9;this.c.projectiles.push({id:this.nextId('pellet'),ownerId,kind:'pellet',x:from.x,z:from.z,fromX:from.x,fromZ:from.z,targetX:from.x+Math.sin(a)*3,targetZ:from.z+Math.cos(a)*3,age:0,duration:.15,damage:def.damage,volleyId,hitIds,weapon:'shotgun',aim:Math.atan2(dx,dz)});}
     } else {
       const range = def.type === 'arrow' ? def.range : Math.min(def.range, Math.max(1, d));
-      this.c.projectiles.push({ id: this.nextId('projectile'), ownerId, kind: def.type, x: from.x, z: from.z, fromX: from.x, fromZ: from.z, targetX: from.x + dx * range, targetZ: from.z + dz * range, age: 0, duration: range / (def.type === 'arrow' ? 24 : 10), damage: def.damage });
+      this.c.projectiles.push({ id: this.nextId('projectile'), ownerId, kind: def.type, x: from.x, z: from.z, fromX: from.x, fromZ: from.z, targetX: from.x + dx * range, targetZ: from.z + dz * range, age: 0, duration: range / (def.type === 'arrow' ? 24 : 10), damage: def.damage, weapon });
     }
   }
   private stepProjectile(p: Projectile, dt: number) {
@@ -179,7 +182,7 @@ export class CombatSystem {
         const phase=previous+(t-previous)*i/steps;if(phase<.1||phase>.8)continue;
         const blade=bladeSegment(owner,owner.heading,p.weapon,phase);
         for(const unit of units)if(!hits.includes(unit.id)&&this.touches(unit,blade.a,blade.b)&&!this.blocked(owner,unit,unit.id)){
-          hits.push(unit.id);this.damage(unit,p.damage,p.ownerId,p.weapon==='machete');
+          hits.push(unit.id);const lost=this.damage(unit,p.damage,p.ownerId,p.weapon==='machete');if(lost>0&&p.weapon==='stone_sword'&&derive(this.s.world.seeds.wildlife,'stone-stun',this.c.sequence++)%10===0){const a=this.c.actors[unit.id];if(a&&a.hp>0)a.stunned=1;}
           if(p.ownerId==='player'&&!p.wearCharged&&(unit.kind==='enemy'||unit.kind==='guard')){
             const weapon=this.c.weapons.find(w=>w.id===p.weaponId);if(weapon&&weapon.uses>0){weapon.uses--;if(weapon.uses===0)this.game.notify(`${WEAPONS[weapon.type].name} is worn out. Equip a replacement.`);}p.wearCharged=true;
           }
@@ -193,7 +196,9 @@ export class CombatSystem {
       const a={x:old.x-dx*(p.kind==='arrow'?.52:.04),z:old.z-dz*(p.kind==='arrow'?.52:.04)},b={x:p.x+dx*(p.kind==='arrow'?.63:.04),z:p.z+dz*(p.kind==='arrow'?.63:.04)};
       const hit=this.units().filter(u=>this.canHit(p.ownerId,u)&&!(p.hitIds??[]).includes(u.id)&&this.touches(u,a,b,.06)&&!this.blocked(old,u,u.id)).sort((a,b)=>distance(a,old)-distance(b,old))[0];
       if(hit){
-        this.damage(hit,p.kind==='pellet'?shotgunDamage(distance({x:p.fromX,z:p.fromZ},hit)):p.damage,p.ownerId);
+        const angle=Math.atan2(Math.sin(Math.atan2(hit.x-p.fromX,hit.z-p.fromZ)-(p.aim??0)),Math.cos(Math.atan2(hit.x-p.fromX,hit.z-p.fromZ)-(p.aim??0)));
+        const lost=this.damage(hit,p.kind==='pellet'?shotgunDamage(distance({x:p.fromX,z:p.fromZ},hit),angle):p.damage,p.ownerId);
+        if(lost>0&&p.kind==='arrow'&&hit.kind!=='building')this.c.statuses[hit.id]={...this.c.statuses[hit.id],bleed:5,tick:0,bleedDamage:3};
         if(p.volleyId)for(const shot of this.c.projectiles)if(shot.volleyId===p.volleyId){shot.hitIds??=[];if(!shot.hitIds.includes(hit.id))shot.hitIds.push(hit.id);}
         return false;
       }
@@ -222,10 +227,10 @@ export class CombatSystem {
     this.clearSpawnZone();this.ensureEncounters(); this.c.cooldown = Math.max(0, this.c.cooldown - dt);
     const weather = this.c.weather; weather.remaining -= dt;
     if (weather.remaining <= 0) { weather.mode = weather.mode === 'clear' ? 'snow' : 'clear'; weather.cycle++; weather.remaining = weather.mode === 'snow' ? 55 : 90 + derive(this.s.world.seeds.wildlife, 'weather', weather.cycle) % 61; this.game.notify(weather.mode === 'snow' ? 'Blizzard incoming. Fuel burns 3× faster; enemies track you from farther away.' : 'The storm has passed.'); }
-    for (const [id, status] of Object.entries(this.c.statuses)) { status.tick += Math.min(dt,status.bleed); status.bleed = Math.max(0,status.bleed-dt); while (status.tick >= 1 - 1e-8) { status.tick = Math.max(0, status.tick - 1); const u = this.units().find(u => u.id === id); if (u) this.damage(u, 2, 'bleed'); } status.wolfTick=(status.wolfTick??0)+Math.min(dt,status.wolfBleed??0);status.wolfBleed=Math.max(0,(status.wolfBleed??0)-dt);while(status.wolfTick>=1-1e-8){status.wolfTick=Math.max(0,status.wolfTick-1);const u=this.units().find(u=>u.id===id);if(u)this.damage(u,4,'bleed');}if (status.bleed <= 1e-8 && status.wolfBleed<=1e-8) delete this.c.statuses[id]; }
+    for (const [id, status] of Object.entries(this.c.statuses)) { status.tick += Math.min(dt,status.bleed); status.bleed = Math.max(0,status.bleed-dt); while (status.tick >= 1 - 1e-8) { status.tick = Math.max(0, status.tick - 1); const u = this.units().find(u => u.id === id); if (u) this.damage(u, status.bleedDamage??2, 'bleed'); } status.wolfTick=(status.wolfTick??0)+Math.min(dt,status.wolfBleed??0);status.wolfBleed=Math.max(0,(status.wolfBleed??0)-dt);while(status.wolfTick>=1-1e-8){status.wolfTick=Math.max(0,status.wolfTick-1);const u=this.units().find(u=>u.id===id);if(u)this.damage(u,4,'bleed');}if (status.bleed <= 1e-8 && status.wolfBleed<=1e-8) delete this.c.statuses[id]; }
     for (const fire of this.c.fires) {
-      fire.remaining -= dt; fire.tick += dt;
-      while (fire.tick >= 1 - 1e-8) { fire.tick = Math.max(0, fire.tick - 1); for (const u of this.units()) if (distance(u, fire) <= 4) this.damage(u, 3, fire.ownerId); }
+      const active=Math.min(dt,Math.max(0,fire.remaining));fire.remaining -= dt; fire.tick += active;
+      while (fire.tick >= 1 - 1e-8) { fire.tick = Math.max(0, fire.tick - 1); for (const u of this.units()) if (distance(u, fire) <= 4+(u.kind==='building'?(u.radius??2):0)) this.damage(u, u.kind==='building'?50:3, fire.ownerId); }
       if (fire.remaining <= 1e-8 && !fire.charred) { fire.charred = true; this.charTimber(fire); }
     }
     this.c.fires = this.c.fires.filter(f => f.remaining > 1e-8);
@@ -235,6 +240,7 @@ export class CombatSystem {
       if(actor.hp<=0)continue;
       if(this.game.settlement.refuge(actor.id)?.phase!=='hidden'){this.heatEntry(actor);this.heatBurn(actor,dt);}
       if(actor.hp<=0)continue;
+      actor.stunned=Math.max(0,(actor.stunned??0)-dt);if(actor.stunned>0){this.velocities.delete(actor.id);continue;}
       if(distance(actor,this.s.player)>70&&!(actor.type==='wolf'&&actor.pursuitId==='player')){if(actor.type!=='wolf'){delete actor.pursuitId;actor.alerted=false;actor.retreating=true;}continue;}
       actor.cooldown = Math.max(0, actor.cooldown - dt); actor.roamTimer = Math.max(0, actor.roamTimer - dt);
       if(this.game.settlement.refuge(actor.id)){this.velocities.delete(actor.id);continue;}
@@ -316,6 +322,6 @@ export class CombatSystem {
   }
   pickup(dropId: string) {
     const drop = this.c.drops.find(d => d.id === dropId); if (!drop || distance(drop, this.s.player) > 3) return false;
-    this.c.weapons.push({ id: this.nextId('weapon'), type: drop.weapon, uses: drop.uses }); this.c.drops = this.c.drops.filter(d => d.id !== dropId); this.game.notify(`Picked up ${WEAPONS[drop.weapon].name}.`); return true;
+    this.c.weapons.push({ id: this.nextId('weapon'), type: drop.weapon, uses: drop.weapon==='molotov'?1:Math.min(drop.uses,weaponUses(drop.weapon)) }); this.c.drops = this.c.drops.filter(d => d.id !== dropId); this.game.notify(`Picked up ${WEAPONS[drop.weapon].name}.`); return true;
   }
 }

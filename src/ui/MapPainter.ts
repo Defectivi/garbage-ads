@@ -1,3 +1,4 @@
+import {visibilityAt,sightSettings} from '../systems/Visibility';
 import type {Game} from '../game/Game';
 import type {Ruin} from '../world/WorldManager';
 export function paintMap(canvas:HTMLCanvasElement,game:Game,known:Ruin[]){
@@ -15,6 +16,8 @@ export function paintMap(canvas:HTMLCanvasElement,game:Game,known:Ruin[]){
  ctx.strokeStyle='#223e4930';ctx.lineWidth=1;for(let i=0;i<=512;i+=64){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,512);ctx.moveTo(0,i);ctx.lineTo(512,i);ctx.stroke();}
  const marker=(x:number,z:number,color:string,label:string,shape='square')=>{const at=screen(x,z);if(at.x<0||at.x>512||at.y<0||at.y>512)return;ctx.fillStyle=color;ctx.strokeStyle='#fff5dc';ctx.lineWidth=2;ctx.beginPath();if(shape==='circle')ctx.arc(at.x,at.y,5,0,Math.PI*2);else ctx.rect(at.x-5,at.y-5,10,10);ctx.fill();ctx.stroke();ctx.font='bold 12px Consolas,monospace';const width=ctx.measureText(label).width,tx=Math.min(506-width,Math.max(5,at.x+9)),ty=Math.max(15,at.y-8);ctx.fillStyle='#f4f2dfeb';ctx.fillRect(tx-3,ty-12,width+6,16);ctx.fillStyle='#213c47';ctx.fillText(label,tx,ty);};
  for(const r of known)marker(r.x,r.z,r.id.startsWith('village:')?'#bd8740':'#745d58',r.name);
- marker(0,0,'#294e65','HOME');marker(p.x,p.z,'#c74d38','YOU','circle');canvas.dataset.trees=String(trees);
+ marker(0,0,'#294e65','HOME');
+ const sight=sightSettings(game.state);if(sight.weight>0){for(let x=0;x<512;x+=4)for(let y=0;y<512;y+=4){const fog=visibilityAt(game.state,{x:p.x-128+x/2,z:p.z-128+y/2});ctx.fillStyle=`rgba(19,34,45,${Math.max(fog,sight.night*.4)})`;ctx.fillRect(x,y,4,4);}}canvas.dataset.night=String(sight.night);canvas.dataset.fog=String(sight.weight);
+ marker(p.x,p.z,'#c74d38','YOU','circle');canvas.dataset.trees=String(trees);
  ctx.fillStyle='#263f48';ctx.font='bold 12px Consolas,monospace';ctx.fillText('N',250,16);ctx.fillText('32 m',10,498);ctx.fillRect(10,502,64,2);
 }

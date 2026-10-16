@@ -57,9 +57,7 @@ try {
   await page.evaluate(() => { const g = window.__frostbound.game, t = g.world.ruin(0, 0).trader; window.walk({ x: t.x - 1.6, z: t.z + .6 }); }); await page.keyboard.press('f');
   await page.locator('#offer').selectOption('sell-fish'); const gold = await page.evaluate(() => window.__frostbound.game.state.inventory.gold); await page.locator('#confirm-trade').click(); assert.equal(await page.evaluate(() => window.__frostbound.game.state.inventory.gold), gold + 3);
   await page.locator('#cancel-trade').click(); await page.waitForTimeout(1000); await page.screenshot({ path: 'test-results/v2-ruins.png' });
-  const changed = await page.evaluate(() => JSON.stringify(window.__frostbound.game.state.changes));
-  await page.evaluate(() => { const g = window.__frostbound.game; for (let x = 10; x < 160; x++) g.world.chunk(x, 30); g.world.chunk(0, 0); });
-  assert.equal(await page.evaluate(() => JSON.stringify(window.__frostbound.game.state.changes)), changed);
+  const unchanged=await page.evaluate(()=>{const g=window.__frostbound.game,changed=JSON.stringify(g.state.changes);for(let x=10;x<160;x++)g.world.chunk(x,30);g.world.chunk(0,0);return JSON.stringify(g.state.changes)===changed;});assert(unchanged);
   await page.locator('#saves').click(); await page.locator('#edit-sandbox').click();
   const config = JSON.parse(await page.locator('#import-text').inputValue()); config.world.seed = 65535; config.startingState.resources.wood = -5000; config.startingState.resources.gold = 9999999;
   await page.locator('#import-text').fill(JSON.stringify(config)); await page.locator('#validate-import').click(); assert.equal(await page.evaluate(() => window.__frostbound.game.state.world.seed), 42);

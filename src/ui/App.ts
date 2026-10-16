@@ -1,3 +1,4 @@
+import {weaponUses} from '../data/weapons';
 import {fuelInterval} from '../data/furnaces';
 import {updateFurnaceUpgrade,flashMissing} from './FurnaceUpgradeUI';
 import {maxPlayerHP,playerEffects} from '../systems/StatusSystem';
@@ -32,6 +33,8 @@ export class App {
     this.resetOrbit(); this.resetJoystick(); this.game.stopMovement();
     this.root.querySelector('#sprint-button')?.classList.remove('selected');
   }
+  private inspectedWorker?:string;private inspectUntil=0;
+  private inspectWorker(x:number,y:number,touch=false){this.inspectedWorker=this.renderer.workerAt(x,y);this.inspectUntil=touch?performance.now()+3500:Infinity;this.refresh();return !!this.inspectedWorker;}
   private collectionEffects: CollectionEffects;
   private damageEffects:DamageEffects; private assistAttack=false;
   constructor(public game: Game, public renderer: Renderer) { this.damageEffects=new DamageEffects(point=>this.renderer.screenPoint(point)); this.collectionEffects = new CollectionEffects(this.root, point => this.renderer.screenPoint(point)); }
@@ -60,7 +63,7 @@ export class App {
     const canvas = this.renderer.webgl.domElement; canvas.addEventListener('contextmenu', e => e.preventDefault());
     let drag: { id: number; x: number } | null = null; let mousePointer = 1;
     this.resetOrbit = () => { const old = drag; drag = null; this.aiming = false; if (old && canvas.hasPointerCapture(old.id)) canvas.releasePointerCapture(old.id); };
-    canvas.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') mousePointer = e.pointerId; if (this.mode !== 'game' || this.game.paused) return; if (this.placement && e.button === 0) { const p = this.renderer.groundAt(e.clientX, e.clientY); if (p) { this.placement.point = { x: Math.round(p.x * 2) / 2, z: Math.round(p.z * 2) / 2 }; this.previewBuilding(); } } else if (e.button === 0 && e.pointerType !== 'touch') { this.firing = true; this.assistAttack=true; canvas.setPointerCapture(e.pointerId); this.attack(true); } else if (e.button === 2 || e.pointerType === 'touch' && e.clientX >= canvas.getBoundingClientRect().left + canvas.clientWidth / 2) { drag = { id: e.pointerId, x: e.clientX }; this.aiming = e.button === 2; canvas.setPointerCapture(e.pointerId); } });
+    canvas.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') mousePointer = e.pointerId; if(this.mode!=='game')return;if(e.pointerType==='touch'&&this.inspectWorker(e.clientX,e.clientY,true)){e.preventDefault();return;}if(this.game.paused)return; if (this.placement && e.button === 0) { const p = this.renderer.groundAt(e.clientX, e.clientY); if (p) { this.placement.point = { x: Math.round(p.x * 2) / 2, z: Math.round(p.z * 2) / 2 }; this.previewBuilding(); } } else if (e.button === 0 && e.pointerType !== 'touch') { this.firing = true; this.assistAttack=true; canvas.setPointerCapture(e.pointerId); this.attack(true); } else if (e.button === 2 || e.pointerType === 'touch' && e.clientX >= canvas.getBoundingClientRect().left + canvas.clientWidth / 2) { drag = { id: e.pointerId, x: e.clientX }; this.aiming = e.button === 2; canvas.setPointerCapture(e.pointerId); } });
     // Pointerdown/up only fire for the first/last mouse button. Handle chords explicitly.
     canvas.addEventListener('mousedown', e => {
       if (this.mode !== 'game' || this.game.paused || this.placement) return;
@@ -68,7 +71,8 @@ export class App {
       if (e.button === 2 && !drag) { drag = { id: mousePointer, x: e.clientX }; this.aiming = true; canvas.setPointerCapture(mousePointer); }
     });
     window.addEventListener('mouseup', e => { if (e.button === 0) this.firing = false; if (e.button === 2) this.resetOrbit(); });
-    canvas.addEventListener('pointermove', e => { if (drag?.id === e.pointerId && this.mode === 'game' && !this.game.paused) { this.renderer.yaw -= (e.clientX - drag.x) * .008; drag.x = e.clientX; } else if (this.placement && e.pointerType !== 'touch') { const p = this.renderer.groundAt(e.clientX, e.clientY); if (p) { this.placement.point = { x: Math.round(p.x * 2) / 2, z: Math.round(p.z * 2) / 2 }; this.previewBuilding(); } } });
+    canvas.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'){this.inspectedWorker=undefined;this.refresh();}});
+    canvas.addEventListener('pointermove', e => { if(e.pointerType==='mouse'&&!drag&&!this.placement&&this.mode==='game')this.inspectWorker(e.clientX,e.clientY); if (drag?.id === e.pointerId && this.mode === 'game' && !this.game.paused) { this.renderer.yaw -= (e.clientX - drag.x) * .008; drag.x = e.clientX; } else if (this.placement && e.pointerType !== 'touch') { const p = this.renderer.groundAt(e.clientX, e.clientY); if (p) { this.placement.point = { x: Math.round(p.x * 2) / 2, z: Math.round(p.z * 2) / 2 }; this.previewBuilding(); } } });
     for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(event, e => { if (drag?.id === (e as PointerEvent).pointerId) this.resetOrbit(); if (!(e.type === 'lostpointercapture' && ((e as PointerEvent).buttons & 1))) this.firing = false; });
     canvas.addEventListener('wheel', e => { e.preventDefault(); this.renderer.zoom = Math.max(16, Math.min(65, this.renderer.zoom + e.deltaY * .025)); }, { passive: false });
     this.menu(); requestAnimationFrame(t => this.frame(t));
@@ -86,7 +90,7 @@ export class App {
   }
   enter() {
     this.clearInput(); this.mode = 'game'; this.played = true; this.game.paused = false; this.root.className = 'playing'; this.keys.clear(); this.audio.enabled = this.game.state.settings.sound; this.audio.unlock(); this.audio.ambience(true);
-    this.root.innerHTML = `<header><b>${uiIcon('mountain')} FROSTBOUND</b><span id="seed-hud"></span><button id="menu" aria-label="Pause game">Ⅱ <span>Pause</span></button></header><div id="resources" class="resource-bar" aria-label="Carried resources"></div><section class="survival"><div class="exposure-heading">${uiIcon('flame')}<strong id="warmth"></strong></div><div class="warmth-meter"><i></i></div><span id="fuel"></span><small id="location"></small><small id="recovery-state"></small><small id="structure-status"></small><div id="furnace-upgrade"></div></section><button id="interaction" class="interaction"><kbd>F</kbd><span></span></button><section class="combat-hud"><div class="health-line"><b id="health"></b><b id="warmth-readout"></b><span id="weather"></span></div><div class="hp-meter"><i></i></div><div id="weapon-rack"></div><small id="weapon-state"></small><small id="furnace-defense"></small><button id="attack-button">ATTACK <kbd>SPACE</kbd></button><button id="sprint-button">SPRINT <kbd>SHIFT</kbd></button></section><aside id="player-effects" aria-label="Active player effects"></aside><div id="message" role="status"></div><footer><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move / F interact / E inventory / Shift+S save</footer>`;
+    this.root.innerHTML = `<header><b>${uiIcon('mountain')} FROSTBOUND</b><span id="seed-hud"></span><button id="menu" aria-label="Pause game">Ⅱ <span>Pause</span></button></header><div id="resources" class="resource-bar" aria-label="Carried resources"></div><section class="survival"><div class="exposure-heading">${uiIcon('flame')}<strong id="warmth"></strong></div><div class="warmth-meter"><i></i></div><span id="fuel"></span><small id="location"></small><small id="recovery-state"></small><small id="structure-status"></small><div id="furnace-upgrade"></div></section><button id="interaction" class="interaction"><kbd>F</kbd><span></span></button><section class="combat-hud"><div class="health-line"><b id="health"></b><b id="warmth-readout"></b><span id="weather"></span></div><div class="hp-meter"><i></i></div><div class="hunger-line"><b id="hunger"></b><div class="hunger-meter"><i></i></div></div><div id="weapon-rack"></div><small id="weapon-state"></small><small id="furnace-defense"></small><button id="attack-button">ATTACK <kbd>SPACE</kbd></button><button id="sprint-button">SPRINT <kbd>SHIFT</kbd></button></section><aside id="player-effects" aria-label="Active player effects"></aside><div id="worker-inspection" role="status" hidden></div><div id="message" role="status"></div><footer><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move / F interact / E inventory / Shift+S save</footer>`;
     this.root.querySelector('#menu')!.addEventListener('click', () => this.pause()); this.root.querySelector('#interaction')!.addEventListener('click', () => this.interact());
     const toolbar = document.createElement('nav'); toolbar.className = 'toolbar'; toolbar.setAttribute('aria-label', 'Field kit'); toolbar.innerHTML = [['inventory', 'pack', 'Rucksack', 'E'], ['build', 'build', 'Build', 'B'], ['map', 'map', 'Map', 'M'], ['saves', 'save', 'World files', 'P'], ['settings', 'settings', 'Settings', '']].map(([id, art, label, key]) => `<button id="${id}" title="${label}${key ? ` (${key})` : ''}" aria-label="${label}">${uiIcon(art)}<span>${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`).join('');
     this.root.appendChild(toolbar); toolbar.querySelector('#inventory')!.addEventListener('click', () => this.panels.inventory()); toolbar.querySelector('#build')!.addEventListener('click', () => this.panels.building()); toolbar.querySelector('#map')!.addEventListener('click', () => this.panels.map()); toolbar.querySelector('#saves')!.addEventListener('click', () => this.panels.saves()); toolbar.querySelector('#settings')!.addEventListener('click', () => this.panels.settings());
@@ -138,14 +142,15 @@ export class App {
     if(context.kind==='loot')this.report(this.game.settlement.pickup(context.id!));
     else if (context.kind === 'drop') this.game.combat.pickup(context.id!);
     else if (context.kind === 'trader') this.panels.trade(context.ruin!);
+    else if(context.kind==='city_store')this.panels.cityStore(context.id!);
     else if (context.kind === 'storage') this.panels.inventory();
     else { const result = context.kind === 'node' ? this.game.startGather(context.node!) : context.kind === 'furnace' ? this.game.feed(context.id) : context.kind === 'fishing' ? this.game.startFishing(context.spot!) : this.game.search(context.ruin!); this.report(result); }
     if(context.kind==='node'&&context.node?.kind==='tree'&&!matchMedia('(prefers-reduced-motion: reduce)').matches)navigator.vibrate?.(18);
-    this.actionTimer = .45; this.refresh();
+    this.actionTimer = context.kind==='node'?.08:.45; this.refresh();
   }
   private context() {
     const p = this.game.state.player, chunks = this.game.world.around(p);
-    type Context = { kind:'loot'| 'drop' | 'node' | 'furnace' | 'trader' | 'chest' | 'fishing' | 'storage'; label: string; d: number; id?: string; node?: ReturnType<Game['nodes']>[number]; spot?: typeof chunks[number]['fishing'][number]; ruin?: typeof chunks[number]['ruins'][number] };
+    type Context = { kind:'city_store'|'loot'| 'drop' | 'node' | 'furnace' | 'trader' | 'chest' | 'fishing' | 'storage'; label: string; d: number; id?: string; node?: ReturnType<Game['nodes']>[number]; spot?: typeof chunks[number]['fishing'][number]; ruin?: typeof chunks[number]['ruins'][number] };
     const candidates: Context[] = [];
     for (const n of this.game.nodes()) if (distance(n, p) < 3 && this.game.nodeRemaining(n) > 0 && !this.game.world.isWater(n.x, n.z)) candidates.push({ kind: 'node', label: `Gather ${this.game.nodeResource(n)} · hold F`, d: distance(n, p), node: n });
     for (const f of this.game.state.furnaces) if (this.game.settlement.intact(f.id)&&distance(f, p) < 4) candidates.push({ kind: 'furnace', label: `Feed furnace / set respawn${this.game.state.respawnFurnaceId===f.id?' / bound':''}`, d: distance(f, p), id: f.id });
@@ -156,15 +161,18 @@ export class App {
         if (distance(r.container, p) < 3 && !this.game.state.changes.containers.includes(r.id)) candidates.push({ kind: 'chest', label: 'Search abandoned supply chest', d: distance(r.container, p), ruin: r });
       }
     }
-    for (const b of this.game.state.buildings) if (b.type === 'storage'&&this.game.settlement.intact(b.id) && distance(b, p) < 4) candidates.push({ kind: 'storage', label: 'Open shared storage', d: distance(b, p) });
+    for (const b of this.game.state.buildings) if (b.type === 'storage'&&this.game.state.changes.structures?.[b.id]?.stage!=='gone' && distance(b, p) < 4) candidates.push({ kind: 'storage', label: 'Open shared storage', d: distance(b, p) });
+    for(const b of this.game.state.buildings)if(b.type==='city_store'&&this.game.settlement.intact(b.id)&&distance(b,p)<5&&!this.game.settlement.burning(b))candidates.push({kind:'city_store',id:b.id,label:'City Store / buy with gold',d:distance(b,p)-4});
     for (const drop of this.game.state.combat.drops) if (distance(drop,p) < 3) candidates.push({kind:'drop', id:drop.id, label:`Pick up ${WEAPONS[drop.weapon].name}`, d:distance(drop,p)-3});
     for(const pile of this.game.settlement.loot(p))if(distance(pile,p)<3)candidates.push({kind:'loot',id:pile.id,label:pile.weapon?`Take ${WEAPONS[pile.weapon].name}`:`Collect supplies / ${Object.entries(pile.resources).map(([r,n])=>`${n} ${r}`).join(', ')}`,d:distance(pile,p)-2});
-    const priority = (kind: Context['kind']) => ['trader', 'chest', 'fishing', 'storage'].includes(kind) ? 4 : 0;
+    const priority = (kind: Context['kind']) => ['city_store','trader', 'chest', 'fishing', 'storage'].includes(kind) ? 4 : 0;
     return candidates.sort((a, b) => a.d - priority(a.kind) - b.d + priority(b.kind))[0];
   }
   refresh() {
     if (this.mode !== 'game') return;
     const s = this.game.state;
+    const inspected=s.workers.find(w=>w.id===this.inspectedWorker),label=this.root.querySelector<HTMLElement>('#worker-inspection')!,point=inspected?this.renderer.screenPoint(inspected):undefined;
+    label.hidden=!inspected||!point||performance.now()>this.inspectUntil;if(inspected&&point){label.textContent=`WORKER / ${Math.ceil(inspected.hp)} / 100 HP`;label.style.left=`${Math.max(8,Math.min(innerWidth-200,point.x-70))}px`;label.style.top=`${Math.max(8,point.y-55)}px`;}
     this.root.querySelector('#seed-hud')!.textContent = `SEED ${s.world.seed} / GEN ${s.world.generationVersion}`;
     const compact = (n: number) => Math.abs(n) >= 10000 ? new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n) : String(n);
     const resources = this.root.querySelector('#resources')!;
@@ -186,10 +194,11 @@ export class App {
     const structure=this.game.settlement.structures().filter(b=>distance(b,s.player)<5&&this.game.settlement.integrity(b).stage!=='gone').sort((a,b)=>distance(a,s.player)-distance(b,s.player))[0];
     this.root.querySelector('#structure-status')!.textContent=structure?`${structure.id==='home'?'Home furnace':structure.generated?'Village house':BUILDINGS[structure.type].name} / ${this.game.settlement.integrity(structure).stage} / ${Math.ceil(this.game.settlement.integrity(structure).hp)} HP${structure.construction!==undefined?' / building '+structure.construction.toFixed(1)+'s':''}`:'';
     const c = s.combat, equipped = c.weapons.find(w => w.id === c.equipped&&w.uses>0);
+    this.root.querySelector('#hunger')!.textContent=`HUNGER ${Math.ceil(s.player.hunger??20)} / 20`; (this.root.querySelector('.hunger-meter i') as HTMLElement).style.width=`${(s.player.hunger??20)*5}%`;
     this.root.querySelector('#health')!.textContent = `${Math.ceil(s.player.hp)} / ${maxPlayerHP(s)} HP`;
     (this.root.querySelector('.hp-meter i') as HTMLElement).style.width = `${s.player.hp/maxPlayerHP(s)*100}%`;
     this.root.querySelector('#weather')!.textContent = c.weather.mode === 'snow' ? 'WHITEOUT / FUEL x3' : `CLEAR / ${Math.ceil(c.weather.remaining)}s`;
-    const rack = this.root.querySelector('#weapon-rack')!; const rackHTML = c.weapons.filter(w => w.uses > 0).map((w,i) => `<button data-weapon="${w.id}" class="${w.id === c.equipped ? 'selected' : ''}" title="${WEAPONS[w.type].name}"><kbd>${i < 6 ? i+1 : ''}</kbd><b>${WEAPONS[w.type].name}</b><small>${w.uses}/100</small></button>`).join('');
+    const rack = this.root.querySelector('#weapon-rack')!; const rackHTML = c.weapons.filter(w => w.uses > 0).map((w,i) => `<button data-weapon="${w.id}" class="${w.id === c.equipped ? 'selected' : ''}" title="${WEAPONS[w.type].name}"><kbd>${i < 6 ? i+1 : ''}</kbd><b>${WEAPONS[w.type].name}</b><small>${w.uses}/${weaponUses(w.type)}</small></button>`).join('');
     if (rack.innerHTML !== rackHTML) { rack.innerHTML = rackHTML; rack.querySelectorAll<HTMLButtonElement>('[data-weapon]').forEach(b => b.onclick = () => { c.equipped = b.dataset.weapon!; this.refresh(); }); }
     this.root.querySelector('#weapon-state')!.textContent = equipped ? `${WEAPONS[equipped.type].name} / ${equipped.uses} uses / ${c.cooldown > 0 ? c.cooldown.toFixed(1)+'s' : 'READY'} / ${equipped&&WEAPONS[equipped.type].type==='melee'?'wear on enemy hit':'unlimited ammo'}` : `Unarmed / 2 damage / ${c.cooldown>0?c.cooldown.toFixed(1)+'s':'READY'}`;
     this.root.querySelector('#furnace-defense')!.textContent = inPlayerHeat(s) ? 'FURNACE / incoming damage -50% / enemies: damage taken x2, speed -50%' : '';

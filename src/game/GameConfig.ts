@@ -15,4 +15,4 @@ export function randomSeed() { return crypto.getRandomValues(new Uint16Array(1))
 /** Local movement defaults; saved world geometry is unaffected. */
 export const MOVEMENT = { walkSpeed: 6, sprintSpeed: 9, response: 18, joystickRadius: 34, joystickDeadZone: .18 } as const;
 
-export const GATHER_SECONDS = 1;
+export const GATHER_SECONDS = {wood:.3,stone:.7,metal:1.1,gold:2.2,charcoal:1,fish:1,meat:1} as const;

@@ -1,3 +1,6 @@
+import {visibilityAt} from '../systems/Visibility';
+import {VisibilityFog} from './VisibilityFog';
+import {nightBlend} from '../systems/DayNight';
 import {furnaceAura} from './FurnaceAura';
 import {weatherVisibility} from './WeatherVisibility';
 import { structureMaxHP } from '../data/settlement';
@@ -16,6 +19,7 @@ import type { Chunk, Ruin } from '../world/WorldManager';
 
 const mat = (color: number, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: .92, ...extra });
 export class Renderer {
+  private sightFog=new VisibilityFog();private torch=new THREE.PointLight(0xffa047,0,18,1.5);
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(48, 1, .1, 220);
   readonly webgl: THREE.WebGLRenderer;
@@ -45,7 +49,7 @@ export class Renderer {
     this.sun = new THREE.DirectionalLight(0xfff5dd, 3); this.sun.position.set(-22, 35, 15); this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(1024, 1024); Object.assign(this.sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 100 }); this.sun.shadow.bias = -.001; this.sun.shadow.normalBias = .04;
     this.scene.add(this.sun, this.sun.target, this.entities, this.markers, this.player, this.combatVisual.group);
-    this.scene.add(this.snowfall);
+    this.scene.add(this.snowfall,this.torch);
     const marker = new THREE.Mesh(new THREE.RingGeometry(.48, .6, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xc38e50, transparent: true, opacity: .65, depthTest: false, depthWrite: false })); marker.position.y = .04; marker.renderOrder = 100; this.player.add(marker);
     this.camera.position.set(20, 28, 30); this.target.set(0, 1, 0); this.resize();
   }
@@ -53,6 +57,11 @@ export class Renderer {
   private box(group: THREE.Group, x: number, y: number, z: number, w: number, h: number, d: number, material: THREE.Material) { const m = this.mesh(new THREE.BoxGeometry(w, h, d), material, x, y, z); group.add(m); return m; }
   private building(type: BuildingType | 'ruin', rotation = 0) {
     const group = new THREE.Group();
+    if(type==='shelter'){
+      for(let i=0;i<8;i++){const a=i*Math.PI/4;group.add(this.mesh(new THREE.DodecahedronGeometry(.22,0),this.materials.ice,Math.sin(a)*.75,.15,Math.cos(a)*.75));}
+      for(const side of [-1,1]){const log=this.box(group,0,.18,0,1.2,.22,.22,this.materials.wood);log.rotation.y=side*.6;}
+      const flame=this.mesh(new THREE.ConeGeometry(.4,1.1,7),this.materials.fire,0,.65);flame.name='camp-flame';group.add(flame);const glow=new THREE.PointLight(0xff9b45,22,12,1.5);glow.name='camp-light';glow.position.y=1;group.add(glow);group.rotation.y=rotation;return group;
+    }
     if (type === 'furnace') {
       const steel = this.materials?.metal ?? mat(0x5a7279), dark = this.materials?.dark ?? mat(0x314e5b);
       group.add(this.mesh(new THREE.CylinderGeometry(.82, 1.2, 2.4, 10), steel, 0, 1.6));
@@ -77,6 +86,9 @@ export class Renderer {
         this.box(group, .85, 1.45, 1.75, .05, .8, .04, wood);
         this.box(group, 1, 3.7, -.5, .5, 1.3, .5, this.materials.metal);
       }
+    }
+    if(type==='city_store'){
+      const canvas=document.createElement('canvas');canvas.width=256;canvas.height=64;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#bc934d';ctx.fillRect(0,0,256,64);ctx.fillStyle='#20343d';ctx.font='bold 30px Consolas,monospace';ctx.textAlign='center';ctx.fillText('CITY STORE',128,43);const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;const sign=this.mesh(new THREE.PlaneGeometry(3.7,.92),new THREE.MeshBasicMaterial({map:texture}),0,2.5,1.82);sign.userData.ownedTexture=texture;group.add(sign);group.name='city-store';
     }
     group.rotation.y = rotation; return group;
   }
@@ -182,7 +194,7 @@ export class Renderer {
     this.box(g, r.trader.x, w.height(r.trader.x, r.trader.z) + 2.6, r.trader.z, .45, .45, .1, mat(0xf4cf7c, { emissive: 0xaa7524 }));
   }
   private dispose(group: THREE.Group) {
-    group.traverse(o => { if (o instanceof THREE.Mesh||o instanceof THREE.Line) { if (o instanceof THREE.InstancedMesh) o.dispose(); o.geometry.dispose(); const mats = Array.isArray(o.material) ? o.material : [o.material]; for (const m of mats) if (!Object.values(this.materials).includes(m as THREE.MeshStandardMaterial)) m.dispose(); } }); group.removeFromParent();
+    group.traverse(o => { o.userData.ownedTexture?.dispose();if (o instanceof THREE.Mesh||o instanceof THREE.Line) { if (o instanceof THREE.InstancedMesh) o.dispose(); o.geometry.dispose(); const mats = Array.isArray(o.material) ? o.material : [o.material]; for (const m of mats) if (!Object.values(this.materials).includes(m as THREE.MeshStandardMaterial)) m.dispose(); } }); group.removeFromParent();
   }
   refreshChunks() { for (const id of this.chunks.keys()) this.dirtyChunks.add(id); }
   private clearChunks() { for (const g of this.chunks.values()) this.dispose(g); this.chunks.clear(); this.dirtyChunks.clear(); }
@@ -192,6 +204,12 @@ export class Renderer {
     const v = new THREE.Vector3(point.x, this.game.world.height(point.x, point.z) + 1.2, point.z).project(this.camera);
     if (v.z < -1 || v.z > 1 || Math.abs(v.x) > 1.2 || Math.abs(v.y) > 1.2) return undefined;
     const b = this.webgl.domElement.getBoundingClientRect(); return { x: b.left + (v.x + 1) * b.width / 2, y: b.top + (1 - v.y) * b.height / 2 };
+  }
+  workerAt(clientX:number,clientY:number){
+    const bounds=this.webgl.domElement.getBoundingClientRect();this.ray.setFromCamera(new THREE.Vector2((clientX-bounds.x)/bounds.width*2-1,-(clientY-bounds.y)/bounds.height*2+1),this.camera);
+    let chosen:string|undefined,nearest=Infinity;
+    for(const w of this.game.state.workers){const visual=this.residents.get(w.id);if(!visual?.ready||!visual.object.visible||visibilityAt(this.game.state,w)>.9)continue;const hit=this.ray.intersectObject(visual.object,true)[0];if(hit&&hit.distance<nearest){chosen=w.id;nearest=hit.distance;}}
+    return chosen;
   }
   groundAt(clientX: number, clientY: number) {
     const bounds = this.webgl.domElement.getBoundingClientRect(); this.ray.setFromCamera(new THREE.Vector2((clientX - bounds.x) / bounds.width * 2 - 1, -(clientY - bounds.y) / bounds.height * 2 + 1), this.camera);
@@ -213,7 +231,10 @@ export class Renderer {
     const storm=game.state.combat.weather.mode==='snow';this.weather.update(game.paused?0:dt,storm,p,height,this.reducedMotion.matches);
     const fog=this.scene.fog as THREE.Fog,intensity=this.snowfall.userData.intensity;
     const visibility=weatherVisibility(this.zoom,game.state.settings.renderDistance,intensity);fog.near=visibility.near;fog.far=visibility.far;
-    this.sun.intensity=THREE.MathUtils.lerp(3,1.7,intensity);
+    const night=nightBlend(game.state);this.sun.intensity=THREE.MathUtils.lerp(3,1.7,intensity)*(1-night*.88);
+    const sky=new THREE.Color(0xb4cbd9).lerp(new THREE.Color(0x152536),night);(this.scene.background as THREE.Color).copy(sky);fog.color.copy(sky);
+    for(const o of this.scene.children)if(o instanceof THREE.HemisphereLight)o.intensity=2.2*(1-night*.83);
+    const heldTorch=game.state.combat.weapons.some(w=>w.id===game.state.combat.equipped&&w.type==='molotov'&&w.uses>0);this.torch.intensity=heldTorch?32:0;this.torch.position.set(p.x,height+1.6,p.z);
 
     const target = new THREE.Vector3(p.x, height + 1.1, p.z), blend = 1 - Math.exp(-dt * 6); this.target.lerp(target, blend);
     // High orbit clears all player-buildable roofs; terrain clearance also protects hills.
@@ -243,6 +264,7 @@ export class Renderer {
       group.userData.construction=b.construction;group.scale.y=b.construction&&integrity.stage==='intact'?.35+.65*(1-b.construction/10):1;
       group.userData.hp=integrity.hp;group.userData.occupants=occupants;this.structureBar(group,integrity.hp/max,integrity.hp<max||occupants>0);
       group.position.set(b.x, game.world.height(b.x, b.z), b.z);
+      if(b.type==='shelter'&&integrity.stage==='intact'){const active=(b.burnTime??15)>0;group.getObjectByName('camp-flame')!.visible=active;(group.getObjectByName('camp-light') as THREE.PointLight).intensity=active?22:0;group.userData.remaining=b.burnTime??15;}
       if (b.type === 'furnace'&&integrity.stage==='intact') {
         const furnace = game.state.furnaces.find(f => f.id === b.id)!; const active = furnace.fuel + furnace.charcoal > 0;
         const tier = furnaceTier(furnace.level);
@@ -282,6 +304,6 @@ export class Renderer {
     }
     for(const [id,visual] of this.residents)if(!residentIds.has(id)){visual.dispose();this.residents.delete(id);}
     for (const [id, group] of this.dynamic) if (!entityIds.has(id)) { this.dispose(group); this.dynamic.delete(id); }
-    this.combatVisual.update(game, this.camera, time, dt); this.webgl.render(this.scene, this.camera);
+    this.combatVisual.update(game, this.camera, time, dt); this.sightFog.update(this.scene,game.state,intensity);this.webgl.render(this.scene, this.camera);
   }
 }

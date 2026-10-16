@@ -4,7 +4,7 @@ import { solveArm } from './RigIK';
 
 /** A blade-led waist/chest-height sweep, shared by survivor and human NPC rigs. */
 export function meleePose(root:T.Group,asset:T.Group,weapon:T.Group,type:string,progress:number) {
-  if(!['wooden_sword','machete','spear'].includes(type))return;
+  if(!['stone_sword','wooden_sword','machete','spear'].includes(type))return;
   const pose=meleePath(type,progress),hand=new T.Vector3(pose.x,pose.y,pose.z),direction=new T.Vector3(pose.dx,pose.dy,pose.dz).normalize();
   solveArm(root,asset,'R',root.localToWorld(hand));
   solveArm(root,asset,'L',root.localToWorld(new T.Vector3(-.3,1.13,.18)));

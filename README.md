@@ -31,7 +31,7 @@ The built application is in `dist/`; preview serves it at **http://localhost:417
 ## Start exploring
 
 1. Enter a **world seed from 0 to 65535**, randomize it, or enter the current world.
-2. **F** starts a one-second gathering action within three units. Hold it to repeatedly gather timber, stone, or metal. Guaranteed wood and stone sources are beside home.
+2. **F** starts gathering (wood 0.3s, stone 0.7s, metal 1.1s, gold 2.2s) within three units. Hold it to repeatedly gather timber, stone, or metal. Guaranteed wood and stone sources are beside home.
 3. Approach a furnace and press F to burn **one wood for 10 base seconds or one charcoal for 30** (charcoal is selected first). A bold ring and animated flame-like aura show the active warmth area. New worlds start with 60 seconds of fuel and a completed 500-HP worker hut with two workers.
 4. Open **Build**. A **hut costs 20 wood**, takes 10 simulation seconds to build, and recruits two workers for wood, stone and fish. Press **T** near a furnace to upgrade; the HUD shows costs and shortages. Storehouses, trail shelters, and outpost furnaces have distinct functional effects. Preview, rotate, confirm or cancel construction.
 5. The map gives a rumour of a generated settlement. Follow it, search the chest, and interact with the trader. Gold purchases and direct resource barter are supported.
@@ -75,7 +75,7 @@ Each resource balance defaults to the inclusive integer range **−9,999,999 to 
 
 Hut workers seek reachable wood, stone and fish within 26 units of their hut, use obstacle-aware routes, carry up to three, and physically return to the nearest storage/furnace delivery area. Resources enter the shared stockpile **on delivery**. Depleted, inaccessible, or full-destination scenarios pause production. Workers do not automatically feed the fire. Simulation continues for constructed camps outside the rendered area and pauses with menus or a hidden tab.
 
-The first furnace upgrade costs **30 wood**; later costs use all materials. Each level adds 0.2 seconds to the fuel consumption interval. Level 1 radius is 12 and grows by 8 units per level through level 20; upgrades continue through level 50. Extinguished furnaces provide no heat at any level. Outpost furnaces start empty. Trail shelters recover warmth within five units without fuel.
+The first furnace upgrade costs **30 wood**; later costs use all materials. Each level adds 0.2 seconds to the fuel consumption interval. Level 1 radius is 12 and grows by 8 units per level through level 20; upgrades continue through level 50. Extinguished furnaces provide no heat at any level. Outpost furnaces start empty. Campfires cost 5 wood and restore 6% maximum HP and 6 warmth per second within five units for 15 seconds.
 
 Rivers are carved valleys with visible banks, water, and timber bridges every 64 east/west units. Water is crossable with hypothermia penalties; the visible bridge deck stays dry and its rails prevent sideways falls. Fish availability and deterministic catches are persisted per location. Chest loot, mined nodes, discoveries, NPC stock, buildings, workers, and furnace modifications survive leaving and reloading chunks.
 
@@ -155,18 +155,19 @@ All mesh artwork and synthesized sounds are original procedural work. Bundled DM
 
 Start a new expedition for terrain generation 5 and its three distant fixed villages: Hearthwatch (128, 8), Stonehaven (-144, -32), and Northpass (192, 176). Each has packed paths connecting houses, trading areas and the entrance. Older saves preserve their village sites. Villages have traders, 3-5 armed guards, and a furnace. Old terrain-generation-1 saves keep their original terrain and ruins. Bandits roam in groups of 2-10; polar bears and arsonists also patrol. Guards fight enemies and retaliate when you attack their village.
 
-Move with the keyboard or joystick to set facing; that direction is retained when you stop. Left click and the touch Attack button assist a nearby reachable hostile; otherwise attacks follow your facing. Space attacks forward. Mouse movement does not redirect the survivor. Equip from the weapon rack, keys 1-6, or the Rucksack equipment list. Hold Shift to sprint (9 rather than 6 units/sec), or hold the touch Sprint button; exposure consumes twice the warmth. New survivors start unarmed with a 2-damage punch; weapons can be traded or found in village supplies. Traders sell all six weapons using carried resources, and defeated armed actors have a deterministic 7% equipment drop chance. Collect drops with F. Melee weapons wear once per successful enemy-hitting swing, with 100 such hits. Ranged weapons have 100 shots and unlimited ammo; enemy weapons never wear out.
+Move with the keyboard or joystick to set facing; that direction is retained when you stop. Left click and the touch Attack button assist a nearby reachable hostile; otherwise attacks follow your facing. Space attacks forward. Mouse movement does not redirect the survivor. Equip from the weapon rack, keys 1-6, or the Rucksack equipment list. Hold Shift to sprint (9 rather than 6 units/sec), or hold the touch Sprint button; exposure consumes twice the warmth. New survivors start unarmed with a 2-damage punch; weapons can be traded, purchased for gold at City Stores, or found in village supplies. Traders sell all six weapons using carried resources, and defeated armed actors have a deterministic 7% equipment drop chance. Collect drops with F. Melee weapons wear once per successful enemy-hitting swing, with durability set per weapon. Ranged weapons have limited uses and unlimited ammo; enemy weapons never wear out.
 
 | Weapon | Damage | Cooldown | Effect |
 | --- | --- | --- | --- |
-| Wooden sword | 10 | 1s | Melee arc |
+| Wooden sword | 8 | 1s | 25 successful hits |
+| Stone sword | 12 / 10% chance of 1s stun | 1s | 50 successful hits |
 | Spear | Random 3-10 | 1.5s | Longer melee reach |
-| Machete | 25 | 1.5s | 2 bleed damage/sec for 10s; hits refresh bleed |
-| Bow | 15 | 2s | Traveling arrow, 22-unit range |
-| Shotgun | 12-95 | 4s | 3-unit, 80-degree pellet fan; closer targets take more damage |
+| Machete | 25 + 7 bleed/second for 7s | 1.5s | 100 successful hits |
+| Bow | 10 + 3 bleed/second for 5s | 2s | 100 shots |
+| Shotgun | 15 / 50 / 105, wide / close / closest | 4s | 21 shots |
 | Molotov | 3/sec | 4s | Traveling bottle, 4-unit radius, 10s fire; friendly fire applies |
 
-One world unit is one tile. Sword, machete and shotgun values reflect the latest requested buffs; bow damage, machete cooldown and molotov cooldown/DOT retain their previous tuning. All values live in `src/data/weapons.ts` and `src/systems/CombatSystem.ts`. Player, traders, and workers have 100 HP; bears/wolves 50, bandits/guards 125, arsonists 75. Combat defeat opens the recovery dialog.
+One world unit is one tile. Weapon values follow the current balance update; the complete durability and gold-shop table is in [Night and balance](docs/NIGHT_AND_BALANCE.md). All values live in `src/data/weapons.ts` and `src/systems/CombatSystem.ts`. Player, traders, and workers have 100 HP; bears/wolves 50, bandits/guards 125, arsonists 75. Combat defeat opens the recovery dialog.
 
 Fire converts timber nodes and standing trees into gatherable charcoal after ten seconds. Charcoal adds 30 base fuel seconds; wood adds 10. Both use the level-adjusted burn interval, and F consumes charcoal first. A whiteout starts after 90 seconds, lasts 55 seconds, triples fuel consumption, reduces visibility, and increases enemy detection distance. Clear intervals thereafter last 90-150 seconds. Furnace reinforcement and chimney models change at every fifth furnace level through level 50; heat radius stops growing after level 20. See the [complete upgrade cost table](docs/FURNACE_UPGRADES.md).
 
@@ -212,10 +213,12 @@ Left click assists the nearest reachable hostile within weapon reach (ranged ass
 
 Active furnace ranges heal 25 HP every three uninterrupted seconds, reduced to 10 when recently attacked inside heat; three damage-free seconds restore 25. Owned heat zones also double damage taken by hostiles and halve their movement, alongside entry damage, 12 HP/second burning, and player protection. New worlds and respawns grant a 100-metre safe area for 12 simulation seconds, anchored at the spawn point. Hostiles are kept outside and a HUD countdown shows protection while inside. The existing five-second respawn immunity is retained. New expeditions reset every upgrade and start unarmed.
 
-Harvesting takes one second; standing trees shake/fall into finite logs, and large boulders split into smaller stones. Traders and guards shelter when hurt. Workers shelter below 50 HP and recover inside their hut. Built huts have 1,000 HP, the free starting hut has 500 HP, and storehouses 2,000; destroyed structures become quarter-health ruins, then finite salvage. Buildings are bleed-immune. Village supply piles roll 50% food, 40% materials and 10% random weapons. See [expansion rules and verification](docs/EXPANSION.md).
+Harvesting takes 0.3s for wood, 0.7s for stone, 1.1s for metal and 2.2s for gold; standing trees shake/fall into finite logs, and large boulders split into smaller stones. Traders and guards shelter when hurt. Workers shelter below 50 HP and recover inside their hut. Built huts have 1,000 HP, the free starting hut has 500 HP, and storehouses 2,000; destroyed structures become quarter-health ruins, then finite salvage. Buildings are bleed-immune. Village supply piles roll 50% food, 40% materials and 10% random weapons. See [expansion rules and verification](docs/EXPANSION.md).
 
 Wilderness update: wolves hunt in packs of 3-12, bears deal 15/30 damage and stun, and wading causes persistent hypothermia. E toggles inventory; M closes inventory or toggles the map. Larger block typography and status cards show current effects. See [wilderness rules and validation](docs/WILDERNESS.md).
 
 The latest [camp progression update](docs/CAMP_PROGRESSION.md) adds the T upgrade HUD, fifty furnace levels, construction, mixed-resource workers, stronger hills, hypothermic lakes and a forest/elevation map. Generation 1-4 saves retain their original terrain.
 
 The [spawn and visibility update](docs/SPAWN_VISIBILITY.md) documents the starting camp, spawn protection, terrain-following warmth aura, bridge rails and stronger whiteout fog. Existing full saves preserve their saved fuel, buildings and protection countdown.
+
+The [hunger, City Store and night update](docs/NIGHT_AND_BALANCE.md) adds movement-based hunger, revised weapons, finite healing campfires, shared-storage salvage, worker HP inspection and world-distance visibility. Day and night alternate every ten simulation minutes; storm fog stays thick at every zoom level.

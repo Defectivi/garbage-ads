@@ -53,7 +53,7 @@ test('river identifies wet crossings and dry bridges; valid fishing yields consu
   const game = new Game(newState(worldSpec(42))); game.paused = false; const r = game.world.river(12, 48); assert(game.world.isWater(12, r.center)); assert(!game.world.isWater(0, game.world.river(0, 48).center));
   const spot = game.world.around({ x: 12, z: r.center }, 1).flatMap(c => c.fishing)[0]; assert(spot); game.state.player.x = spot.x; game.state.player.z = spot.z;
   const old = game.state.inventory.fish; assert(game.startFishing(spot).ok); for (let i = 0; i < 42; i++) game.update(.1); assert(game.state.inventory.fish > old); assert(game.state.changes.fishing[spot.id] > 0);
-  game.state.player.warmth = 40; assert(game.eat('fish').ok); assert.equal(game.state.player.warmth, 75);
+  game.state.player.warmth = 40; assert(game.eat('fish').ok); assert.equal(game.state.player.warmth, 40); assert.equal(game.state.player.foodCooldown,3);
 });
 test('generated ruins support persistent chest salvage and real NPC barter', () => {
   const game = new Game(newState(worldSpec(42))), r = game.world.ruin(0, 0)!; game.state.player = { ...game.state.player, ...r.container }; assert(game.search(r).ok); assert(!game.search(r).ok);

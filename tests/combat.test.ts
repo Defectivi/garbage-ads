@@ -13,12 +13,12 @@ test('weapon cadence, 100 uses, infinite ammo and HP definitions',()=>{
  for(const type of WEAPON_IDS){g.state.combat.weapons=[{id:'test',type,uses:100}];g.state.combat.equipped='test';g.state.combat.cooldown=0;assert(g.combat.attack({x:0,z:10}));assert.equal(g.state.combat.cooldown,WEAPONS[type].cooldown);assert.equal(g.state.combat.weapons[0].uses,WEAPONS[type].type==='melee'?100:99);assert(!g.combat.attack({x:0,z:10}));g.state.combat.cooldown=0;g.state.combat.weapons[0].uses=0;assert(g.combat.attack({x:0,z:10}));assert.equal(g.state.combat.projectiles.at(-1)!.weapon,'punch');}
  assert.deepEqual(ACTOR_HP,{polar_bear:50,wolf:50,bandit:125,arsonist:75,guard:125}); assert(shotgunDamage(.5)>shotgunDamage(2.9));
 });
-test('machete applies 25 damage and exactly ten bleed ticks and guard retaliation persists',()=>{
+test('machete applies 25 damage and exactly seven 7-damage bleed ticks and guard retaliation persists',()=>{
  const g=isolated();g.state.furnaces[0].fuel=0;const a=Object.values(g.state.combat.actors).find(a=>a.type==='guard')!; a.hp=125;a.x=0;a.z=5.5; a.weapon=null;
  g.combat.fireWeapon('player',g.state.player,a,'machete');for(let i=0;i<6;i++)g.combat.update(.1);assert.equal(a.hp,100);assert(g.state.combat.villageAlerts.includes(a.villageId!));
  // Keep the target in the active region without AI retaliation affecting the test.
  for(let i=0;i<100;i++)g.combat.update(.1);
- assert.equal(a.hp,80);assert(!g.state.combat.statuses[a.id]); assert.deepEqual(importJSON(exportFull(g.state)),g.state);
+ assert.equal(a.hp,51);assert(!g.state.combat.statuses[a.id]); assert.deepEqual(importJSON(exportFull(g.state)),g.state);
 });
 test('molotov burns for ten seconds, converts wood and trees into gatherable charcoal',()=>{
  const g=isolated(), n=g.nodes().find(n=>n.id==='starter:wood')!;
