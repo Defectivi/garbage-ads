@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {Game} from '../src/game/Game';
-import {newState} from '../src/game/GameState';
+import {simulationState as newState} from './fixtures/state';
 import {worldSpec} from '../src/game/GameConfig';
 import {ACTOR_HP,type ActorType} from '../src/data/weapons';
 import type {Actor} from '../src/game/CombatState';

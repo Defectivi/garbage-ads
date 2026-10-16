@@ -2,7 +2,7 @@ import {villageLoot,STRUCTURE_HP} from '../src/data/settlement';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {Game} from '../src/game/Game';
-import {newState} from '../src/game/GameState';
+import {simulationState as newState} from './fixtures/state';
 import {worldSpec} from '../src/game/GameConfig';
 import {updateSurvival} from '../src/systems/SurvivalSystem';
 import {exportFull,importJSON} from '../src/systems/SaveSystem';
@@ -18,7 +18,7 @@ test('heat retains ten percent entry loss, doubles subsequent hostile damage and
  g.solids=()=>[];g.world.isWater=()=>false;const start={x:a.x,z:a.z};(g.combat as any).walk(a,{x:10,z:4},.1,1.8);const slow=Math.hypot(a.x-start.x,a.z-start.z);a.x=start.x;a.z=start.z;(g.combat as any).velocities.clear();g.state.furnaces[0].fuel=0;(g.combat as any).walk(a,{x:10,z:4},.1,1.8);assert(Math.abs(Math.hypot(a.x-start.x,a.z-start.z)-slow*2)<1e-8);
 });
 test('recovery grants five seconds of immunity including bleed, preserved by save/load',()=>{
- const g=fresh();g.state.player.hp=0;assert(g.recover());assert.equal(g.state.player.invulnerable,5);const hit=()=>g.combat.damage({...g.state.player,id:'player',kind:'player'},10,'bleed');hit();assert.equal(g.state.player.hp,100);assert.equal(importJSON(exportFull(g.state)).player.invulnerable,5);updateSurvival(g.state,4.9);hit();assert.equal(g.state.player.hp,100);updateSurvival(g.state,.1);hit();assert.equal(g.state.player.hp,95);
+ const g=fresh();g.state.player.hp=0;assert(g.recover());assert.equal(g.state.player.invulnerable,5);const hit=()=>g.combat.damage({...g.state.player,id:'player',kind:'player'},10,'bleed');hit();assert.equal(g.state.player.hp,100);assert.equal(importJSON(exportFull(g.state)).player.invulnerable,5);updateSurvival(g.state,4.9);hit();assert.equal(g.state.player.hp,100);updateSurvival(g.state,.1);hit();assert.equal(g.state.player.hp,100);updateSurvival(g.state,7);hit();assert.equal(g.state.player.hp,95);
 });
 
 test('gathering takes one second, cannot stack presses, and cancels without awarding on movement',()=>{

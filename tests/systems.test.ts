@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { balances } from '../src/data/definitions';
 import { DEFAULT_SETTINGS, worldSpec } from '../src/game/GameConfig';
-import { newState } from '../src/game/GameState';
+import {simulationState as newState} from './fixtures/state';
 import { Game } from '../src/game/Game';
 import { transact, exchange } from '../src/systems/InventorySystem';
 import { importJSON, exportFull, exportSandbox } from '../src/systems/SaveSystem';
@@ -26,7 +26,7 @@ test('full save round trip preserves negative extremes, modifications, NPC inven
 });
 test('sandbox import is clean and never restores previous positions, buildings or discoveries', () => {
   const s = newState(worldSpec(12)); s.player.x = 200; s.inventory.fish = -42; s.buildings.push({ id: 'built:1', type: 'hut', x: 8, z: 5, rotation: 0 }); s.nextId = 2; s.discovered.push('ruin:3:2'); s.changes.nodes['starter:wood'] = 0;
-  const fresh = importJSON(exportSandbox(s), 'sandbox-config'); assert.equal(fresh.inventory.fish, -42); assert.equal(fresh.player.x, 0); assert.deepEqual(fresh.buildings, []); assert.deepEqual(fresh.changes.nodes, {}); assert.deepEqual(fresh.discovered, ['home']);
+  const fresh = importJSON(exportSandbox(s), 'sandbox-config'); assert.equal(fresh.inventory.fish, -42); assert.equal(fresh.player.x, 0); assert.deepEqual(fresh.buildings.map(b=>b.id), ['starter:hut']);assert.equal(fresh.workers.length,2); assert.deepEqual(fresh.changes.nodes, {}); assert.deepEqual(fresh.discovered, ['home']);
 });
 test('invalid JSON, versions, seeds, numeric balances, IDs and structures are rejected without live mutation', () => {
   const live = newState(worldSpec(42)), baseline = exportFull(live);

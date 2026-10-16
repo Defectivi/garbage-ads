@@ -4,10 +4,11 @@ export function paintMap(canvas:HTMLCanvasElement,game:Game,known:Ruin[]){
  const ctx=canvas.getContext('2d')!,w=game.world,p=game.state.player;
  const screen=(x:number,z:number)=>({x:(x-p.x+128)*2,y:(z-p.z+128)*2});
  for(let x=0;x<512;x+=4)for(let y=0;y<512;y+=4){const wx=p.x-128+x/2,wz=p.z-128+y/2,r=w.river(wx,wz),water=w.isWater(wx,wz),height=w.height(wx,wz);
-  ctx.fillStyle=water?'#387e9b':w.spec.config.riverDensity&&r.crossing&&r.distance<r.width+1?'#b58c58':height>11?'#788586':height>6?'#aab3aa':w.biome(wx,wz)==='Pinewood'?'#c4d3bf':'#e9ece0';ctx.fillRect(x,y,4,4);
+  ctx.fillStyle=water?'#387e9b':w.bridgeAt(wx,wz)?'#b58c58':height>11?'#788586':height>6?'#aab3aa':w.biome(wx,wz)==='Pinewood'?'#c4d3bf':'#e9ece0';ctx.fillRect(x,y,4,4);
  }
  let trees=0;
  for(const c of w.around(p,Math.ceil(128/w.spec.config.chunkSize)))for(const [i,tree]of c.trees.entries()){
+  if(w.bridgeAt(tree.x,tree.z))continue;
   if(game.state.changes.terrain?.[`tree:${c.cx}:${c.cz}:${i}`]==='felled'||game.state.combat.charredTrees.includes(`tree:${c.cx}:${c.cz}:${i}`))continue;
   const at=screen(tree.x,tree.z);if(at.x<0||at.x>512||at.y<0||at.y>512)continue;ctx.fillStyle='#467465';ctx.beginPath();ctx.moveTo(at.x,at.y-3);ctx.lineTo(at.x-2.2,at.y+2);ctx.lineTo(at.x+2.2,at.y+2);ctx.fill();trees++;
  }

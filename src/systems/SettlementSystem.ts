@@ -3,7 +3,7 @@ import type { Game } from '../game/Game';
 import type { Building,Point } from '../game/GameState';
 import { BUILDINGS,RESOURCE_IDS,type Balances } from '../data/definitions';
 import type { WeaponType } from '../data/weapons';
-import { villageLoot,STRUCTURE_HP,SALVAGE_AMOUNT } from '../data/settlement';
+import { villageLoot,structureMaxHP,SALVAGE_AMOUNT } from '../data/settlement';
 import { transact,type Result } from './InventorySystem';
 import { distance } from '../world/WorldManager';
 import { route } from './Navigation';
@@ -19,14 +19,14 @@ export class SettlementSystem {
     const g=this.game;
     return [...g.state.buildings,...g.state.furnaces.filter(f=>!g.state.buildings.some(b=>b.id===f.id)).map(f=>({...f,type:'furnace' as const,rotation:0})),...g.world.settlements(point,radius).flatMap(r=>Array.from({length:r.houses},(_,i)=>({id:`house:${r.id}:${i}`,type:'hut' as const,x:r.x+(i-1)*6,z:r.z-3,rotation:i%2?.1:-.1,generated:true,initialRuin:!r.id.startsWith('village:')&&i%2===0})))];
   }
-  integrity(structure:Structure):Integrity{return this.game.state.changes.structures?.[structure.id]??{hp:STRUCTURE_HP[structure.type]*(structure.initialRuin?.25:1),stage:structure.initialRuin?'ruin':'intact'};}
+  integrity(structure:Structure):Integrity{return this.game.state.changes.structures?.[structure.id]??{hp:structureMaxHP(structure)*(structure.initialRuin?.25:1),stage:structure.initialRuin?'ruin':'intact'};}
   intact(id:string){return this.game.state.changes.structures?.[id]?.stage===undefined||this.game.state.changes.structures[id].stage==='intact';}
   damage(id:string,amount:number,point:Point):number{
     const structure=this.structures(point,2).find(b=>b.id===id);if(!structure)return 0;
     const old=this.integrity(structure);if(old.stage==='gone')return 0;
     const lost=Math.min(old.hp,amount),next:Integrity={...old,hp:Math.max(0,old.hp-amount)};
     if(next.hp===0){
-      if(old.stage==='intact'){next.stage='ruin';next.hp=STRUCTURE_HP[structure.type]*.25;}
+      if(old.stage==='intact'){next.stage='ruin';next.hp=structureMaxHP(structure)*.25;}
       else{next.stage='gone';const n=SALVAGE_AMOUNT[structure.type];const loot=this.game.state.changes.groundLoot??(this.game.state.changes.groundLoot={});loot[`salvage:${id}`]={id:`salvage:${id}`,x:structure.x,z:structure.z,resources:{wood:n,stone:n}};}
       this.game.revision++;this.paths.clear();
     }

@@ -1,3 +1,4 @@
+import {isolateStartingCamp} from './browser-state.mjs';
 import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -11,7 +12,7 @@ try {
   page.on('pageerror', e => errors.push(e.message));
   await page.goto('http://localhost:5173');
   assert.equal(await page.title(), 'FYWS: Frostbound');
-  await page.locator('#seed').fill('0'); await page.locator('#new-world').click();
+  await page.locator('#seed').fill('0'); await page.locator('#new-world').click();await isolateStartingCamp(page);
   await page.waitForFunction(() => window.__frostbound.game.state.elapsed > .2);
   assert.match(await page.locator('#seed-hud').textContent(), /SEED 0 \/ GEN 5/);
   await page.waitForFunction(() => window.__frostbound.renderer.chunks.has('2,0'));
@@ -52,7 +53,7 @@ try {
 
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   mobile.on('pageerror', e => errors.push(e.message));
-  await mobile.goto('http://localhost:5173'); await mobile.locator('#enter-world').tap();
+  await mobile.goto('http://localhost:5173'); await mobile.locator('#enter-world').tap();await isolateStartingCamp(mobile);
   await mobile.waitForFunction(() => window.__frostbound.game.state.elapsed > .1);
   const cdp = await mobile.context().newCDPSession(mobile);
   const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(p => ({ ...p, radiusX: 3, radiusY: 3, force: 1 })) });

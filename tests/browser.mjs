@@ -1,3 +1,4 @@
+import {isolateStartingCamp} from './browser-state.mjs';
 import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -7,7 +8,7 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const errors = []; page.on('pageerror', e => errors.push(e.stack)); mkdirSync('test-results', { recursive: true });
 try {
   await page.goto('http://localhost:5173'); await page.locator('#seed').fill('42'); await page.screenshot({ path: 'test-results/v2-menu.png' });
-  await page.locator('#new-world').click(); await page.waitForTimeout(700);
+  await page.locator('#new-world').click();await isolateStartingCamp(page); await page.waitForTimeout(700);
   // This suite exercises world/economy flows; combat and NPC sheltering have dedicated suites.
   await page.evaluate(()=>{const g=window.__frostbound.game;g.combat.ensureEncounters();for(const a of Object.values(g.state.combat.actors))a.hp=0;g.combat.ensureEncounters=()=>{};});
   const before = await page.evaluate(() => ({ ...window.__frostbound.game.state.player }));
@@ -64,14 +65,14 @@ try {
   await page.locator('#import-text').fill(JSON.stringify(config)); await page.locator('#validate-import').click(); assert.equal(await page.evaluate(() => window.__frostbound.game.state.world.seed), 42);
   await page.locator('#replace-world').click();
   const fresh = await page.evaluate(() => { const s = window.__frostbound.game.state; return { wood: s.inventory.wood, gold: s.inventory.gold, x: s.player.x, buildings: s.buildings.length, discovered: s.discovered }; });
-  assert.equal(fresh.wood, -5000); assert.equal(fresh.gold, 9999999); assert.equal(fresh.x, 0); assert.equal(fresh.buildings, 0); assert.deepEqual(fresh.discovered, ['home']);
+  assert.equal(fresh.wood, -5000); assert.equal(fresh.gold, 9999999); assert.equal(fresh.x, 0); assert.equal(fresh.buildings, 1); assert.deepEqual(fresh.discovered, ['home']);
   await page.locator('#settings').click(); await page.locator('#debt').check(); await page.locator('#difficulty').selectOption('survival'); await page.locator('#apply-settings').click(); assert.equal(await page.evaluate(() => window.__frostbound.game.state.settings.allowDebt), true);
   await page.locator('#menu').click(); const elapsed = await page.evaluate(() => window.__frostbound.game.state.elapsed); await page.waitForTimeout(200); assert.equal(await page.evaluate(() => window.__frostbound.game.state.elapsed), elapsed); await page.locator('#resume').click();
   // Actual touch events in a separate mobile browser context.
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }); mobile.on('pageerror', e => errors.push(e.stack));
-  await mobile.goto('http://localhost:5173'); await mobile.locator('#enter-world').tap(); const j = await mobile.locator('#joystick').boundingBox();
+  await mobile.goto('http://localhost:5173'); await mobile.locator('#seed').fill('42');await mobile.locator('#new-world').tap();await isolateStartingCamp(mobile);await mobile.waitForFunction(()=>window.__frostbound.renderer.chunks.size===25&&window.__frostbound.game.state.elapsed>.1);await mobile.evaluate(()=>{const g=window.__frostbound.game;for(const a of Object.values(g.state.combat.actors))a.hp=0;g.combat.ensureEncounters=()=>{};});const j = await mobile.locator('#joystick').boundingBox();
   const position = await mobile.evaluate(() => ({ ...window.__frostbound.game.state.player }));
-  await mobile.locator('#joystick').dispatchEvent('pointerdown', { pointerId: 1, clientX: j.x + j.width / 2 + 28, clientY: j.y + j.height / 2 }); await mobile.waitForTimeout(350); await mobile.locator('#joystick').dispatchEvent('pointerup', { pointerId: 1 });
+  const cdp=await mobile.context().newCDPSession(mobile),center={x:j.x+j.width/2,y:j.y+j.height/2,id:1};await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[center]});await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{...center,x:center.x+28}]});await mobile.waitForTimeout(350);await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
   const moved = await mobile.evaluate(() => window.__frostbound.game.state.player); assert(Math.hypot(moved.x - position.x, moved.z - position.z) > .3);
   await mobile.locator('#inventory').tap(); await mobile.locator('.close-modal').tap(); await mobile.locator('#build').tap(); await mobile.locator('[data-building="hut"]').tap(); await mobile.locator('#cancel-building').tap();
   await mobile.screenshot({ path: 'test-results/v2-mobile.png' }); await mobile.setViewportSize({ width: 844, height: 390 }); await mobile.waitForTimeout(250); await mobile.screenshot({ path: 'test-results/v2-landscape.png' });

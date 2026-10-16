@@ -50,10 +50,10 @@ Required `startingState` fields:
 | --- | --- |
 | `resources` | Complete carried balance object |
 | `stockpile` | Complete settlement balance object |
-| `furnace` | `{ "level": 1, "fuel": 100 }`; level integer 1–25, fuel 0–3600 seconds |
+| `furnace` | `{ "level": 1, "fuel": 60 }`; level integer 1-50, fuel 0-3600 seconds |
 | `settings` | Complete settings object above |
 
-Import constructs a **new** home furnace, fresh player at `(0,4)` with 100 warmth, empty building/worker lists, empty mutable-world changes, and only home discovered. It then applies the specified balances, furnace and settings. It does not inspect an earlier world to fill missing fields. Unknown extra fields do not restore previous state. Export the result as a full save to preserve later play.
+Import constructs a **new** home furnace, fresh player at `(0,4)` with 100 warmth, a completed 500-HP starting hut and two workers, empty mutable-world changes, and only home discovered. It then applies the specified balances, furnace and settings. It does not inspect an earlier world to fill missing fields. Unknown extra fields do not restore previous state. Export the result as a full save to preserve later play.
 
 ## `mode: "full-save"`
 
@@ -75,7 +75,7 @@ Required `state` fields:
 | `nextId` | Integer counter greater than existing building numbers |
 | `settings` | Complete settings object |
 
-Every coordinate must be finite and within ±1,000,000. IDs must be short safe alphanumeric/colon/comma/underscore/dash strings, with no duplicate entity/furnace IDs or prototype-property keys. Each worker references a hut; one worker per hut is supported. A built furnace must have matching fuel state and location. Worker load is integer 0–3; progress is 0–100; states are `seeking`, `gathering`, `returning`, `blocked`. A sourceId is a stable node ID or null. Unsupported or inaccessible sources are handled by the simulation's search/blocked states.
+Every coordinate must be finite and within ±1,000,000. IDs must be short safe alphanumeric/colon/comma/underscore/dash strings, with no duplicate entity/furnace IDs or prototype-property keys. Each worker references a hut; up to two workers per completed hut are supported (older one-worker huts remain valid). A built furnace must have matching fuel state and location. Worker load is integer 0–3; progress is 0–100; states are `seeking`, `gathering`, `returning`, `blocked`. A sourceId is a stable node ID or null. Unsupported or inaccessible sources are handled by the simulation's search/blocked states.
 
 Static terrain, trees and unmodified node amounts are regenerated; they are not serialized as meshes. Deltas above restore modifications regardless of render/cache eviction. Pending fishing animations, camera position and UI dialogs are transient; cancelling/closing them does not apply a catch or a trade.
 
@@ -115,3 +115,5 @@ Format 2 additionally accepts optional player `invulnerable` (0-5s) and `heatTim
 Wilderness optional fields: actors can be `wolf` (50 HP) and may carry `pursuitId` and `retreating`; statuses may additionally contain `wolfBleed` (0-12 seconds) and `wolfTick` (0-1). Player `stunned` accepts 0-3 seconds, and `hypothermia` contains `level` (1 or 2), `waterTime` (0-5) and `tick` (0-3). Hypothermic imports cap current HP at 90. Older records remain valid. These effects persist across full saves and reset on new worlds/respawn.
 
 Camp progression: furnace levels accept 1-50. Player `recentDamage` (0-3 seconds) and actor `heatBurn` (0-1) persist combat-healing/burning timers. Huts may have `construction` (0-10 seconds), and cannot contain workers until completion. Completed huts support up to two workers (legacy one-worker saves remain valid); each worker optionally stores `resource` (`wood`, `stone`, `fish`) for typed deliveries. Worker fishing consumes the same persistent `changes.fishing` availability as player fishing. Generation 5 adds independently seeded lakes and taller hills; prior terrain generations remain supported.
+
+Spawn/visibility update (format remains 2): optional `state.spawnProtection` contains finite `{x,z,remaining}` with `remaining` in 0-12 seconds. The fixed radius is 100 world units. Full saves preserve the remaining simulation time; an absent field grants no new protection on load. Fresh worlds/sandbox imports and recovery create a new zone. Full-save imports keep their saved fuel/building/worker arrays without adding a starter camp. The reserved `starter:hut` ID has 500 maximum HP (125 as a ruin); ordinary huts retain 1000/250. New worlds start with 60 fuel units, a completed starter hut and two workers.

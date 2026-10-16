@@ -32,7 +32,7 @@ The built application is in `dist/`; preview serves it at **http://localhost:417
 
 1. Enter a **world seed from 0 to 65535**, randomize it, or enter the current world.
 2. **F** starts a one-second gathering action within three units. Hold it to repeatedly gather timber, stone, or metal. Guaranteed wood and stone sources are beside home.
-3. Approach a furnace and press F to burn **one wood for 10 base seconds or one charcoal for 30** (charcoal is selected first). Heating rings indicate actual warmth recovery. Initial fuel lasts 100 seconds.
+3. Approach a furnace and press F to burn **one wood for 10 base seconds or one charcoal for 30** (charcoal is selected first). A bold ring and animated flame-like aura show the active warmth area. New worlds start with 60 seconds of fuel and a completed 500-HP worker hut with two workers.
 4. Open **Build**. A **hut costs 20 wood**, takes 10 simulation seconds to build, and recruits two workers for wood, stone and fish. Press **T** near a furnace to upgrade; the HUD shows costs and shortages. Storehouses, trail shelters, and outpost furnaces have distinct functional effects. Preview, rotate, confirm or cancel construction.
 5. The map gives a rumour of a generated settlement. Follow it, search the chest, and interact with the trader. Gold purchases and direct resource barter are supported.
 6. Follow a riverbank to a **blue fishing post**. Interact and remain still for four seconds to catch fish. Fish can restore warmth or be traded.
@@ -73,11 +73,11 @@ Definitions live in `src/data/definitions.ts`: wood, stone, meat, fish, metal, g
 
 Each resource balance defaults to the inclusive integer range **−9,999,999 to 9,999,999**. Imports may contain negative values, including the extremes. By default, a cost cannot take its account below zero. Enable **Allow resource debt** to permit that behavior, including trading counterparties. The central transaction system validates every account before committing a cost, transfer, or exchange. Limits and finite integer arithmetic remain enforced with debt enabled.
 
-Hut workers seek reachable wood nodes within 26 units of their hut, use obstacle-aware routes, chop one unit every two seconds, carry up to three, and physically return to the nearest storage/furnace delivery area. Wood enters the shared stockpile **on delivery**. Depleted, inaccessible, or full-destination scenarios pause production. Workers do not automatically feed the fire. Simulation continues for constructed camps outside the rendered area and pauses with menus or a hidden tab.
+Hut workers seek reachable wood, stone and fish within 26 units of their hut, use obstacle-aware routes, carry up to three, and physically return to the nearest storage/furnace delivery area. Resources enter the shared stockpile **on delivery**. Depleted, inaccessible, or full-destination scenarios pause production. Workers do not automatically feed the fire. Simulation continues for constructed camps outside the rendered area and pauses with menus or a hidden tab.
 
-The **30-wood furnace expansion** adds **8 units** of heat radius in v2 world coordinates and improves fuel efficiency by 10% of base duration per level. Level 1 radius is 12; supported levels are 1–25. The conversion from the much larger v1 canvas coordinates is deliberate. Extinguished furnaces provide no heat at any level. Outpost furnaces start empty. Trail shelters recover warmth within five units without fuel.
+The first furnace upgrade costs **30 wood**; later costs use all materials. Each level adds 0.2 seconds to the fuel consumption interval. Level 1 radius is 12 and grows by 8 units per level through level 20; upgrades continue through level 50. Extinguished furnaces provide no heat at any level. Outpost furnaces start empty. Trail shelters recover warmth within five units without fuel.
 
-Rivers are carved valleys with visible banks, water, and timber bridges every 64 east/west units. Deep water blocks movement; bridges are explicit crossings. Fish availability and deterministic catches are persisted per location. Chest loot, mined nodes, discoveries, NPC stock, buildings, workers, and furnace modifications survive leaving and reloading chunks.
+Rivers are carved valleys with visible banks, water, and timber bridges every 64 east/west units. Water is crossable with hypothermia penalties; the visible bridge deck stays dry and its rails prevent sideways falls. Fish availability and deterministic catches are persisted per location. Chest loot, mined nodes, discoveries, NPC stock, buildings, workers, and furnace modifications survive leaving and reloading chunks.
 
 ## World generation
 
@@ -210,10 +210,12 @@ Left click assists the nearest reachable hostile within weapon reach (ranged ass
 
 ## Furnace recovery and settlement expansion
 
-Active furnace ranges heal 25 HP every three uninterrupted seconds, reduced to 10 when recently attacked inside heat; three damage-free seconds restore 25. Owned heat zones also double damage taken by hostiles and halve their movement, alongside entry damage, 12 HP/second burning, and player protection. Respawning grants five seconds of immunity. New expeditions reset every upgrade and start unarmed.
+Active furnace ranges heal 25 HP every three uninterrupted seconds, reduced to 10 when recently attacked inside heat; three damage-free seconds restore 25. Owned heat zones also double damage taken by hostiles and halve their movement, alongside entry damage, 12 HP/second burning, and player protection. New worlds and respawns grant a 100-metre safe area for 12 simulation seconds, anchored at the spawn point. Hostiles are kept outside and a HUD countdown shows protection while inside. The existing five-second respawn immunity is retained. New expeditions reset every upgrade and start unarmed.
 
-Harvesting takes one second; standing trees shake/fall into finite logs, and large boulders split into smaller stones. Traders and guards shelter when hurt. Workers shelter below 50 HP and recover inside their hut. Huts have 1,000 HP and storehouses 2,000; destroyed structures become quarter-health ruins, then finite salvage. Buildings are bleed-immune. Village supply piles roll 50% food, 40% materials and 10% random weapons. See [expansion rules and verification](docs/EXPANSION.md).
+Harvesting takes one second; standing trees shake/fall into finite logs, and large boulders split into smaller stones. Traders and guards shelter when hurt. Workers shelter below 50 HP and recover inside their hut. Built huts have 1,000 HP, the free starting hut has 500 HP, and storehouses 2,000; destroyed structures become quarter-health ruins, then finite salvage. Buildings are bleed-immune. Village supply piles roll 50% food, 40% materials and 10% random weapons. See [expansion rules and verification](docs/EXPANSION.md).
 
 Wilderness update: wolves hunt in packs of 3-12, bears deal 15/30 damage and stun, and wading causes persistent hypothermia. E toggles inventory; M closes inventory or toggles the map. Larger block typography and status cards show current effects. See [wilderness rules and validation](docs/WILDERNESS.md).
 
 The latest [camp progression update](docs/CAMP_PROGRESSION.md) adds the T upgrade HUD, fifty furnace levels, construction, mixed-resource workers, stronger hills, hypothermic lakes and a forest/elevation map. Generation 1-4 saves retain their original terrain.
+
+The [spawn and visibility update](docs/SPAWN_VISIBILITY.md) documents the starting camp, spawn protection, terrain-following warmth aura, bridge rails and stronger whiteout fog. Existing full saves preserve their saved fuel, buildings and protection countdown.

@@ -1,4 +1,4 @@
-import { STRUCTURE_HP } from '../data/settlement';
+import { structureMaxHP } from '../data/settlement';
 import { balances, BUILDINGS, RESOURCE_IDS, type Balances, type BuildingType } from '../data/definitions';
 import { GENERATION_VERSION, type Settings, type WorldSpec } from '../game/GameConfig';
 import { newState, type GameState, type Point } from '../game/GameState';
@@ -95,6 +95,7 @@ export function importJSON(text: string, expectedMode?: 'full-save' | 'sandbox-c
   }
   const raw = record(doc.state, 'state'), settings = validateSettings(raw.settings), player = record(raw.player, 'player'), changes = record(raw.changes, 'changes');
   const state = newState(world, settings);
+  delete state.spawnProtection;if(raw.spawnProtection!==undefined){const zone=record(raw.spawnProtection,'spawnProtection');state.spawnProtection={...point(zone,'spawnProtection'),remaining:num(zone.remaining,'spawnProtection.remaining',0,12)};}
   state.player = { ...point(player, 'player'), warmth: num(player.warmth, 'warmth', 0, 100), hp: num(player.hp, 'hp', 0, 100), heading: num(player.heading, 'heading', -1000000, 1000000), ...(player.invulnerable===undefined?{}:{invulnerable:num(player.invulnerable,'invulnerable',0,5)}), ...(player.heatTime===undefined?{}:{heatTime:num(player.heatTime,'heatTime',0,3)}),...(player.stunned===undefined?{}:{stunned:num(player.stunned,'stunned',0,3)}),...(player.recentDamage===undefined?{}:{recentDamage:num(player.recentDamage,'recentDamage',0,3)}) };
   if(player.hypothermia!==undefined){const h=record(player.hypothermia,'hypothermia');state.player.hypothermia={level:num(h.level,'hypothermia.level',1,2,true) as 1|2,waterTime:num(h.waterTime,'waterTime',0,5),tick:num(h.tick,'hypothermia.tick',0,3)};state.player.hp=Math.min(90,state.player.hp);}
   state.combat = validateCombat(raw.combat);
@@ -128,10 +129,10 @@ export function importJSON(text: string, expectedMode?: 'full-save' | 'sandbox-c
     const furnace=state.furnaces.find(f=>f.id===key);if(furnace)return{...furnace,type:'furnace' as const};
     const match=/^house:(village:[a-z]+|ruin:-?\d+:-?\d+):(\d+)$/.exec(key);if(!match)return undefined;
     const settlement=match[1].startsWith('village:')?worldManager.villages().find(v=>v.id===match[1]):worldManager.ruin(Number(match[1].split(':')[1]),Number(match[1].split(':')[2]));
-    return settlement&&Number(match[2])<settlement.houses?{type:'hut' as const}:undefined;
+    return settlement&&Number(match[2])<settlement.houses?{id:key,type:'hut' as const}:undefined;
   };
   if(changes.structures!==undefined){const structures=record(changes.structures,'structures');if(Object.keys(structures).length>10000)throw new Error('Too many structure changes.');for(const [key,value]of Object.entries(structures)){
-    id(key,'structure.id');const structure=resolveStructure(key);if(!structure)throw new Error('Unknown structure.');const raw=record(value,'integrity');if(!['intact','ruin','gone'].includes(String(raw.stage)))throw new Error('Invalid structure stage.');const stage=raw.stage as 'intact'|'ruin'|'gone',hp=num(raw.hp,'structure.hp',0,STRUCTURE_HP[structure.type]);if(stage==='gone'&&hp!==0||stage!=='gone'&&hp===0||stage==='ruin'&&hp>STRUCTURE_HP[structure.type]*.25)throw new Error('Invalid structure HP for its stage.');state.changes.structures![key]={stage,hp};
+    id(key,'structure.id');const structure=resolveStructure(key);if(!structure)throw new Error('Unknown structure.');const raw=record(value,'integrity');if(!['intact','ruin','gone'].includes(String(raw.stage)))throw new Error('Invalid structure stage.');const stage=raw.stage as 'intact'|'ruin'|'gone',hp=num(raw.hp,'structure.hp',0,structureMaxHP(structure));if(stage==='gone'&&hp!==0||stage!=='gone'&&hp===0||stage==='ruin'&&hp>structureMaxHP(structure)*.25)throw new Error('Invalid structure HP for its stage.');state.changes.structures![key]={stage,hp};
   }}
   if(changes.refuges!==undefined){const refuges=record(changes.refuges,'refuges');if(Object.keys(refuges).length>12000)throw new Error('Too many sheltering NPCs.');for(const[key,value]of Object.entries(refuges)){
     id(key,'refuge.npc');const npcKey=key.startsWith('npc:')?key.slice(4):'',ruin=/^ruin:(-?\d+):(-?\d+)$/.exec(npcKey),knownNpc=worldManager.villages().some(v=>v.id===npcKey)||!!ruin&&!!worldManager.ruin(Number(ruin[1]),Number(ruin[2]));if(!state.workers.some(w=>w.id===key)&&!knownNpc&&state.combat.actors[key]?.type!=='guard')throw new Error('Unknown sheltered NPC.');const raw=record(value,'refuge'),houseId=id(raw.houseId,'houseId');if(!resolveStructure(houseId))throw new Error('Shelter does not exist.');if(!['fleeing','hidden','returning'].includes(String(raw.phase)))throw new Error('Invalid refuge phase.');state.changes.refuges![key]={...point(raw,'refuge'),houseId,homeX:num(raw.homeX,'homeX',-1e6,1e6),homeZ:num(raw.homeZ,'homeZ',-1e6,1e6),remaining:num(raw.remaining,'refuge.remaining',0,12),phase:raw.phase as 'fleeing'|'hidden'|'returning'};

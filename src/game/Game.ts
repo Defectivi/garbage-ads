@@ -1,3 +1,4 @@
+import {beginSpawnProtection} from '../systems/SpawnProtection';
 import {furnaceCost,MAX_FURNACE_LEVEL,MAX_RADIUS_LEVEL} from '../data/furnaces';
 import {movementMultiplier,updateExposure} from '../systems/StatusSystem';
 import { SettlementSystem } from '../systems/SettlementSystem';
@@ -42,14 +43,14 @@ export class Game {
   nodeResource(node: Node): Resource { return this.state.combat.charredNodes.includes(node.id) ? 'charcoal' : node.resource; }
   nodesInChunk(chunk: Chunk): Node[] {
     const terrain=this.state.changes.terrain??{};
-    const nodes=chunk.nodes.filter(n=>this.state.world.generationVersion<4||!this.world.villages().some(v=>distance(v,n)<15)).flatMap((n):Node[]=>{
+    const nodes=chunk.nodes.filter(n=>!this.state.buildings.some(b=>b.id==='starter:hut'&&distance(b,n)<3.5)).filter(n=>!this.world.bridgeAt(n.x,n.z)).filter(n=>this.state.world.generationVersion<4||!this.world.villages().some(v=>distance(v,n)<15)).flatMap((n):Node[]=>{
       const large=n.resource==='stone'&&!n.id.startsWith('starter:')&&derive(this.state.world.seeds.resources,n.id)%3===0;
       if(!large)return[n];
       if(terrain[n.id]==='broken')return Array.from({length:3},(_,i)=>({...n,id:`fragment:${n.id}:${i}`,x:n.x+Math.cos(i*2.1)*.6,z:n.z+Math.sin(i*2.1)*.6,amount:Math.floor(this.nodeRemaining(n)/3)+(i<this.nodeRemaining(n)%3?1:0),radius:.4,kind:'fragment' as const}));
       return[{...n,kind:'boulder',radius:1.7}];
     });
     return [...nodes,...chunk.trees.flatMap((tree,i):Node[]=>{
-      const id=`tree:${chunk.cx}:${chunk.cz}:${i}`;
+      const id=`tree:${chunk.cx}:${chunk.cz}:${i}`;if(this.world.bridgeAt(tree.x,tree.z))return[];
       if(this.state.combat.charredTrees.includes(id))return[{...tree,id:`charcoal:${id}`,resource:'charcoal',amount:3,radius:.4}];
       if(terrain[id]==='felled')return[{...tree,id:`log:${id}`,resource:'wood',amount:3+Math.floor(tree.scale*2),radius:.7,kind:'log'}];
       return[{...tree,id,resource:'wood',amount:1,radius:.38*tree.scale,kind:'tree',scale:tree.scale}];
@@ -57,7 +58,7 @@ export class Game {
   }
   nodes() { return this.world.around(this.state.player).flatMap(chunk => this.nodesInChunk(chunk)); }
   solids(point: Point) {
-    const trees = this.world.around(point).flatMap(c => c.trees.flatMap((t, i) => (this.state.combat.charredTrees.includes(`tree:${c.cx}:${c.cz}:${i}`)||this.state.changes.terrain?.[`tree:${c.cx}:${c.cz}:${i}`]==='felled') ? [] : [{ ...t, radius: .38 * t.scale }]));
+    const trees = this.world.around(point).flatMap(c => c.trees.flatMap((t, i) => (this.world.bridgeAt(t.x,t.z)||this.state.combat.charredTrees.includes(`tree:${c.cx}:${c.cz}:${i}`)||this.state.changes.terrain?.[`tree:${c.cx}:${c.cz}:${i}`]==='felled') ? [] : [{ ...t, radius: .38 * t.scale }]));
     const ruins=this.world.settlements(point).flatMap(r=>[...(this.npc(r).hp>0&&this.settlement.refuge(`npc:${r.id}`)?.phase!=='hidden'?[{id:`npc:${r.id}`,...this.settlement.position(`npc:${r.id}`,r.trader),radius:.5}]:[]),{...r.container,radius:.65}]);
     const rocks=this.world.around(point).flatMap(c=>this.nodesInChunk(c)).filter(n=>n.kind==='boulder'&&this.nodeRemaining(n)>0).map(n=>({...n,radius:1.45}));
     return [...trees,...rocks,...ruins,...this.settlement.structures(point).filter(b=>this.settlement.integrity(b).stage!=='gone').map(b=>({...b,radius:BUILDINGS[b.type].radius}))];
@@ -68,6 +69,11 @@ export class Game {
       if('id' in s&&s.id===ignoreId)continue;
       const d = Math.hypot(x - s.x, z - s.z), min = s.radius + radius;
       if (d < min) { x = s.x + (d ? (x - s.x) / d : 1) * min; z = s.z + (d ? (z - s.z) / d : 0) * min; }
+    }
+    const bridge=this.world.bridgeAt(point.x,point.z)??this.world.bridgeAt(x,z);
+    if(bridge&&Math.abs(point.z-bridge.z)<bridge.halfLength-.4&&Math.abs(z-bridge.z)<bridge.halfLength-.4){
+      const oldSide=point.x-bridge.x;if(Math.abs(oldSide)<=bridge.halfWidth)x=bridge.x+Math.max(-2.3+radius,Math.min(2.3-radius,x-bridge.x));
+      else if(Math.abs(x-bridge.x)<2.3+radius)x=bridge.x+Math.sign(oldSide)*(2.3+radius);
     }
     point.x = x; point.z = z;
   }
@@ -153,6 +159,7 @@ export class Game {
     if(!spawn){this.notify('No clear recovery spot near this furnace. Return to Home to save your progress, or start a new world.');return false;}
     for(const account of [this.state.inventory,this.state.stockpile])for(const resource of RESOURCE_IDS)if(account[resource]>0)account[resource]=Math.floor(account[resource]/2);
     this.state.player={...spawn,heading:0,warmth:100,hp:100,invulnerable:5,heatTime:0};delete this.state.combat.statuses.player;
+    beginSpawnProtection(this.state);this.combat.clearSpawnZone();
     this.fishing=undefined;this.gathering=undefined;this.stopMovement();this.notify('Recovered at your furnace. Half of carried and stored supplies were lost.');return true;
   }
   eat(resource: 'fish' | 'meat'): Result {

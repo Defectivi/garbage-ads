@@ -9,6 +9,7 @@ export interface Worker extends Point { id: string; hutId: string; hp: number; s
 export interface NPCState { inventory: Balances; hp: number }
 export interface GameState {
   world: WorldSpec;
+  spawnProtection?:Point & {remaining:number};
   respawnFurnaceId?: string;
   player: Point & { warmth: number; heading: number; hp: number; invulnerable?:number; heatTime?:number; recentDamage?:number; stunned?:number; hypothermia?:{level:1|2;waterTime:number;tick:number} };
   combat: CombatState;
@@ -18,7 +19,7 @@ export interface GameState {
   discovered: string[]; elapsed: number; nextId: number; settings: Settings;
 }
 export function newState(world: WorldSpec, settings: Partial<Settings> = {}): GameState {
-  return { world: structuredClone(world), player: { x: 0, z: 4, warmth: 100, heading: 0, hp: 100 }, combat: freshCombat(), inventory: balances({ wood: 12, fish: 3 }), stockpile: balances(), furnaces: [{ id: 'home', x: 0, z: 0, fuel: 100, charcoal: 0, level: 1 }], buildings: [], workers: [], changes: { nodes: {}, containers: [], fishing: {}, npcs: {}, terrain:{}, structures:{}, refuges:{}, lootTaken:[], groundLoot:{} }, discovered: ['home'], elapsed: 0, nextId: 1, settings: { ...DEFAULT_SETTINGS, ...settings } };
+  return { world: structuredClone(world), player: { x: 0, z: 4, warmth: 100, heading: 0, hp: 100 }, combat: freshCombat(), inventory: balances({ wood: 12, fish: 3 }), stockpile: balances(), furnaces: [{ id: 'home', x: 0, z: 0, fuel: 60, charcoal: 0, level: 1 }], buildings: [{id:'starter:hut',type:'hut',x:-7,z:-7,rotation:0}], workers: [0,1].map(i=>({id:`worker:starter:hut:${i}`,hutId:'starter:hut',hp:100,x:-7+(i?1:-1),z:-4,sourceId:null,load:0,progress:0,state:'seeking'})), spawnProtection:{x:0,z:4,remaining:12}, changes: { nodes: {}, containers: [], fishing: {}, npcs: {}, terrain:{}, structures:{}, refuges:{}, lootTaken:[], groundLoot:{} }, discovered: ['home'], elapsed: 0, nextId: 1, settings: { ...DEFAULT_SETTINGS, ...settings } };
 }
 
 export function maxPlayerHP(state:GameState){return state.player.hypothermia?90:100;}

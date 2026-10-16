@@ -1,4 +1,6 @@
-import { STRUCTURE_HP } from '../data/settlement';
+import {furnaceAura} from './FurnaceAura';
+import {weatherVisibility} from './WeatherVisibility';
+import { structureMaxHP } from '../data/settlement';
 import { weaponMesh } from './WeaponModels';
 import type { LootPile } from '../systems/SettlementSystem';
 import { SnowWeather } from './SnowWeather';
@@ -92,7 +94,7 @@ export class Renderer {
     for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), z = pos.getZ(i), y = w.height(x, z); pos.setY(i, y); const river = w.river(x, z); color.setHex(y < .1 && river.distance < river.width + 2 ? 0x839ea9 : 0xe0ebef); color.multiplyScalar(1 - Math.max(0, y) * .007); colors.push(color.r, color.g, color.b); }
     terrain.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); terrain.computeVertexNormals();
     const ground = this.mesh(terrain, mat(0xffffff, { vertexColors: true })); ground.castShadow = false; g.add(ground);
-    const trees = data.trees.map((t,i)=>({...t,id:`tree:${data.cx}:${data.cz}:${i}`})).filter((t) => !this.game.state.combat.charredTrees.includes(t.id)&&this.game.state.changes.terrain?.[t.id]!=='felled').map(t => ({ ...t, y: w.height(t.x, t.z) }));
+    const trees = data.trees.map((t,i)=>({...t,id:`tree:${data.cx}:${data.cz}:${i}`})).filter((t) => !w.bridgeAt(t.x,t.z)&&!this.game.state.combat.charredTrees.includes(t.id)&&this.game.state.changes.terrain?.[t.id]!=='felled').map(t => ({ ...t, y: w.height(t.x, t.z) }));
     this.instance(g, new THREE.CylinderGeometry(.16, .25, 2.2, 5), this.materials.wood, trees.map(t => ({ id:t.id, x: t.x, y: t.y + t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
     for (let layer = 0; layer < 3; layer++) {
       const scale = 1 - layer * .23;
@@ -210,7 +212,7 @@ export class Renderer {
     this.flowTime.value=this.reducedMotion.matches?0:game.state.elapsed;
     const storm=game.state.combat.weather.mode==='snow';this.weather.update(game.paused?0:dt,storm,p,height,this.reducedMotion.matches);
     const fog=this.scene.fog as THREE.Fog,intensity=this.snowfall.userData.intensity;
-    fog.near=THREE.MathUtils.lerp(42,Math.max(12,this.zoom*.75),intensity);fog.far=THREE.MathUtils.lerp(game.state.settings.renderDistance===1?56:110,Math.max(55,this.zoom*1.6+12),intensity);
+    const visibility=weatherVisibility(this.zoom,game.state.settings.renderDistance,intensity);fog.near=visibility.near;fog.far=visibility.far;
     this.sun.intensity=THREE.MathUtils.lerp(3,1.7,intensity);
 
     const target = new THREE.Vector3(p.x, height + 1.1, p.z), blend = 1 - Math.exp(-dt * 6); this.target.lerp(target, blend);
@@ -237,7 +239,7 @@ export class Renderer {
       entityIds.add(b.id); let group = this.dynamic.get(b.id);
       if(group&&(group.userData.stage!==integrity.stage||group.userData.constructing!==!!b.construction)){this.dispose(group);this.dynamic.delete(b.id);group=undefined;}
       if(!group){group=b.construction&&integrity.stage==='intact'?this.constructionModel():integrity.stage==='ruin'?this.ruinedBuilding(b.type,b.rotation):this.building(b.type,b.rotation);group.userData.stage=integrity.stage;group.userData.constructing=!!b.construction;group.userData.structureId=b.id;this.dynamic.set(b.id,group);this.entities.add(group);}
-      const max=STRUCTURE_HP[b.type]*(integrity.stage==='ruin'?.25:1),occupants=Object.values(game.state.changes.refuges??{}).filter(r=>r.houseId===b.id&&r.phase==='hidden').length;
+      const max=structureMaxHP(b)*(integrity.stage==='ruin'?.25:1),occupants=Object.values(game.state.changes.refuges??{}).filter(r=>r.houseId===b.id&&r.phase==='hidden').length;
       group.userData.construction=b.construction;group.scale.y=b.construction&&integrity.stage==='intact'?.35+.65*(1-b.construction/10):1;
       group.userData.hp=integrity.hp;group.userData.occupants=occupants;this.structureBar(group,integrity.hp/max,integrity.hp<max||occupants>0);
       group.position.set(b.x, game.world.height(b.x, b.z), b.z);
@@ -253,11 +255,15 @@ export class Renderer {
         const old = group.getObjectByName('heat-ring') as THREE.Mesh | undefined, radius = heatRadius(furnace);
         if (old?.userData.radius !== radius) {
           if (old) { old.geometry.dispose(); (old.material as THREE.Material).dispose(); group.remove(old); }
-          const ring = this.mesh(new THREE.RingGeometry(Math.max(.01, radius - .07), Math.max(.02, radius), 72), new THREE.MeshBasicMaterial({ color: 0xe8b97a, transparent: true, opacity: .6, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+          const ring = this.mesh(new THREE.RingGeometry(Math.max(.01, radius - .42), Math.max(.02, radius), 72), new THREE.MeshBasicMaterial({ color: 0xe8b97a, transparent: true, opacity: .95, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
           ring.geometry.rotateX(-Math.PI / 2); const v = ring.geometry.attributes.position;
-          for (let i = 0; i < v.count; i++) v.setY(i, game.world.height(b.x + v.getX(i), b.z + v.getZ(i)) - group.position.y + .06);
+          for(let i=0;i<v.count;i++){const x=b.x+v.getX(i)*Math.cos(b.rotation)+v.getZ(i)*Math.sin(b.rotation),z=b.z-v.getX(i)*Math.sin(b.rotation)+v.getZ(i)*Math.cos(b.rotation);v.setY(i,Math.max(game.world.walkHeight(x,z),game.world.isWater(x,z)?.12:-Infinity)-group.position.y+.12);}
           ring.name = 'heat-ring'; ring.userData.radius = radius; ring.castShadow = false; group.add(ring);
         }
+        const aura=group.getObjectByName('heat-aura') as THREE.Mesh|undefined;
+        if(aura?.userData.radius!==radius){if(aura)this.dispose(aura as unknown as THREE.Group);if(radius>0)group.add(furnaceAura(game,b,radius));}
+        const liveAura=group.getObjectByName('heat-aura');if(liveAura)liveAura.userData.clock.value=this.reducedMotion.matches?0:game.state.elapsed;
+        const ring=group.getObjectByName('heat-ring')!;ring.visible=radius>0;
       }
     }
     for(const pile of game.settlement.loot(p)){

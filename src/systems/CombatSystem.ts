@@ -1,3 +1,4 @@
+import {spawnProtected,SPAWN_RADIUS} from './SpawnProtection';
 import { BUILDINGS } from '../data/definitions';
 import { bladeSegment, meleeDuration, segmentDistance, segmentSegmentDistance, projectileHeight } from '../game/CombatGeometry';
 import { heatRadius, inPlayerHeat, playerHeatSources, structureIntact } from './SurvivalSystem';
@@ -31,7 +32,7 @@ export class CombatSystem {
     for (let i = 0; i < 64; i++) {
       const angle = i * 2.399963, r = i === 0 ? 0 : 1 + Math.floor(i / 8) * 1.5;
       const p = { x: point.x + Math.cos(angle) * r, z: point.z + Math.sin(angle) * r };
-      if (!this.game.world.isWater(p.x,p.z) && distance(p,this.s.player) > radius + .8 && solids.every(s => distance(s,p) > s.radius + radius + .12) && Object.values(this.c.actors).every(a => a.hp <= 0 || distance(a,p) > radius + (a.type === 'polar_bear' ? .75 : .4) + .2)) { valid = p; break; }
+      if (!this.game.world.isWater(p.x,p.z) && (type==='guard'&&!this.c.villageAlerts.includes(villageId??'')||!spawnProtected(this.s,p)) && distance(p,this.s.player) > radius + .8 && solids.every(s => distance(s,p) > s.radius + radius + .12) && Object.values(this.c.actors).every(a => a.hp <= 0 || distance(a,p) > radius + (a.type === 'polar_bear' ? .75 : .4) + .2)) { valid = p; break; }
     }
     if (!valid) return;
     point = valid;
@@ -46,6 +47,7 @@ export class CombatSystem {
     const cx = Math.floor(p.x / 64), cz = Math.floor(p.z / 64);
     for (let x = cx - 1; x <= cx + 1; x++) for (let z = cz - 1; z <= cz + 1; z++) {
       const key = `encounter:${x}:${z}`; if (this.c.encounters.includes(key)) continue;
+      if(this.s.spawnProtection&&this.s.spawnProtection.remaining>0&&distance({x:x*64+32,z:z*64+32},this.s.spawnProtection)<SPAWN_RADIUS+46)continue;
       this.c.encounters.push(key); const rng = new SeededRNG(derive(this.s.world.seeds.wildlife, 'encounter', x, z));
       const groups: { type: ActorType; count: number; x: number; z: number }[] = [
         { type: 'polar_bear', count: 1, x: x * 64 + rng.range(14, 50), z: z * 64 + rng.range(14, 50) }
@@ -80,7 +82,7 @@ export class CombatSystem {
       if(lost>0){if(this.damageEvents.length>=64)this.damageEvents.shift();this.damageEvents.push({x:target.x,z:target.z,amount:lost,targetId:target.id,bleed:false});}return lost;
     }
     const before=target.id==='player'?this.s.player.hp:this.c.actors[target.id]?.hp??this.s.workers.find(w=>w.id===target.id)?.hp??target.hp;
-    if (before <= 0 || target.id==='player'&&(this.s.player.invulnerable??0)>0) return 0;
+    if (before <= 0 || target.id==='player'&&((this.s.player.invulnerable??0)>0||spawnProtected(this.s))) return 0;
     const enemy=this.c.actors[target.id];
     if(enemy&&this.hostile(enemy)&&inPlayerHeat(this.s,enemy)&&ownerId!=='furnace')amount*=2;
     if (target.id === 'player' && inPlayerHeat(this.s)) amount *= .5;
@@ -144,7 +146,7 @@ export class CombatSystem {
   }
   private blocked(a:Point,b:Point,targetId?:string){return this.game.solids(b).some(s=>(!('id'in s)||s.id!==targetId)&&distance(s,a)>s.radius+.2&&segmentDistance(s,a,b)<s.radius)||!this.game.world.visible(a,b);}
   private canHit(ownerId: string, target: CombatUnit) {
-    if (ownerId === target.id || target.hp <= 0) return false;
+    if (ownerId === target.id || target.hp <= 0 || target.id==='player'&&spawnProtected(this.s)&&ownerId!=='player') return false;
     if (ownerId === 'player') return true;
     const owner = this.c.actors[ownerId];
     if(owner?.type==='wolf')return target.kind!=='building'&&this.c.actors[target.id]?.groupId!==owner.groupId;
@@ -217,7 +219,7 @@ export class CombatSystem {
     this.game.revision++;
   }
   update(dt: number) {
-    this.ensureEncounters(); this.c.cooldown = Math.max(0, this.c.cooldown - dt);
+    this.clearSpawnZone();this.ensureEncounters(); this.c.cooldown = Math.max(0, this.c.cooldown - dt);
     const weather = this.c.weather; weather.remaining -= dt;
     if (weather.remaining <= 0) { weather.mode = weather.mode === 'clear' ? 'snow' : 'clear'; weather.cycle++; weather.remaining = weather.mode === 'snow' ? 55 : 90 + derive(this.s.world.seeds.wildlife, 'weather', weather.cycle) % 61; this.game.notify(weather.mode === 'snow' ? 'Blizzard incoming. Fuel burns 3× faster; enemies track you from farther away.' : 'The storm has passed.'); }
     for (const [id, status] of Object.entries(this.c.statuses)) { status.tick += Math.min(dt,status.bleed); status.bleed = Math.max(0,status.bleed-dt); while (status.tick >= 1 - 1e-8) { status.tick = Math.max(0, status.tick - 1); const u = this.units().find(u => u.id === id); if (u) this.damage(u, 2, 'bleed'); } status.wolfTick=(status.wolfTick??0)+Math.min(dt,status.wolfBleed??0);status.wolfBleed=Math.max(0,(status.wolfBleed??0)-dt);while(status.wolfTick>=1-1e-8){status.wolfTick=Math.max(0,status.wolfTick-1);const u=this.units().find(u=>u.id===id);if(u)this.damage(u,4,'bleed');}if (status.bleed <= 1e-8 && status.wolfBleed<=1e-8) delete this.c.statuses[id]; }
@@ -267,6 +269,15 @@ export class CombatSystem {
     if(actor.type==='wolf')this.c.statuses[target.id]={...this.c.statuses[target.id],bleed:this.c.statuses[target.id]?.bleed??0,tick:this.c.statuses[target.id]?.tick??0,wolfBleed:12,wolfTick:this.c.statuses[target.id]?.wolfTick??0};
     if(actor.type==='polar_bear'&&target.id==='player'&&derive(this.s.world.seeds.wildlife,'bear-stun',this.c.sequence++)%10===0)this.s.player.stunned=3;
   }
+  clearSpawnZone(){
+    const zone=this.s.spawnProtection;if(!zone||zone.remaining<=0)return;
+    for(const actor of Object.values(this.c.actors))if(actor.hp>0&&this.hostile(actor)&&spawnProtected(this.s,actor)){
+      const start=Math.atan2(actor.x-zone.x,actor.z-zone.z);
+      for(let i=0;i<64;i++){const angle=start+i*.4,r=SPAWN_RADIUS+5+Math.floor(i/16)*6,p={x:zone.x+Math.sin(angle)*r,z:zone.z+Math.cos(angle)*r};
+        if(!this.game.world.isWater(p.x,p.z)&&this.game.solids(p).every(s=>distance(s,p)>s.radius+1)){actor.x=p.x;actor.z=p.z;actor.heatInside=false;actor.heatBurn=0;actor.cooldown=Math.max(1,actor.cooldown);delete actor.pursuitId;this.velocities.delete(actor.id);break;}
+      }
+    }
+  }
   private face(actor: Actor, angle: number, dt: number) {
     actor.heading += Math.atan2(Math.sin(angle - actor.heading), Math.cos(angle - actor.heading)) * (1 - Math.exp(-dt * 8));
   }
@@ -297,7 +308,7 @@ export class CombatSystem {
     for (const turn of [0,.5,-.5,1,-1,1.5,-1.5,Math.PI]) {
       const angle = base+turn, p = {x:actor.x+Math.sin(angle)*step,z:actor.z+Math.cos(angle)*step};
       const crowd = Object.values(this.c.actors).some(a=>a!==actor&&a.hp>0&&distance(a,p)<radius+(a.type==='polar_bear'?.75:.4)+.08&&distance(a,p)<distance(a,actor));
-      if (!crowd && penetration(p) <= Math.max(.001,current-.00001)) {
+      if (!crowd && (!this.hostile(actor)||!spawnProtected(this.s,p)) && penetration(p) <= Math.max(.001,current-.00001)) {
         actor.x=p.x;actor.z=p.z;this.velocities.set(actor.id,{x:Math.sin(angle)*step/dt,z:Math.cos(angle)*step/dt});this.face(actor,angle,dt);return;
       }
     }

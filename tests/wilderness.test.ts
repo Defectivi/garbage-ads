@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {Game} from '../src/game/Game';
-import {newState} from '../src/game/GameState';
+import {simulationState as newState} from './fixtures/state';
 import {worldSpec} from '../src/game/GameConfig';
 import {WorldManager,distance} from '../src/world/WorldManager';
 import {updateExposure,maxPlayerHP,movementMultiplier,playerEffects} from '../src/systems/StatusSystem';

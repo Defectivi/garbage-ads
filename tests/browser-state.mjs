@@ -1,0 +1,2 @@
+/** Existing feature suites isolate the starting camp; spawn-visibility covers real new-world defaults. */
+export async function isolateStartingCamp(page){await page.evaluate(()=>{const a=window.__frostbound;if(!a)return;const g=a.game;delete g.state.spawnProtection;g.state.buildings=g.state.buildings.filter(b=>b.id!=='starter:hut');g.state.workers=g.state.workers.filter(w=>w.hutId!=='starter:hut');g.revision++;a.renderer.refreshChunks();a.refresh();});}

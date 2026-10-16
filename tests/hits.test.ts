@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
 import {Game} from '../src/game/Game';
-import {newState} from '../src/game/GameState';
+import {simulationState as newState} from './fixtures/state';
 import {worldSpec} from '../src/game/GameConfig';
 import {shotgunDamage} from '../src/systems/CombatSystem';
 import {exportFull,importJSON} from '../src/systems/SaveSystem';

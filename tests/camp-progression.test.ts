@@ -2,7 +2,7 @@ import {ACTOR_HP} from '../src/data/weapons';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {Game} from '../src/game/Game';
-import {newState} from '../src/game/GameState';
+import {simulationState as newState} from './fixtures/state';
 import {worldSpec} from '../src/game/GameConfig';
 import {heatRadius,updateSurvival,healingAmount} from '../src/systems/SurvivalSystem';
 import {furnaceCost,fuelInterval} from '../src/data/furnaces';
@@ -20,7 +20,7 @@ test('upgrade schedule reaches 50, uses every material and spends carried/stored
 });
 test('radius stops growing at 20 while fuel interval keeps improving to 50',()=>{
  const f=fresh().state.furnaces[0];f.level=20;const radius=heatRadius(f);f.level=50;assert.equal(heatRadius(f),radius);assert.equal(radius,164);assert.equal(fuelInterval(1),1);assert.equal(fuelInterval(2),1.2);assert.equal(fuelInterval(50),10.8);
- const s=fresh().state;s.furnaces[0].level=50;updateSurvival(s,1);assert(Math.abs(s.furnaces[0].fuel-(100-1/10.8))<1e-8);
+ const s=fresh().state;s.furnaces[0].level=50;updateSurvival(s,1);assert(Math.abs(s.furnaces[0].fuel-(60-1/10.8))<1e-8);
 });
 test('charcoal is preferred and adds 30 base seconds; wood adds 10, with no hidden double duration',()=>{
  const g=fresh(),f=g.state.furnaces[0];f.fuel=0;g.state.inventory.charcoal=1;assert(g.feed().ok);assert.equal(f.charcoal,30);assert.equal(g.state.inventory.wood,12);assert(g.feed('home','wood').ok);assert.equal(f.fuel,10);updateSurvival(g.state,1);assert.equal(f.charcoal,29);assert.equal(f.fuel,10);

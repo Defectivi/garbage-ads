@@ -6,7 +6,7 @@ import { cameraRelativeMovement, joystickMovement } from '../src/game/MovementIn
 import { worldSpec, MOVEMENT } from '../src/game/GameConfig';
 import { WorldManager } from '../src/world/WorldManager';
 import { Game } from '../src/game/Game';
-import { newState } from '../src/game/GameState';
+import {simulationState as newState} from './fixtures/state';
 import { equipmentDrops } from '../src/systems/CombatSystem';
 import { exportFull, importJSON, validateWorld } from '../src/systems/SaveSystem';
 

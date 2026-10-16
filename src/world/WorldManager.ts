@@ -55,8 +55,13 @@ export class WorldManager {
     let result=(-1.1 + Math.min(1, r.distance / r.width) * .8) * (1 - bank) + base * bank;
     for(const lake of this.lakes({x,z})){const d=this.lakeDistance({x,z},lake);if(d<1.6){const shore=smooth((d-1)/.6);result=(-1.1+Math.min(1,d)*.8)*(1-shore)+result*shore;}}return result;
   }
-  walkHeight(x: number, z: number) { const r = this.river(x, z); return this.spec.config.riverDensity > 0 && r.crossing && r.distance < r.width + 2 ? .65 : this.isWater(x,z)?-.05:this.height(x, z); }
-  isWater(x: number, z: number) { const r = this.river(x, z); return this.spec.config.riverDensity > 0 && r.distance < r.width + .2 && !r.crossing || this.lakes({x,z}).some(lake=>this.lakeDistance({x,z},lake)<1); }
+  bridgeAt(x:number,z:number){
+    if(this.spec.config.riverDensity===0)return undefined;
+    const bx=Math.round(x/64)*64,r=this.river(bx,z),halfWidth=2.35,halfLength=r.width+1.5;
+    return Math.abs(x-bx)<=halfWidth&&Math.abs(z-r.center)<=halfLength?{x:bx,z:r.center,halfWidth,halfLength,height:.65}:undefined;
+  }
+  walkHeight(x:number,z:number){return this.bridgeAt(x,z)?.height??(this.isWater(x,z)?-.05:this.height(x,z));}
+  isWater(x:number,z:number){if(this.bridgeAt(x,z))return false;const r=this.river(x,z);return this.spec.config.riverDensity>0&&r.distance<r.width+.2||this.lakes({x,z}).some(lake=>this.lakeDistance({x,z},lake)<1);}
   biome(x: number, z: number) { return noise(this.spec.seeds.biomes, x / 70, z / 70) > .56 ? 'Pinewood' : noise(this.spec.seeds.biomes, x / 25, z / 25) < .32 ? 'Rocky uplands' : 'Snowfields'; }
   villages(): Village[] { return this.spec.generationVersion < 2 ? [] : this.villageSites.map((v, i) => ({ ...v, variant: i, houses: 3, trader: { x: v.x - 5, z: v.z + 5 }, container: { x: v.x + 5, z: v.z + 5 }, guardCount: 3 + derive(this.spec.seeds.villages, v.id) % 3 })); }
   settlements(point: Point, radius = 1): Ruin[] { const chunks = this.around(point, radius); return [...chunks.flatMap(c => c.ruins), ...this.villages().filter(v => distance(v, point) < this.spec.config.chunkSize * (radius + 1))]; }

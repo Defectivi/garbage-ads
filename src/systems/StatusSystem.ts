@@ -1,3 +1,4 @@
+import {spawnProtected} from './SpawnProtection';
 import {maxPlayerHP,type GameState} from '../game/GameState';
 export {maxPlayerHP} from '../game/GameState';
 import {heatRadius,structureIntact,inPlayerHeat,healingAmount} from './SurvivalSystem';
@@ -16,6 +17,7 @@ export function updateExposure(state:GameState,dt:number,inWater:boolean){
 }
 export function playerEffects(state:GameState):{id:string;label:string;detail:string}[]{
  const p=state.player,status=state.combat.statuses.player,effects=[];
+ if(spawnProtected(state))effects.push({id:'spawn',label:`SPAWN SAFE ${Math.ceil(state.spawnProtection!.remaining)}s`,detail:'100 m safe area / hostiles kept outside'});
  if(p.hypothermia)effects.push({id:'cold',label:`HYPOTHERMIA ${p.hypothermia.level===2?'II':'I'}`,detail:p.hypothermia.level===2?'Speed -90% / max HP 90 / -25 warmth every 3s':'Speed -90% / max HP 90 / warm up at fire'});
  if((p.stunned??0)>0)effects.push({id:'stun',label:`STUNNED ${p.stunned!.toFixed(1)}s`,detail:'Movement and attacks disabled'});
  if((status?.wolfBleed??0)>0)effects.push({id:'wolf-bleed',label:`WOLF BITE ${Math.ceil(status!.wolfBleed!)}s`,detail:'Bleeding / 4 damage each second'});

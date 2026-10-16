@@ -13,6 +13,7 @@ export function temperature(state: GameState) { return -18 - Math.sin(state.elap
 export function sheltered(state: GameState) { return state.furnaces.some(f => structureIntact(state,f.id)&&distance(f, state.player) < heatRadius(f)) || state.buildings.some(b => b.type === 'shelter'&&structureIntact(state,b.id) && distance(b, state.player) < 5); }
 export function updateSurvival(state: GameState, dt: number, sprint = false) {
   state.elapsed += dt;
+  if(state.spawnProtection)state.spawnProtection.remaining=Math.max(0,state.spawnProtection.remaining-dt);
   if(state.player.invulnerable!==undefined)state.player.invulnerable=Math.max(0,state.player.invulnerable-dt);
   if(state.player.recentDamage!==undefined)state.player.recentDamage=Math.max(0,state.player.recentDamage-dt);
   const heated=state.furnaces.some(f=>structureIntact(state,f.id)&&distance(f,state.player)<heatRadius(f));

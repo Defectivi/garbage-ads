@@ -5,7 +5,7 @@ import { createSurvivorAsset } from '../src/rendering/SurvivorAsset';
 import { weaponMesh, disposeWeapon } from '../src/rendering/WeaponModels';
 import { WEAPON_IDS } from '../src/data/weapons';
 import { Game } from '../src/game/Game';
-import { newState } from '../src/game/GameState';
+import {simulationState as newState} from './fixtures/state';
 import { worldSpec } from '../src/game/GameConfig';
 import { exportFull } from '../src/systems/SaveSystem';
 
