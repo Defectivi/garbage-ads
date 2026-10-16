@@ -95,6 +95,7 @@ export class CombatSystem {
       if (ownerId === 'player') { actor.alerted = true; for (const member of Object.values(this.c.actors)) if (member.groupId === actor.groupId) member.alerted = true; }
       if (actor.villageId && ownerId === 'player' && !this.c.villageAlerts.includes(actor.villageId)) this.c.villageAlerts.push(actor.villageId);
       if (wasAlive && actor.hp <= 0) {
+        if(actor.type==='wolf'){const meat=derive(this.s.world.seeds.loot,`wolf-meat:${actor.id}`)%3;if(meat){const loot=this.s.changes.groundLoot??(this.s.changes.groundLoot={});const id=`wolf-meat:${actor.id}`;loot[id]={id,x:actor.x,z:actor.z,resources:{meat}};}}
         this.c.kills++; delete this.c.statuses[actor.id];
         if (actor.weapon && equipmentDrops(this.s.world.seeds.loot, actor.id)) this.c.drops.push({ id: this.nextId('drop'), x: actor.x, z: actor.z, weapon: actor.weapon, uses: actor.weapon==='molotov'?1:weaponUses(actor.weapon) });
         this.game.notify(`${actor.type === 'polar_bear' ? 'Polar bear' : actor.type === 'guard' ? 'Guard' : actor.type==='wolf'?'Wolf':'Raider'} defeated.`);

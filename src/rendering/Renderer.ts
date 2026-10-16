@@ -156,7 +156,7 @@ export class Renderer {
   }
   private lootModel(pile:LootPile){
     const g=new THREE.Group();g.name='supply-pile';g.userData.lootId=pile.id;
-    const weapon=!!pile.weapon,food=pile.category==='food',color=weapon?0xe1b76a:food?0xd9a37c:0x89b1ad;
+    const weapon=!!pile.weapon,food=pile.category==='food'||(pile.resources.meat??0)>0||(pile.resources.fish??0)>0,color=weapon?0xe1b76a:food?0xd9a37c:0x89b1ad;
     this.box(g,0,.22,0,.65,.44,.6,this.materials.wood);this.box(g,0,.45,0,.72,.07,.65,this.materials.metal);
     if(pile.weapon){const mesh=weaponMesh(pile.weapon,true);mesh.position.y=.8;mesh.rotation.z=-.65;g.add(mesh);}
     else{const bundle=this.mesh(new THREE.DodecahedronGeometry(.27,0),mat(color),0,.65);bundle.scale.set(1,.75,.65);g.add(bundle);}

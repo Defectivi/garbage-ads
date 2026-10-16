@@ -1,0 +1,11 @@
+# Worker fuel, wolf meat and pause menu
+
+Healthy workers automatically tend intact player-owned furnaces within 26 units of their hut when combined wood/charcoal fuel is at most 20 units. They walk to the delivery apron and add one actual wood per tending action for the existing 10 fuel units, drawing from their carried wood first or the shared stockpile. Player inventory is never taken. Multiple workers share the same authoritative balances and stop adding fuel above the reserve. Workers can relight extinguished furnaces; resources and reachable paths are still required. They prioritize gathering wood when a nearby furnace needs fuel. Injured/sheltered workers remain safe, ruined furnaces are skipped, and village furnaces are not automatically fueled. Simulation continues away from the player and pauses with menus. Pending routes are reconstructed from existing worker state on load.
+
+A defeated wolf drops 0, 1 or 2 meat, deterministically seeded by wolf ID and loot seed. Positive drops use ordinary persistent ground loot, visible food bundles and the existing pickup animation. Zero yields no empty pile. Repeated damage and save/reload do not repeat drops. Meat restores 3 hunger; fish retains 2. Both still restore 5 HP, cap at current maximums and share a three-second meal cooldown.
+
+The pause menu uses a dark field-panel style with a compact expedition summary, prominent Resume action, separate Save/Exit row, collapsed keyboard/touch reference, and a quieter reset section with the existing replacement confirmation. Save feedback and failures remain visible; Escape and close resume normally. The layout scrolls on short screens and adapts to phone widths.
+
+Validation: 111 simulation tests, the production build, and seven browser suites passed across the regression run and focused reruns: workers, camp, night, UI, recovery, wilderness and production. Checks cover physical delivery, save/load during tending, bounded retries for blocked paths, finite balances, hidden/injured workers, deterministic meat pickup, meal cooldown, pause/save/reset, and desktop/touch portrait/landscape. Browser coverage uses headless Edge with touch emulation.
+
+Verified captures: [desktop pause](screenshots/pause-desktop.png), [expanded controls](screenshots/pause-controls.png), [phone pause](screenshots/pause-mobile.png).

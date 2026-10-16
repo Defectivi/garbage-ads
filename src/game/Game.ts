@@ -8,7 +8,7 @@ import type { SettlementEvent } from './PresentationEvents';
 import { MOVEMENT,GATHER_SECONDS } from './GameConfig';
 import { BUILDINGS, RESOURCE_IDS, balances, type Balances, type BuildingType, type Resource } from '../data/definitions';
 import { WorldManager, distance, type Chunk, type Node, type Ruin, type FishingSpot } from '../world/WorldManager';
-import type { GameState, Point } from './GameState';
+import type { GameState, Point, Worker } from './GameState';
 import { transact, single, negate, exchange, type Result } from '../systems/InventorySystem';
 import { updateSurvival } from '../systems/SurvivalSystem';
 import { trader } from '../data/trades';
@@ -35,6 +35,7 @@ export class Game {
     this.collectionEvents.push({ resource, amount, x: point.x, z: point.z });
   }
   fishing?: { spot: FishingSpot; remaining: number };
+  private fuelTasks=new Map<string,string>();
   private paths = new Map<string, Point[]>();
   private velocity = { x: 0, z: 0 };
   constructor(public state: GameState) { for(const w of state.combat.weapons)w.uses=Math.min(w.uses,weaponUses(w.type));this.world = new WorldManager(state.world); this.combat = new CombatSystem(this);this.settlement=new SettlementSystem(this); }
@@ -169,7 +170,7 @@ export class Game {
   eat(resource: 'fish' | 'meat'): Result {
     const p=this.state.player;if(this.dead||(p.foodCooldown??0)>0)return{ok:false,error:'Wait three seconds between meals.'};
     const r=transact([{account:this.state.inventory,delta:single(resource,-1)}],this.state.settings);
-    if(r.ok){p.hunger=Math.min(20,(p.hunger??20)+2);p.hp=Math.min(maxPlayerHP(this.state),p.hp+5);p.foodCooldown=3;this.notify('Meal: +5 HP, +2 hunger. Next meal in 3s.');}return r;
+    if(r.ok){const hunger=resource==='meat'?3:2;p.hunger=Math.min(20,(p.hunger??20)+hunger);p.hp=Math.min(maxPlayerHP(this.state),p.hp+5);p.foodCooldown=3;this.notify(`Meal: +5 HP, +${hunger} hunger. Next meal in 3s.`);}return r;
   }
   stash(): Result {
     if (!this.state.furnaces.some(f => this.settlement.intact(f.id)&&distance(f, this.state.player) < 5) && !this.state.buildings.some(b => b.type === 'storage' &&this.state.changes.structures?.[b.id]?.stage!=='gone'&&distance(b, this.state.player) < 5)) return { ok: false, error: 'Approach a furnace or storehouse.' };
@@ -276,15 +277,34 @@ export class Game {
       this.revision++;this.notify('Worker hut ready. Two gatherers have joined the settlement.');this.action({kind:'build',x:hut.x,z:hut.z,label:'Hut complete / 2 workers',costs:[]});
     }
   }
+  private workerFurnaces(hut:Point){return this.state.furnaces.filter(f=>(f.id==='home'||this.state.buildings.some(b=>b.id===f.id&&b.type==='furnace'))&&this.settlement.intact(f.id)&&f.fuel+f.charcoal<=20&&distance(f,hut)<=26).sort((a,b)=>a.fuel+a.charcoal-b.fuel-b.charcoal||distance(a,hut)-distance(b,hut));}
+  private tendFurnace(worker:Worker,hut:Point,dt:number){
+    if(worker.hp<50)return false;
+    const carried=worker.resource==='wood'&&worker.load>0;
+    const furnace=(carried||this.state.stockpile.wood>=1)?this.workerFurnaces(hut)[0]:undefined;
+    if(!furnace){if(this.fuelTasks.delete(worker.id))this.paths.delete(worker.id);return false;}
+    if(this.fuelTasks.get(worker.id)!==furnace.id){this.paths.delete(worker.id);this.fuelTasks.set(worker.id,furnace.id);worker.sourceId=null;worker.progress=0;worker.state='returning';}
+    const target={x:furnace.x,z:furnace.z+3};
+    if(distance(worker,target)<1.8){
+      if(carried)worker.load--;else{const r=transact([{account:this.state.stockpile,delta:{wood:-1}}],this.state.settings);if(!r.ok)return false;}
+      const relit=furnace.fuel+furnace.charcoal<=0;furnace.fuel+=10;if(relit)this.notify('A worker relit the furnace with wood.');
+      this.paths.delete(worker.id);this.fuelTasks.delete(worker.id);worker.state=worker.load?'returning':'seeking';return true;
+    }
+    let path=this.paths.get(worker.id);if(!path){const solids=this.solids(hut),valid=(p:Point)=>!this.world.isWater(p.x,p.z)&&solids.every(s=>distance(s,p)>s.radius+.6);path=route(worker,target,valid);this.paths.set(worker.id,path);}
+    const next=path[0];if(!next){worker.progress+=dt;if(worker.progress>=3){worker.progress=0;this.paths.delete(worker.id);}return true;}
+    const d=distance(worker,next),step=Math.min(d,dt*3.8);this.move(worker,(next.x-worker.x)/(d||1)*step,(next.z-worker.z)/(d||1)*step,.3);if(d<.4)path.shift();return true;
+  }
   private updateWorkers(dt: number) {
     for (const w of this.state.workers) {
       if(w.hp>0&&w.hp<50&&!this.settlement.refuge(w.id))this.settlement.flee(w.id,w);
       if (w.hp <= 0||this.settlement.refuge(w.id)) continue;
       const hut = this.state.buildings.find(b => b.id === w.hutId); if (!hut||!this.settlement.intact(hut.id)) continue;
+      if(this.tendFurnace(w,hut,dt))continue;
+      const needsWood=this.workerFurnaces(hut).length>0;
       const sources = this.world.around(hut).flatMap(c => [...this.nodesInChunk(c),...c.fishing.map((f):Node=>({...f,amount:f.availability,resource:'fish' as const,radius:.4}))]).filter(n => (['wood','stone','fish'].includes(this.nodeResource(n))) && distance(n, hut) < 26 && this.nodeRemaining(n) > 0 && !this.world.isWater(n.x, n.z));
       let source = sources.find(n => n.id === w.sourceId);
       if (w.load >= 3 || !source && w.load > 0) w.state = 'returning';
-      if (!source && !w.load) { source = sources.sort((a,b)=>this.state.stockpile[a.resource]-this.state.stockpile[b.resource]||distance(a,w)-distance(b,w))[0];if(source)w.resource=source.resource as 'wood'|'stone'|'fish'; w.sourceId = source?.id ?? null; w.state = source ? 'seeking' : 'blocked'; this.paths.delete(w.id); }
+      if (!source && !w.load) { source = sources.sort((a,b)=>(needsWood?Number(b.resource==='wood')-Number(a.resource==='wood'):0)||this.state.stockpile[a.resource]-this.state.stockpile[b.resource]||distance(a,w)-distance(b,w))[0];if(source)w.resource=source.resource as 'wood'|'stone'|'fish'; w.sourceId = source?.id ?? null; w.state = source ? 'seeking' : 'blocked'; this.paths.delete(w.id); }
       if (w.state === 'blocked') { w.progress += dt; if (w.progress < 3) continue; w.progress = 0; w.state = w.load ? 'returning' : 'seeking'; this.paths.delete(w.id); }
       if (w.state === 'gathering') {
         w.progress += dt;

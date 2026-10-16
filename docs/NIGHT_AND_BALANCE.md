@@ -30,7 +30,7 @@ Shotgun overlays show three nested sectors: closest within 1m and 13.3 degrees e
 
 ## Hunger and food
 
-Hunger starts at 20. Standing still does not drain it. Actual movement accumulates separate clocks: walking loses 1 every 30 seconds; sprinting loses 2 every 15 seconds. Blocked movement does not count. Below 10, movement is 20% slower; below 5, maximum HP is halved (45 with hypothermia, otherwise 50). At zero, starvation removes 15 HP each second, independently of combat mitigation. Either food restores 5 HP and 2 hunger with a shared 3-second simulation cooldown. Food no longer grants the old 35 warmth. Eating increases hunger before healing applies its current HP cap. Recovery resets hunger to 20. Timers pause with the game and persist through full saves.
+Hunger starts at 20. Standing still does not drain it. Actual movement accumulates separate clocks: walking loses 1 every 30 seconds; sprinting loses 2 every 15 seconds. Blocked movement does not count. Below 10, movement is 20% slower; below 5, maximum HP is halved (45 with hypothermia, otherwise 50). At zero, starvation removes 15 HP each second, independently of combat mitigation. Food restores 5 HP; fish gives 2 hunger and meat gives 3, with a shared 3-second simulation cooldown. Food no longer grants the old 35 warmth. Eating increases hunger before healing applies its current HP cap. Recovery resets hunger to 20. Timers pause with the game and persist through full saves.
 
 ## Fire, fog and night
 
