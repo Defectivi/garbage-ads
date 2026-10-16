@@ -31,7 +31,9 @@ export class CombatRenderer {
     const get = (id: string, make: () => THREE.Group) => { needed.add(id); let g = this.objects.get(id); if (!g) { g = make(); this.objects.set(id, g); this.group.add(g); } return g; };
     for (const actor of Object.values(c.actors).filter(a => a.hp > 0 && distance(a, game.state.player) < 55).sort((a, b) => distance(a, game.state.player) - distance(b, game.state.player)).slice(0, 40)) {
       const g = get(`actor:${actor.id}`, () => this.actor(actor.type, actor.weapon, actor.id));
-      this.characters.get(actor.id)!.update(actor,game.world.walkHeight(actor.x,actor.z),actor.heading,game.paused?0:dt,game.state.elapsed,actor.weapon,game.combat.actorAttacks.get(actor.id)??-100);
+      const visual=this.characters.get(actor.id)!,refuge=game.settlement.refuge(actor.id);
+      visual.update(actor,game.world.walkHeight(actor.x,actor.z),actor.heading,game.paused?0:dt,game.state.elapsed,actor.weapon,refuge?-100:game.combat.actorAttacks.get(actor.id)??-100);
+      g.visible=visual.ready&&refuge?.phase!=='hidden';g.userData.refuge=refuge?.phase;
       const health = g.getObjectByName('health')!; health.quaternion.copy(g.quaternion).invert().multiply(camera.quaternion); (health.getObjectByName('fill') as THREE.Mesh).scale.x = 1.5 * actor.hp / ACTOR_HP[actor.type]; health.visible = distance(actor, game.state.player) < 26 || actor.hp < ACTOR_HP[actor.type];
     }
     for (const p of c.projectiles) {

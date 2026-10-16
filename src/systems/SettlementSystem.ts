@@ -65,6 +65,8 @@ export class SettlementSystem {
   update(dt:number){
     const g=this.game;
     for(const [id,refuge]of Object.entries(g.state.changes.refuges??{})){
+      const actor=g.state.combat.actors[id];
+      if(actor&&actor.hp<=0){delete g.state.changes.refuges![id];this.paths.delete(id);continue;}
       if(distance(refuge,g.state.player)>100)continue;
       const house=this.structures(refuge,2).find(b=>b.id===refuge.houseId),worker=g.state.workers.find(w=>w.id===id);
       if(!house||this.integrity(house).stage!=='intact'){refuge.phase='returning';this.paths.delete(id);}
@@ -72,7 +74,7 @@ export class SettlementSystem {
       const target=refuge.phase==='fleeing'?{x:house!.x-.7*Math.cos(house!.rotation)+(BUILDINGS[house!.type].radius+.5)*Math.sin(house!.rotation),z:house!.z+.7*Math.sin(house!.rotation)+(BUILDINGS[house!.type].radius+.5)*Math.cos(house!.rotation)}:{x:refuge.homeX,z:refuge.homeZ};
       if(distance(refuge,target)<.4){if(refuge.phase==='fleeing'){refuge.phase='hidden';refuge.remaining=12;}else delete g.state.changes.refuges![id];this.paths.delete(id);continue;}
       let path=this.paths.get(id);if(!path){const solids=g.solids(refuge).filter(s=>!('id'in s)||s.id!==id),valid=(p:Point)=>!g.world.isWater(p.x,p.z)&&solids.every(s=>distance(s,p)>s.radius+.35),clear=(a:Point,b:Point)=>solids.every(s=>segmentDistance(s,a,b)>s.radius+.3);path=valid(target)&&clear(refuge,target)?[target]:route(refuge,target,valid);if(path.length&&valid(target)&&clear(path[path.length-1],target))path.push(target);this.paths.set(id,path);}
-      const next=path[0];if(!next){this.paths.delete(id);continue;}const d=distance(next,refuge),step=Math.min(d,dt*3.8);g.move(refuge,(next.x-refuge.x)/(d||1)*step,(next.z-refuge.z)/(d||1)*step,.3,id);if(d<.4)path.shift();if(worker){worker.x=refuge.x;worker.z=refuge.z;}
+      const next=path[0];if(!next){this.paths.delete(id);continue;}const d=distance(next,refuge),step=Math.min(d,dt*3.8),oldX=refuge.x,oldZ=refuge.z;g.move(refuge,(next.x-refuge.x)/(d||1)*step,(next.z-refuge.z)/(d||1)*step,.3,id);if(d<.4)path.shift();if(worker){worker.x=refuge.x;worker.z=refuge.z;}if(actor){actor.x=refuge.x;actor.z=refuge.z;if(Math.hypot(refuge.x-oldX,refuge.z-oldZ)>1e-6)actor.heading=Math.atan2(refuge.x-oldX,refuge.z-oldZ);}
     }
   }
 }

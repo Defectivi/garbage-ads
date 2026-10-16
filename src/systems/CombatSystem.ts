@@ -64,7 +64,7 @@ export class CombatSystem {
   }
   units(): CombatUnit[] {
     const units: CombatUnit[] = [{ ...this.s.player, id: 'player', kind: 'player' }];
-    for (const a of Object.values(this.c.actors)) if (a.hp > 0 && distance(a, this.s.player) < 85) units.push({ ...a, kind: a.type === 'guard' ? 'guard' : 'enemy' });
+    for (const a of Object.values(this.c.actors)) if (a.hp > 0 && distance(a, this.s.player) < 85 && this.game.settlement.refuge(a.id)?.phase !== 'hidden') units.push({ ...a, kind: a.type === 'guard' ? 'guard' : 'enemy' });
     for (const w of this.s.workers) if (w.hp > 0 && distance(w, this.s.player) < 85&&this.game.settlement.refuge(w.id)?.phase!=='hidden') units.push({ ...w, ...this.game.settlement.position(w.id,w),kind: 'npc' });
     for (const r of this.game.world.settlements(this.s.player, 2)) { const npc = this.game.npc(r); if (npc.hp > 0&&this.game.settlement.refuge(npc.id)?.phase!=='hidden') units.push({ ...this.game.settlement.position(npc.id,r.trader), id: npc.id, hp: npc.hp, kind: 'npc', villageId: r.id.startsWith('village:') ? r.id : null }); }
     for(const building of this.game.settlement.structures()){
@@ -102,8 +102,8 @@ export class CombatSystem {
       }
       if (target.villageId && ownerId === 'player' && !this.c.villageAlerts.includes(target.villageId)) this.c.villageAlerts.push(target.villageId);
     }
-    if(target.kind==='npc'&&before<=amount&&this.s.changes.refuges)delete this.s.changes.refuges[target.id];
-    if(target.kind==='npc'&&before>amount&&ownerId!=='bleed')this.game.settlement.flee(target.id,target);
+    if((target.kind==='npc'||enemy?.type==='guard')&&before<=amount&&this.s.changes.refuges)delete this.s.changes.refuges[target.id];
+    if((target.kind==='npc'||enemy?.type==='guard')&&before>amount&&ownerId!=='bleed')this.game.settlement.flee(target.id,target);
     if(this.damageEvents.length>=64)this.damageEvents.shift();
     this.damageEvents.push({x:target.x,z:target.z,amount:Math.min(before,amount),targetId:target.id,bleed:ownerId==='bleed'});
     if (bleed&&before>amount) this.c.statuses[target.id] = { bleed: 10, tick: 0 };
@@ -165,7 +165,7 @@ export class CombatSystem {
     const old={x:p.x,z:p.z},previous=p.age/p.duration;p.age+=dt;const t=Math.min(1,p.age/p.duration);
     if(p.kind==='swing'){
       const owner=p.ownerId==='player'?this.s.player:this.c.actors[p.ownerId];
-      if(!owner||owner.hp<=0)return false;
+      if(!owner||owner.hp<=0||this.game.settlement.refuge(p.ownerId))return false;
       if(!p.weapon||p.damage<=0)return t<1; // Legacy swings were cosmetic.
       p.x=owner.x;p.z=owner.z;const hits=p.hitIds??(p.hitIds=[]),units=this.units().filter(u=>this.canHit(p.ownerId,u)&&!hits.includes(u.id));
       const steps=Math.max(1,Math.ceil((t-previous)*48));
@@ -227,8 +227,10 @@ export class CombatSystem {
     const units = this.units(), snow = weather.mode === 'snow';
     for (const actor of Object.values(this.c.actors)) {
       if (actor.hp <= 0 || distance(actor, this.s.player) > 70) continue;
-      this.heatEntry(actor); if (actor.hp <= 0) continue;
       actor.cooldown = Math.max(0, actor.cooldown - dt); actor.roamTimer = Math.max(0, actor.roamTimer - dt);
+      if(this.game.settlement.refuge(actor.id)?.phase!=='hidden')this.heatEntry(actor);
+      if(actor.hp<=0)continue;
+      if(this.game.settlement.refuge(actor.id)){this.velocities.delete(actor.id);continue;}
       const guard = actor.type === 'guard', hostilePlayer = !guard || !!actor.villageId && this.c.villageAlerts.includes(actor.villageId);
       const targets = units.filter(u => u.hp > 0 && u.id !== actor.id && (guard ? u.kind === 'enemy' || u.kind === 'player' && hostilePlayer : u.kind !== 'enemy'));
       const target = targets.filter(u => distance(u, actor) < (actor.alerted ? 30 : snow ? 27 : guard ? 16 : 12)).sort((a, b) => distance(a, actor) - distance(b, actor))[0];
