@@ -1,6 +1,6 @@
 import type {Game} from '../game/Game';
 import {RESOURCE_IDS,type Resource} from '../data/definitions';
-import {fuelInterval} from '../data/furnaces';
+import {fuelInterval,furnaceExpansions,expandsAtLevel,FURNACE_EXPANSION_LEVELS} from '../data/furnaces';
 import {itemIcon} from './Icons';
 export function updateFurnaceUpgrade(root:HTMLElement,game:Game,attempt:()=>void){
  const host=root.querySelector('#furnace-upgrade');if(!host)return;
@@ -11,7 +11,8 @@ export function updateFurnaceUpgrade(root:HTMLElement,game:Game,attempt:()=>void
  button.querySelector('strong')!.textContent=maxed?'Furnace maxed / 50':`Upgrade / ${f?.level??1} > ${(f?.level??1)+1}`;
  const html=maxed?'':RESOURCE_IDS.filter(k=>info.cost[k]).map(k=>`<span class="${info.missing.includes(k)?'cost-missing':''}" title="${k}">${itemIcon(k)}<b>${info.cost[k]}</b></span>`).join('');
  const costs=host.querySelector('.upgrade-costs')!;if(costs.innerHTML!==html)costs.innerHTML=html;
- host.querySelector('.upgrade-help')!.textContent=!f||Math.hypot(f.x-game.state.player.x,f.z-game.state.player.z)>5?'Move within 5 units of a furnace.':maxed?`Fuel interval ${fuelInterval(50).toFixed(1)}s / radius capped`:`Carried + stored / ${f.level>=20?'fuel efficiency only':'range +8 and fuel efficiency'}`;
+ const expansions=furnaceExpansions(f?.level??1),nextExpansion=FURNACE_EXPANSION_LEVELS.find(level=>level>(f?.level??1));
+ host.querySelector('.upgrade-help')!.textContent=!f||Math.hypot(f.x-game.state.player.x,f.z-game.state.player.z)>5?'Move within 5 units of a furnace.':maxed?`Fuel interval ${fuelInterval(50).toFixed(1)}s / expansions 3/3`:`${expandsAtLevel(f.level+1)?'+8 range + fuel':'Fuel +' } / expansions ${expansions}/3${nextExpansion?` / next at ${nextExpansion}`:''}`;
 }
 export function flashMissing(root:HTMLElement,resources:Resource[]){
  for(const resource of resources){const el=root.querySelector<HTMLElement>(`#resources [data-resource="${resource}"]`);if(!el)continue;

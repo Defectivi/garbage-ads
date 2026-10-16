@@ -2,7 +2,7 @@ import {harvestRoute,workerHarvestReach} from '../systems/WorkerHarvest';
 import {CITY_OFFERS} from '../data/cityStore';
 import {maxPlayerHP} from './GameState';
 import {beginSpawnProtection} from '../systems/SpawnProtection';
-import {furnaceCost,MAX_FURNACE_LEVEL,MAX_RADIUS_LEVEL} from '../data/furnaces';
+import {furnaceCost,MAX_FURNACE_LEVEL,expandsAtLevel} from '../data/furnaces';
 import {movementMultiplier,updateExposure} from '../systems/StatusSystem';
 import { SettlementSystem } from '../systems/SettlementSystem';
 import type { SettlementEvent } from './PresentationEvents';
@@ -218,7 +218,7 @@ export class Game {
     const f=info.furnace!,cost=info.cost,stock:Partial<Balances>={},carried:Partial<Balances>={};
     for(const k of RESOURCE_IDS){const n=cost[k]??0;stock[k]=-Math.min(n,Math.max(0,this.state.stockpile[k]));carried[k]=-n-stock[k]!;}
     const r=transact([{account:this.state.stockpile,delta:stock},{account:this.state.inventory,delta:carried}],this.state.settings);
-    if(r.ok){f.level++;this.action({kind:'upgrade',x:f.x,z:f.z,label:`Level ${f.level} / ${f.level<=MAX_RADIUS_LEVEL?'+8 heat range':'fuel efficiency improved'}`,costs:RESOURCE_IDS.filter(k=>cost[k]).map(resource=>({resource,amount:cost[resource]!,stock:-stock[resource]!}))});this.notify(`Furnace level ${f.level}. ${f.level<=MAX_RADIUS_LEVEL?'Heat range expanded.':'Maximum heat range retained.'} Fuel lasts longer.`);}return r;
+    if(r.ok){f.level++;this.action({kind:'upgrade',x:f.x,z:f.z,label:`Level ${f.level} / ${expandsAtLevel(f.level)?'+8 heat range':'fuel efficiency improved'}`,costs:RESOURCE_IDS.filter(k=>cost[k]).map(resource=>({resource,amount:cost[resource]!,stock:-stock[resource]!}))});this.notify(`Furnace level ${f.level}. ${expandsAtLevel(f.level)?'Heat range expanded.':'Heat range unchanged.'} Fuel lasts longer.`);}return r;
   }
   furnaceUpgrade(id?:string){
     const furnace=id?this.state.furnaces.find(f=>f.id===id):[...this.state.furnaces].filter(f=>this.settlement.intact(f.id)).sort((a,b)=>distance(a,this.state.player)-distance(b,this.state.player))[0];

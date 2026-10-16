@@ -5,7 +5,7 @@ import {Game} from '../src/game/Game';
 import {simulationState as newState} from './fixtures/state';
 import {worldSpec} from '../src/game/GameConfig';
 import {heatRadius,updateSurvival,healingAmount} from '../src/systems/SurvivalSystem';
-import {furnaceCost,fuelInterval} from '../src/data/furnaces';
+import {furnaceCost,fuelInterval,furnaceExpansions} from '../src/data/furnaces';
 import {RESOURCE_IDS} from '../src/data/definitions';
 import {WorldManager,distance} from '../src/world/WorldManager';
 import {updateExposure} from '../src/systems/StatusSystem';
@@ -14,12 +14,13 @@ const fresh=()=>{const g=new Game(newState(worldSpec(42)));g.paused=false;g.comb
 test('upgrade schedule reaches 50, uses every material and spends carried/stored supplies atomically',()=>{
  assert.deepEqual(furnaceCost(2),{wood:30});assert.deepEqual(furnaceCost(3),{wood:60});assert.deepEqual(furnaceCost(4),{wood:90});assert.deepEqual(furnaceCost(5),{wood:90});assert.deepEqual(furnaceCost(6),{wood:100,metal:10});assert.deepEqual(furnaceCost(10),{wood:140,metal:20});
  const g=fresh();for(const r of RESOURCE_IDS)g.state.inventory[r]=100000;
- const used=new Set();for(let level=2;level<=50;level++){const cost=furnaceCost(level),before={...g.state.inventory};assert(g.upgradeFurnace().ok);assert.equal(g.state.furnaces[0].level,level);for(const r of RESOURCE_IDS){assert.equal(g.state.inventory[r],before[r]-(cost[r]??0));if(cost[r])used.add(r);}}
+ const used=new Set();for(let level=2;level<=50;level++){const cost=furnaceCost(level),before={...g.state.inventory};assert(g.upgradeFurnace().ok);assert.equal(g.state.furnaces[0].level,level);assert.equal(g.message.includes('Heat range expanded.'),[5,10,20].includes(level));assert.equal(heatRadius(importJSON(exportFull(g.state)).furnaces[0]),heatRadius(g.state.furnaces[0]));for(const r of RESOURCE_IDS){assert.equal(g.state.inventory[r],before[r]-(cost[r]??0));if(cost[r])used.add(r);}}
  assert.equal(used.size,RESOURCE_IDS.length);assert(!g.upgradeFurnace().ok);assert.deepEqual(importJSON(exportFull(g.state)),g.state);
  const h=fresh();h.state.inventory.wood=10;h.state.stockpile.wood=20;assert(h.upgradeFurnace().ok);assert.equal(h.state.inventory.wood+h.state.stockpile.wood,0);const snapshot=exportFull(h.state);assert(!h.upgradeFurnace().ok);assert.equal(exportFull(h.state),snapshot);
 });
-test('radius stops growing at 20 while fuel interval keeps improving to 50',()=>{
- const f=fresh().state.furnaces[0];f.level=20;const radius=heatRadius(f);f.level=50;assert.equal(heatRadius(f),radius);assert.equal(radius,164);assert.equal(fuelInterval(1),1);assert.equal(fuelInterval(2),1.2);assert.equal(fuelInterval(50),10.8);
+test('radius expands exactly three times at 5, 10 and 20 while fuel improves through 50',()=>{
+ const furnace=fresh().state.furnaces[0];let changes=0,previous=12;for(let level=1;level<=50;level++){furnace.level=level;const count=level>=20?3:level>=10?2:level>=5?1:0;assert.equal(furnaceExpansions(level),count);assert.equal(heatRadius(furnace),12+8*count);if(heatRadius(furnace)!==previous){assert([5,10,20].includes(level));changes++;}previous=heatRadius(furnace);}assert.equal(changes,3);furnace.fuel=0;furnace.charcoal=0;assert.equal(heatRadius(furnace),0);furnace.charcoal=1;assert.equal(heatRadius(furnace),36);
+ const f=fresh().state.furnaces[0];f.level=20;const radius=heatRadius(f);f.level=50;assert.equal(heatRadius(f),radius);assert.equal(radius,36);assert.equal(fuelInterval(1),1);assert.equal(fuelInterval(2),1.2);assert.equal(fuelInterval(50),10.8);
  const s=fresh().state;s.furnaces[0].level=50;updateSurvival(s,1);assert(Math.abs(s.furnaces[0].fuel-(60-1/10.8))<1e-8);
 });
 test('charcoal is preferred and adds 30 base seconds; wood adds 10, with no hidden double duration',()=>{
@@ -29,11 +30,11 @@ test('charcoal is preferred and adds 30 base seconds; wood adds 10, with no hidd
 test('attacks inside furnace reduce the next healing tick to ten, restored after three damage-free seconds',()=>{
  const g=fresh(),p=g.state.player;p.hp=20;p.heatTime=2.5;g.combat.damage({...p,id:'player',kind:'player'},10,'enemy');assert.equal(p.hp,15);assert.equal(healingAmount(g.state),10);assert.equal(importJSON(exportFull(g.state)).player.recentDamage,3);updateSurvival(g.state,.5);assert.equal(p.hp,25);updateSurvival(g.state,2.5);assert.equal(healingAmount(g.state),25);updateSurvival(g.state,.5);assert.equal(p.hp,50);
 });
-test('all hostile types burn for twelve per second without doubling or overlapping heat stacking, including outside AI radius',()=>{
+test('all hostile types burn for twelve per second without doubling or overlapping heat stacking, without stacking overlapping sources',()=>{
  const g=fresh();Object.getPrototypeOf(g.combat).ensureEncounters.call(g.combat);for(const a of Object.values(g.state.combat.actors))a.hp=0;
- const a=Object.values(g.state.combat.actors).find(a=>a.type==='bandit')!;Object.assign(a,{hp:125,x:90,z:0,heatInside:false});g.state.furnaces[0].level=20;
+ const a=Object.values(g.state.combat.actors).find(a=>a.type==='bandit')!;Object.assign(a,{hp:125,x:30,z:0,heatInside:false});g.state.furnaces[0].level=20;
  for(let i=0;i<10;i++)g.combat.update(.1);assert.equal(a.hp,100.5);assert.equal(a.heatBurn,0);
- a.x=300;g.combat.update(.1);assert.equal(a.heatBurn,0);a.x=90;g.combat.update(.1);assert.equal(a.hp,88); // another 10% entry penalty, no full burn tick yet
+ a.x=300;g.combat.update(.1);assert.equal(a.heatBurn,0);a.x=30;g.combat.update(.1);assert.equal(a.hp,88); // another 10% entry penalty, no full burn tick yet
  const b={id:'built:1',type:'furnace' as const,x:1,z:0,rotation:0};g.state.buildings.push(b);g.state.nextId=2;g.state.furnaces.push({...b,level:20,fuel:100,charcoal:0});for(let i=0;i<9;i++)g.combat.update(.1);assert.equal(a.hp,76);
 });
 test('hut construction takes ten simulation seconds, survives saving, and summons exactly two workers once',()=>{

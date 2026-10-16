@@ -1,6 +1,9 @@
 import type {Balances} from './definitions';
 export const MAX_FURNACE_LEVEL=50;
-export const MAX_RADIUS_LEVEL=20;
+export const FURNACE_EXPANSION_LEVELS:readonly number[]=[5,10,20];
+export const furnaceExpansions=(level:number)=>FURNACE_EXPANSION_LEVELS.filter(milestone=>level>=milestone).length;
+export const furnaceRadius=(level:number)=>12+furnaceExpansions(level)*8;
+export const expandsAtLevel=(level:number)=>FURNACE_EXPANSION_LEVELS.includes(level);
 export const fuelInterval=(level:number)=>1+(level-1)*.2;
 /** Indexed by destination level. Food supplies the builders in later tiers. */
 export function furnaceCost(level:number):Partial<Balances>{

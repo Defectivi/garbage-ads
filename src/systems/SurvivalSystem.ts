@@ -1,8 +1,8 @@
-import {fuelInterval,MAX_RADIUS_LEVEL} from '../data/furnaces';
+import {fuelInterval,furnaceRadius} from '../data/furnaces';
 import {maxPlayerHP} from '../game/GameState';
 import type { GameState, Furnace, Point } from '../game/GameState';
 import { distance } from '../world/WorldManager';
-export const heatRadius = (f: Furnace) => f.fuel + f.charcoal > 0 ? 12 + (Math.min(MAX_RADIUS_LEVEL,f.level) - 1) * 8 : 0;
+export const heatRadius = (f: Furnace) => f.fuel + f.charcoal > 0 ? furnaceRadius(f.level) : 0;
 export const furnaceTier = (level: number) => Math.floor(level / 5);
 export function structureIntact(state:GameState,id:string){return !state.changes.structures?.[id]||state.changes.structures[id].stage==='intact';}
 export function playerHeatSources(state: GameState) {
