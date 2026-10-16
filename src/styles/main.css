@@ -522,3 +522,7 @@ h1,h2,h3,.modal h2,.death-modal h2{font-family:Consolas,'Courier New',monospace;
 @media(max-width:600px){.pause-modal{width:calc(100vw - 24px);padding:24px 18px}.pause-controls{grid-template-columns:1fr;gap:18px}.pause-summary{gap:8px}.pause-summary span{font-size:10px;letter-spacing:0}.pause-summary strong{font-size:17px}.pause-reset{gap:12px}.pause-reset span{font-size:11px}.pause-actions>div button{font-size:13px;padding:10px 7px}}
 
 .pause-modal .pause-actions>div button:hover:not(:disabled){background:#3a5a64;color:#fff0d4}.pause-modal .pause-actions>button:hover:not(:disabled){background:#a77440;color:#fff5df}.pause-modal .pause-reset button:hover:not(:disabled){background:#4a3835;color:#ffcfb5}.pause-modal .close-modal{background:#29434d;color:#e6eee5;border-color:#738e91}.pause-modal .close-modal:hover:not(:disabled){background:#3a5a64;color:#fff0d4}
+
+#seed-preview{display:block;min-height:18px;font:12px/1.5 Consolas,monospace;letter-spacing:0;margin-top:8px;color:#506e72;overflow-wrap:anywhere}#day-night{color:#c4d7df;font-size:12px;white-space:nowrap}
+
+#weather{display:inline-flex;align-items:center;gap:5px}#weather svg{width:15px;height:15px;flex-shrink:0}

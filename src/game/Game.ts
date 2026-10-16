@@ -5,7 +5,7 @@ import {furnaceCost,MAX_FURNACE_LEVEL,MAX_RADIUS_LEVEL} from '../data/furnaces';
 import {movementMultiplier,updateExposure} from '../systems/StatusSystem';
 import { SettlementSystem } from '../systems/SettlementSystem';
 import type { SettlementEvent } from './PresentationEvents';
-import { MOVEMENT,GATHER_SECONDS } from './GameConfig';
+import { MOVEMENT,GATHER_SECONDS,INT32_MAX } from './GameConfig';
 import { BUILDINGS, RESOURCE_IDS, balances, type Balances, type BuildingType, type Resource } from '../data/definitions';
 import { WorldManager, distance, type Chunk, type Node, type Ruin, type FishingSpot } from '../world/WorldManager';
 import type { GameState, Point, Worker } from './GameState';
@@ -39,7 +39,7 @@ export class Game {
   private paths = new Map<string, Point[]>();
   private velocity = { x: 0, z: 0 };
   constructor(public state: GameState) { for(const w of state.combat.weapons)w.uses=Math.min(w.uses,weaponUses(w.type));this.world = new WorldManager(state.world); this.combat = new CombatSystem(this);this.settlement=new SettlementSystem(this); }
-  get inventoryLimit() { return this.state.settings.inventoryLimit ? this.state.settings.inventoryLimit + this.state.buildings.filter(b => b.type === 'storage'&&this.settlement.intact(b.id)).length * 50 : 0; }
+  get inventoryLimit() { return this.state.settings.inventoryLimit ? Math.min(INT32_MAX,this.state.settings.inventoryLimit + this.state.buildings.filter(b => b.type === 'storage'&&this.settlement.intact(b.id)).length * 50) : 0; }
   get dead() { return this.state.player.hp <= 0 || this.state.settings.difficulty === 'survival' && this.state.player.warmth <= 0; }
   notify(message: string) { this.message = message; }
   nodeRemaining(node: Node) { if(node.id.startsWith('fish:'))return Math.max(0,node.amount-(this.state.changes.fishing[node.id]??0));return this.state.changes.nodes[node.id] ?? node.amount; }

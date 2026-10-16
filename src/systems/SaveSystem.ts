@@ -1,6 +1,6 @@
 import { structureMaxHP } from '../data/settlement';
 import { balances, BUILDINGS, RESOURCE_IDS, type Balances, type BuildingType } from '../data/definitions';
-import { GENERATION_VERSION, type Settings, type WorldSpec } from '../game/GameConfig';
+import { GENERATION_VERSION, INT32_MIN,INT32_MAX,UINT32_MAX,parseSeed, type Settings, type WorldSpec } from '../game/GameConfig';
 import { newState, maxPlayerHP, type GameState, type Point } from '../game/GameState';
 import { WorldManager } from '../world/WorldManager';
 import { freshCombat, type CombatState } from '../game/CombatState';
@@ -13,8 +13,8 @@ const bool = (v: unknown, path: string) => { if (typeof v !== 'boolean') throw n
 const array = (v: unknown, path: string, max = 10000): unknown[] => { if (!Array.isArray(v) || v.length > max) throw new Error(`${path} must be an array with at most ${max} entries.`); return v; };
 function point(v: unknown, path: string): Point { const p = record(v, path); return { x: num(p.x, `${path}.x`, -1000000, 1000000), z: num(p.z, `${path}.z`, -1000000, 1000000) }; }
 export function validateSettings(v: unknown): Settings {
-  const s = record(v, 'settings'); if (s.difficulty !== 'relaxed' && s.difficulty !== 'survival') throw new Error('Unknown survival difficulty.');
-  return { difficulty: s.difficulty, renderDistance: num(s.renderDistance, 'renderDistance', 1, 3, true), sound: bool(s.sound, 'sound'), allowDebt: bool(s.allowDebt, 'allowDebt'), inventoryLimit: num(s.inventoryLimit, 'inventoryLimit', 0, 9999999, true), resourceMin: num(s.resourceMin, 'resourceMin', -9999999, -1, true), resourceMax: num(s.resourceMax, 'resourceMax', 1, 9999999, true) };
+  const s = record(v, 'settings'),legacyBounds=s.resourceMin===-9999999&&s.resourceMax===9999999; if (s.difficulty !== 'relaxed' && s.difficulty !== 'survival') throw new Error('Unknown survival difficulty.');
+  return { difficulty: s.difficulty, renderDistance: num(s.renderDistance, 'renderDistance', 1, 3, true), sound: bool(s.sound, 'sound'), allowDebt: bool(s.allowDebt, 'allowDebt'), inventoryLimit: num(s.inventoryLimit, 'inventoryLimit', 0, INT32_MAX, true), resourceMin: legacyBounds?INT32_MIN:num(s.resourceMin, 'resourceMin', INT32_MIN, -1, true), resourceMax: legacyBounds?INT32_MAX:num(s.resourceMax, 'resourceMax', 1, INT32_MAX, true) };
 }
 export function validateBalances(v: unknown, settings: Settings, path = 'resources'): Balances {
   const r = record(v, path), out = balances();
@@ -25,15 +25,16 @@ export function validateWorld(v: unknown): WorldSpec {
   const w = record(v, 'world');
   if (![1, 2, 3, 4, GENERATION_VERSION].includes(w.generationVersion as number)) throw new Error(`Unsupported generation version ${String(w.generationVersion)}. Supported terrain generations: 1, 2, 3, 4 and ${GENERATION_VERSION}.`);
   const seeds = record(w.seeds, 'world.seeds'), c = record(w.config, 'world.config');
-  const read = (k: string) => num(seeds[k], `seeds.${k}`, 0, 65535, true);
+  const read = (k: string) => num(seeds[k], `seeds.${k}`, 0, UINT32_MAX, true);
+  let seedText:string|undefined;if(w.seedText!==undefined){if(typeof w.seedText!=='string')throw new Error('seedText must be text.');const parsed=parseSeed(w.seedText);if(!parsed.seedText||parsed.seed!==w.seed)throw new Error('seedText does not match the numeric seed.');seedText=parsed.seedText;}
   // Legacy worlds used wildlife for village guards and equipment drops. Preserve those outcomes.
   const independent = (k: 'villages' | 'loot') => seeds[k] === undefined && Number(w.generationVersion) < 3 ? read('wildlife') : read(k);
-  return { seed: num(w.seed, 'world.seed', 0, 65535, true), generationVersion: Number(w.generationVersion), seeds: { terrain: read('terrain'), rivers: read('rivers'), biomes: read('biomes'), resources: read('resources'), ruins: read('ruins'), wildlife: read('wildlife'), villages: independent('villages'), loot: independent('loot') }, config: { chunkSize: num(c.chunkSize, 'chunkSize', 16, 64, true), initialRegionSize: num(c.initialRegionSize, 'initialRegionSize', 64, 4096, true), worldScale: num(c.worldScale, 'worldScale', .5, 4), riverDensity: num(c.riverDensity, 'riverDensity', 0, 3), ruinDensity: num(c.ruinDensity, 'ruinDensity', 0, 3), resourceDensity: num(c.resourceDensity, 'resourceDensity', 0, 3) } };
+  return { seed: num(w.seed, 'world.seed', 0, UINT32_MAX, true),...(seedText===undefined?{}:{seedText}), generationVersion: Number(w.generationVersion), seeds: { terrain: read('terrain'), rivers: read('rivers'), biomes: read('biomes'), resources: read('resources'), ruins: read('ruins'), wildlife: read('wildlife'), villages: independent('villages'), loot: independent('loot') }, config: { chunkSize: num(c.chunkSize, 'chunkSize', 16, 64, true), initialRegionSize: num(c.initialRegionSize, 'initialRegionSize', 64, 4096, true), worldScale: num(c.worldScale, 'worldScale', .5, 4), riverDensity: num(c.riverDensity, 'riverDensity', 0, 3), ruinDensity: num(c.ruinDensity, 'ruinDensity', 0, 3), resourceDensity: num(c.resourceDensity, 'resourceDensity', 0, 3) } };
 }
 function numericMap(v: unknown, path: string) {
   const raw = record(v, path); if (Object.keys(raw).length > 50000) throw new Error(`${path} is too large.`);
   const out: Record<string, number> = {};
-  for (const [key, value] of Object.entries(raw)) out[id(key, path)] = num(value, `${path}.${key}`, 0, 9999999, true);
+  for (const [key, value] of Object.entries(raw)) out[id(key, path)] = num(value, `${path}.${key}`, 0, INT32_MAX, true);
   return out;
 }
 function weaponType(v: unknown): WeaponType { if (typeof v !== 'string' || !Object.hasOwn(WEAPONS, v)) throw new Error('Unknown weapon type.'); return v as WeaponType; }
@@ -140,7 +141,7 @@ export function importJSON(text: string, expectedMode?: 'full-save' | 'sandbox-c
   }}
   if(changes.lootTaken!==undefined){state.changes.lootTaken=array(changes.lootTaken,'lootTaken',50000).map(v=>id(v,'lootTaken'));if(state.changes.lootTaken.some(key=>!worldManager.villages().some(v=>Array.from({length:6},(_,i)=>`supplies:${v.id}:${i}`).includes(key))))throw new Error('Unknown village loot pile.');if(new Set(state.changes.lootTaken).size!==state.changes.lootTaken.length)throw new Error('Duplicate looted pile.');}
   if(changes.groundLoot!==undefined){const loot=record(changes.groundLoot,'groundLoot');if(Object.keys(loot).length>5000)throw new Error('Too many loot piles.');for(const[key,value]of Object.entries(loot)){
-    id(key,'loot.id');const raw=record(value,'loot');if(raw.id!==key)throw new Error('Loot ID does not match key.');const resources=record(raw.resources,'loot.resources'),items:Partial<Balances>={};if(Object.keys(resources).some(key=>!RESOURCE_IDS.includes(key as keyof Balances)))throw new Error('Unknown loot material.');for(const resource of RESOURCE_IDS)if(resources[resource]!==undefined)items[resource]=num(resources[resource],'loot.quantity',0,9999,true);state.changes.groundLoot![key]={id:key,...point(raw,'loot'),resources:items,...(raw.weapon===undefined?{}:{weapon:weaponType(raw.weapon)})};
+    id(key,'loot.id');const raw=record(value,'loot');if(raw.id!==key)throw new Error('Loot ID does not match key.');const resources=record(raw.resources,'loot.resources'),items:Partial<Balances>={};if(Object.keys(resources).some(key=>!RESOURCE_IDS.includes(key as keyof Balances)))throw new Error('Unknown loot material.');for(const resource of RESOURCE_IDS)if(resources[resource]!==undefined)items[resource]=num(resources[resource],'loot.quantity',0,INT32_MAX,true);state.changes.groundLoot![key]={id:key,...point(raw,'loot'),resources:items,...(raw.weapon===undefined?{}:{weapon:weaponType(raw.weapon)})};
   }}
   return state;
 }

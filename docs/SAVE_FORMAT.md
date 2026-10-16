@@ -20,13 +20,13 @@ Both documents require `format: "frostbound"`, `formatVersion: 2`, `mode`, and `
 }
 ```
 
-The top-level seed and all eight stream seeds are unsigned 16-bit integers, including zero and 65535. Explicit stream seeds are authoritative: changing `world.seed` alone changes the displayed identifying seed, not the stored streams. Use **New World** to derive all streams from a different seed, or edit the individual streams deliberately. Generation is a function of the complete world specification, not the displayed seed alone.
+The top-level seed and all eight stream seeds are unsigned 32-bit integers, including zero and 4294967295. Explicit stream seeds are authoritative: changing `world.seed` alone changes the displayed identifying seed, not the stored streams. Use **New World** to derive all streams from a different seed, or edit the individual streams deliberately. Generation is a function of the complete world specification, not the displayed seed alone.
 
 Chunk size: integer 16–64; initial region: integer 64–4096; world scale: 0.5–4; densities: 0–3. Terrain samples are continuous world coordinates. Generated stable IDs include `node:chunkX:chunkZ:index`, `fish:chunkX:riverRow`, and `ruin:regionX:regionZ`. Regions for ruins are 128 units wide. Building IDs use `built:N`; workers refer to their hut ID. Coordinate addressing supports negatives.
 
 ## Common balances and settings
 
-A balance is a complete object containing integer `wood`, `stone`, `meat`, `fish`, `metal`, `gold`, and `charcoal` values. Missing values are invalid. The inclusive default range is **−9,999,999 to 9,999,999**; negative values are valid, independent of debt settings. `null`, strings, fractions, NaN/infinity representations, and out-of-range values are not accepted.
+A balance is a complete object containing integer `wood`, `stone`, `meat`, `fish`, `metal`, `gold`, and `charcoal` values. Missing values are invalid. The inclusive default range is **-2,147,483,648 to 2,147,483,647**; negative values are valid, independent of debt settings. `null`, strings, fractions, NaN/infinity representations, and out-of-range values are not accepted.
 
 ```json
 {
@@ -35,12 +35,12 @@ A balance is a complete object containing integer `wood`, `stone`, `meat`, `fish
   "sound": true,
   "allowDebt": false,
   "inventoryLimit": 0,
-  "resourceMin": -9999999,
-  "resourceMax": 9999999
+  "resourceMin": -2147483648,
+  "resourceMax": 2147483647
 }
 ```
 
-Difficulty is `relaxed` or `survival`; render distance is integer 1–3. Inventory limit is integer 0–9,999,999 (zero disables it). Custom resourceMin may be −9,999,999 through −1; resourceMax may be 1 through 9,999,999. Every imported balance, including NPC accounts, must fit those configured bounds. Debt controls *spending*, not whether a negative balance may be imported. Transactions commit all accounts or none.
+Difficulty is `relaxed` or `survival`; render distance is integer 1-3. Inventory limit is integer 0-2147483647 (zero disables it). Custom resourceMin may be -2147483648 through -1; resourceMax may be 1 through 2147483647. Every imported balance, including NPC accounts, must fit those configured bounds. Debt controls spending, not whether negative balances can be imported. Transactions commit all accounts or none.
 
 ## `mode: "sandbox-config"`
 
@@ -119,3 +119,5 @@ Camp progression: furnace levels accept 1-50. Player `recentDamage` (0-3 seconds
 Spawn/visibility update (format remains 2): optional `state.spawnProtection` contains finite `{x,z,remaining}` with `remaining` in 0-12 seconds. The fixed radius is 100 world units. Full saves preserve the remaining simulation time; an absent field grants no new protection on load. Fresh worlds/sandbox imports and recovery create a new zone. Full-save imports keep their saved fuel/building/worker arrays without adding a starter camp. The reserved `starter:hut` ID has 500 maximum HP (125 as a ruin); ordinary huts retain 1000/250. New worlds start with 60 fuel units, a completed starter hut and two workers.
 
 Night/balance update (format 2): new optional player `hunger` (0-20), `hungerTime` (0-30 walking seconds), `sprintHungerTime` (0-15 sprint seconds), `foodCooldown` (0-3), and `starvationTime` (0-1). Absent hunger reads as 20. Campfire buildings retain type `shelter`, with optional `burnTime` (0-15) and `pulseTime` (0-1); old shelters receive a finite 15-second burn. `city_store` is a valid 2000-HP building type. Equipment accepts `stone_sword`; actor `stunned` accepts 0-1; weapon statuses may have `bleedDamage` (0-7), with older missing values retaining 2 damage. Projectile damage accepts up to 105 and optional `aim` stores the fixed shotgun direction. Elapsed time already persists day/night and optional encounter IDs track additional night waves. Storage salvage uses existing persistent ground loot; positive shared balances are removed once and its ten-percent remainder is stored in a separate pile.
+
+Seed/HUD update: optional `world.seedText` stores a normalized text seed whose deterministic hash must equal numeric `world.seed`. Explicit eight stream seeds remain authoritative; numeric seeds 0-65535 keep their original derivation and existing saves keep their terrain streams. Randomization uses Uint32. The exact legacy default settings pair (-9999999,9999999) migrates to signed 32-bit limits; other custom bounds remain unchanged. Node depletion maps and ground-loot quantities accept nonnegative values through 2147483647. Aggregate sums use safe JavaScript arithmetic without bitwise wrapping. The weather state still saves its internal timer, but the HUD displays only current weather and the separate day/night countdown.

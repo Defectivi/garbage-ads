@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { worldSpec } from '../src/game/GameConfig';
 import { WorldManager } from '../src/world/WorldManager';
 import { derive, SeededRNG } from '../src/utils/SeededRNG';
-test('16-bit world seeds include both limits and reject invalid values', () => { worldSpec(0); worldSpec(65535); for (const n of [-1, 65536, 1.5, NaN, Infinity]) { assert.throws(() => worldSpec(n)); assert.throws(() => worldSpec(0, n)); } });
+test('32-bit world seeds include both limits and reject invalid values', () => { worldSpec(0); worldSpec(4294967295); for (const n of [-1, 4294967296, 1.5, NaN, Infinity]) { assert.throws(() => worldSpec(n)); assert.throws(() => worldSpec(0, n)); } });
 test('coordinate-addressable streams reproduce terrain, biomes, rivers, ruins and nodes', () => {
   const a = new WorldManager(worldSpec(48192)), b = new WorldManager(worldSpec(48192));
   for (const [x, z] of [[0, 0], [-71, -45], [256, 32], [-32, 32]]) { assert.equal(a.height(x, z), b.height(x, z)); assert.deepEqual(a.river(x, z), b.river(x, z)); assert.equal(a.biome(x, z), b.biome(x, z)); }

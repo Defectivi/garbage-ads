@@ -17,7 +17,7 @@ test('generation 5 separates all eight RNG streams and validates new seed fields
   assert.equal(new Set(Object.values(spec.seeds)).size, 8);
   for (const value of Object.values(spec.seeds)) assert(Number.isInteger(value) && value >= 0 && value <= 65535);
   for (const key of ['villages', 'loot'] as const) {
-    for (const value of [undefined, null, -1, 65536, 1.5, NaN]) {
+    for (const value of [undefined, null, -1, 4294967296, 1.5, NaN]) {
       const broken = structuredClone(spec); (broken.seeds as any)[key] = value;
       assert.throws(() => validateWorld(broken));
     }

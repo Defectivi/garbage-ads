@@ -8,7 +8,7 @@ import { transact, exchange } from '../src/systems/InventorySystem';
 import { importJSON, exportFull, exportSandbox } from '../src/systems/SaveSystem';
 const rules = { ...DEFAULT_SETTINGS };
 test('transactions allow legitimate negative balances but enforce finite integer limits atomically', () => {
-  const a = balances({ wood: -500, stone: 9999999 }); assert(transact([{ account: a, delta: { wood: 2 } }], rules).ok); assert.equal(a.wood, -498);
+  const a = balances({ wood: -500, stone: 2147483647 }); assert(transact([{ account: a, delta: { wood: 2 } }], rules).ok); assert.equal(a.wood, -498);
   const before = { ...a }; assert(!transact([{ account: a, delta: { wood: 10, stone: 1 } }], rules).ok); assert.deepEqual(a, before);
   for (const n of [NaN, Infinity, 1.1, 1e30]) assert(!transact([{ account: a, delta: { wood: n } }], rules).ok);
   assert(transact([{ account: a, delta: { wood: -50 } }], { ...rules, allowDebt: true }).ok); assert.equal(a.wood, -548);

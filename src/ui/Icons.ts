@@ -11,6 +11,8 @@ const items: Record<Resource, string> = {
 };
 export const itemIcon = (type: Resource) => `<svg class="item-icon" viewBox="0 0 26 26" shape-rendering="crispEdges" aria-hidden="true">${items[type]}</svg>`;
 const symbols: Record<string, string> = {
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/>',
+  storm:'<path d="M6 15a5 5 0 1 1 2-9 6 6 0 0 1 11 4 3 3 0 0 1 0 6h-3M12 13l-3 5h4l-3 5"/>',
   pack: '<rect x="6" y="6" width="12" height="15" rx="1"/><path d="M9 6V3h6v3M6 13h12m-8 3h4"/>',
   build: '<path d="m3 11 9-8 9 8M6 9v12h12V9M10 21v-7h4v7"/>',
   map: '<path d="m3 5 6-2 6 3 6-2v16l-6 2-6-3-6 2V5Zm6-2v16m6-13v16"/>',
