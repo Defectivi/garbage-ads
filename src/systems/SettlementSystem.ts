@@ -1,3 +1,4 @@
+import {isNight} from './DayNight';
 import { segmentDistance } from '../game/CombatGeometry';
 import type { Game } from '../game/Game';
 import type { Building,Point } from '../game/GameState';
@@ -10,7 +11,7 @@ import { route } from './Navigation';
 
 export interface Structure extends Building {initialRuin?:boolean;generated?:boolean}
 export interface Integrity {hp:number;stage:'intact'|'ruin'|'gone'}
-export interface Refuge extends Point {houseId:string;homeX:number;homeZ:number;phase:'fleeing'|'hidden'|'returning';remaining:number}
+export interface Refuge extends Point {houseId:string;homeX:number;homeZ:number;phase:'fleeing'|'hidden'|'returning';remaining:number;reason?:'night'}
 export interface LootPile extends Point {id:string;resources:Partial<Balances>;weapon?:WeaponType;category?:string}
 export class SettlementSystem {
   private paths=new Map<string,Point[]>();
@@ -34,7 +35,7 @@ export class SettlementSystem {
     (this.game.state.changes.structures??(this.game.state.changes.structures={}))[id]=next;
     if(next.stage!=='intact'){
       const f=this.game.state.furnaces.find(f=>f.id===id);if(f){f.fuel=0;f.charcoal=0;}
-      for(const [npc,refuge]of Object.entries(this.game.state.changes.refuges??{}))if(refuge.houseId===id){refuge.phase='returning';refuge.remaining=0;this.paths.delete(npc);}
+      for(const [npc,refuge]of Object.entries(this.game.state.changes.refuges??{}))if(refuge.houseId===id){const worker=this.game.state.workers.find(w=>w.id===npc);if(worker&&refuge.phase==='hidden'&&old.stage==='intact'&&next.stage==='ruin')worker.hp*=.5;refuge.phase='returning';refuge.remaining=0;this.paths.delete(npc);}
     }
     return lost;
   }
@@ -57,22 +58,23 @@ export class SettlementSystem {
   burning(point:Point & {type?:keyof typeof BUILDINGS}){return this.game.state.combat.fires.some(f=>f.remaining>0&&distance(f,point)<=4+(point.type?BUILDINGS[point.type].radius:0));}
   refuge(id:string){return this.game.state.changes.refuges?.[id];}
   position(id:string,fallback:Point):Point{return this.refuge(id)??fallback;}
-  flee(id:string,point:Point){
+  flee(id:string,point:Point,night=false){
     const g=this.game,worker=g.state.workers.find(w=>w.id===id),old=this.refuge(id);
     if(old){old.remaining=12;if(old.phase==='returning')old.phase='fleeing';return;}
-    const houses=this.structures(point,2).filter(b=>b.type!=='furnace'&&b.type!=='shelter'&&!this.burning(b)&&this.integrity(b).stage==='intact'&&!b.construction&&distance(b,point)<36).sort((a,b)=>(a.id===worker?.hutId?-100:distance(a,point))-(b.id===worker?.hutId?-100:distance(b,point)));
+    const houses=this.structures(point,2).filter(b=>b.type!=='furnace'&&b.type!=='shelter'&&!this.burning(b)&&this.integrity(b).stage==='intact'&&!b.construction&&(night?b.id===worker?.hutId:distance(b,point)<36)).sort((a,b)=>(a.id===worker?.hutId?-100:distance(a,point))-(b.id===worker?.hutId?-100:distance(b,point)));
     const house=houses[0];if(!house)return;
-    (g.state.changes.refuges??(g.state.changes.refuges={}))[id]={houseId:house.id,x:point.x,z:point.z,homeX:point.x,homeZ:point.z,phase:'fleeing',remaining:12};this.paths.delete(id);
+    (g.state.changes.refuges??(g.state.changes.refuges={}))[id]={houseId:house.id,x:point.x,z:point.z,homeX:point.x,homeZ:point.z,phase:'fleeing',remaining:12,...(night?{reason:'night' as const}:{})};this.paths.delete(id);
   }
   update(dt:number){
-    const g=this.game;
+    const g=this.game,night=isNight(g.state);
+    if(night)for(const w of g.state.workers)if(w.hp>0&&!this.refuge(w.id))this.flee(w.id,w,true);
     for(const [id,refuge]of Object.entries(g.state.changes.refuges??{})){
       const actor=g.state.combat.actors[id];
-      if(actor&&actor.hp<=0){delete g.state.changes.refuges![id];this.paths.delete(id);continue;}
+      if((actor&&actor.hp<=0)||g.state.workers.some(w=>w.id===id&&w.hp<=0)){delete g.state.changes.refuges![id];this.paths.delete(id);continue;}
       if(distance(refuge,g.state.player)>100&&!g.state.workers.some(w=>w.id===id))continue;
       const house=this.structures(refuge,2).find(b=>b.id===refuge.houseId),worker=g.state.workers.find(w=>w.id===id);
       if(!house||this.burning(house)||this.integrity(house).stage!=='intact'){refuge.phase='returning';this.paths.delete(id);}
-      if(refuge.phase==='hidden'){if(worker)worker.hp=Math.min(100,worker.hp+dt*5);refuge.remaining=Math.max(0,refuge.remaining-dt);if(refuge.remaining<=0){refuge.phase='returning';this.paths.delete(id);}else continue;}
+      if(refuge.phase==='hidden'){if(worker)worker.hp=Math.min(100,worker.hp+dt*5);refuge.remaining=worker&&night&&house?.id===worker.hutId?12:worker&&refuge.reason==='night'&&worker.hp>=50?0:Math.max(0,refuge.remaining-dt);if(refuge.remaining<=0){refuge.phase='returning';this.paths.delete(id);}else continue;}
       const target=refuge.phase==='fleeing'?{x:house!.x-.7*Math.cos(house!.rotation)+(BUILDINGS[house!.type].radius+.5)*Math.sin(house!.rotation),z:house!.z+.7*Math.sin(house!.rotation)+(BUILDINGS[house!.type].radius+.5)*Math.cos(house!.rotation)}:{x:refuge.homeX,z:refuge.homeZ};
       if(distance(refuge,target)<.4){if(refuge.phase==='fleeing'){refuge.phase='hidden';refuge.remaining=12;}else delete g.state.changes.refuges![id];this.paths.delete(id);continue;}
       let path=this.paths.get(id);if(!path){const solids=g.solids(refuge).filter(s=>!('id'in s)||s.id!==id),valid=(p:Point)=>!g.world.isWater(p.x,p.z)&&solids.every(s=>distance(s,p)>s.radius+.35),clear=(a:Point,b:Point)=>solids.every(s=>segmentDistance(s,a,b)>s.radius+.3);path=valid(target)&&clear(refuge,target)?[target]:route(refuge,target,valid);if(path.length&&valid(target)&&clear(path[path.length-1],target))path.push(target);this.paths.set(id,path);}

@@ -211,6 +211,14 @@ export class Renderer {
     for(const w of this.game.state.workers){const visual=this.residents.get(w.id);if(!visual?.ready||!visual.object.visible||visibilityAt(this.game.state,w)>.9)continue;const hit=this.ray.intersectObject(visual.object,true)[0];if(hit&&hit.distance<nearest){chosen=w.id;nearest=hit.distance;}}
     return chosen;
   }
+  structureAt(clientX:number,clientY:number){
+    const bounds=this.webgl.domElement.getBoundingClientRect();this.ray.setFromCamera(new THREE.Vector2((clientX-bounds.x)/bounds.width*2-1,-(clientY-bounds.y)/bounds.height*2+1),this.camera);
+    let chosen:string|undefined,nearest=Infinity;
+    for(const [id,group] of this.dynamic){if(!group.userData.structureId||!group.visible||visibilityAt(this.game.state,{x:group.position.x,z:group.position.z})>.9)continue;
+      const hit=this.ray.intersectObject(group,true).find(hit=>{for(let o:THREE.Object3D|null=hit.object;o&&o!==group;o=o.parent)if(!o.visible||['heat-ring','heat-aura','structure-health'].includes(o.name))return false;return true;});
+      if(hit&&hit.distance<nearest){chosen=id;nearest=hit.distance;}
+    }return chosen;
+  }
   groundAt(clientX: number, clientY: number) {
     const bounds = this.webgl.domElement.getBoundingClientRect(); this.ray.setFromCamera(new THREE.Vector2((clientX - bounds.x) / bounds.width * 2 - 1, -(clientY - bounds.y) / bounds.height * 2 + 1), this.camera);
     const terrain = Array.from(this.chunks.values()).map(g => g.children[0]); const hit = this.ray.intersectObjects(terrain, false)[0]; return hit ? { x: hit.point.x, z: hit.point.z } : undefined;

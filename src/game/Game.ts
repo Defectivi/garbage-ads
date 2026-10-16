@@ -1,3 +1,4 @@
+import {isNight} from '../systems/DayNight';
 import {harvestRoute,workerHarvestReach} from '../systems/WorkerHarvest';
 import {CITY_OFFERS} from '../data/cityStore';
 import {maxPlayerHP} from './GameState';
@@ -301,7 +302,7 @@ export class Game {
     this.harvestTargets.clear();
     for (const w of this.state.workers) {
       if(w.hp>0&&w.hp<50&&!this.settlement.refuge(w.id))this.settlement.flee(w.id,w);
-      if (w.hp <= 0||this.settlement.refuge(w.id)) continue;
+      if (w.hp <= 0||this.settlement.refuge(w.id)||isNight(this.state)) {this.paths.delete(w.id);this.fuelTasks.delete(w.id);w.progress=0;continue;}
       const hut = this.state.buildings.find(b => b.id === w.hutId); if (!hut||!this.settlement.intact(hut.id)) continue;
       if(this.tendFurnace(w,hut,dt))continue;
       const needsWood=this.workerFurnaces(hut).length>0;

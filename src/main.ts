@@ -1,8 +1,8 @@
-import '@fontsource/dm-sans/latin-400.css';
-import '@fontsource/dm-sans/latin-500.css';
-import '@fontsource/dm-sans/latin-600.css';
-import '@fontsource/dm-sans/latin-700.css';
-import '@fontsource/libre-caslon-display/latin-400.css';
+import '@fontsource/rajdhani/latin-500.css';
+import '@fontsource/rajdhani/latin-600.css';
+import '@fontsource/rajdhani/latin-700.css';
+import '@fontsource/oxanium/latin-600.css';
+import '@fontsource/oxanium/latin-700.css';
 import './styles/main.css';
 import { Game } from './game/Game';
 import { newState } from './game/GameState';

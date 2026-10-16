@@ -13,7 +13,11 @@ import { transact } from './InventorySystem';
 
 export interface CombatUnit extends Point { id: string; hp: number; kind: 'player' | 'guard' | 'enemy' | 'npc'|'building'; radius?:number; villageId?: string | null }
 export function shotgunDamage(range:number,angle=0){const band=Math.max(range/3,Math.abs(angle)/(Math.PI*2/9));return band<=1/3?105:band<=2/3?50:15;}
-export function equipmentDrops(seed: number, id: string) { return derive(seed, `equipment:${id}`) / 4294967296 < .07; }
+export function equipmentDrops(seed: number, id: string, chance=.07) { return derive(seed, `equipment:${id}`) / 4294967296 < chance; }
+export function droppedWeaponUses(seed:number,id:string,weapon:WeaponType){
+ const roll=derive(seed,`equipment-wear:${id}`);if(weapon==='molotov')return 1+roll%5;
+ const max=weaponUses(weapon),low=Math.ceil(max*.2),high=Math.floor(max*.6);return low+roll%(high-low+1);
+}
 
 
 export class CombatSystem {
@@ -97,7 +101,7 @@ export class CombatSystem {
       if (wasAlive && actor.hp <= 0) {
         if(actor.type==='wolf'){const meat=derive(this.s.world.seeds.loot,`wolf-meat:${actor.id}`)%3;if(meat){const loot=this.s.changes.groundLoot??(this.s.changes.groundLoot={});const id=`wolf-meat:${actor.id}`;loot[id]={id,x:actor.x,z:actor.z,resources:{meat}};}}
         this.c.kills++; delete this.c.statuses[actor.id];
-        if (actor.weapon && equipmentDrops(this.s.world.seeds.loot, actor.id)) this.c.drops.push({ id: this.nextId('drop'), x: actor.x, z: actor.z, weapon: actor.weapon, uses: actor.weapon==='molotov'?1:weaponUses(actor.weapon) });
+        if (actor.weapon && equipmentDrops(this.s.world.seeds.loot, actor.id,actor.type==='bandit'?.25:.07)) this.c.drops.push({ id: this.nextId('drop'), x: actor.x, z: actor.z, weapon: actor.weapon, uses: actor.type==='bandit'||actor.weapon==='molotov'?droppedWeaponUses(this.s.world.seeds.loot,actor.id,actor.weapon):weaponUses(actor.weapon) });
         this.game.notify(`${actor.type === 'polar_bear' ? 'Polar bear' : actor.type === 'guard' ? 'Guard' : actor.type==='wolf'?'Wolf':'Raider'} defeated.`);
       }
     } else {
@@ -323,6 +327,6 @@ export class CombatSystem {
   }
   pickup(dropId: string) {
     const drop = this.c.drops.find(d => d.id === dropId); if (!drop || distance(drop, this.s.player) > 3) return false;
-    this.c.weapons.push({ id: this.nextId('weapon'), type: drop.weapon, uses: drop.weapon==='molotov'?1:Math.min(drop.uses,weaponUses(drop.weapon)) }); this.c.drops = this.c.drops.filter(d => d.id !== dropId); this.game.notify(`Picked up ${WEAPONS[drop.weapon].name}.`); return true;
+    this.c.weapons.push({ id: this.nextId('weapon'), type: drop.weapon, uses: Math.min(drop.uses,drop.weapon==='molotov'?5:weaponUses(drop.weapon)) }); this.c.drops = this.c.drops.filter(d => d.id !== dropId); this.game.notify(`Picked up ${WEAPONS[drop.weapon].name}.`); return true;
   }
 }

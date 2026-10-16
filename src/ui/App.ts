@@ -1,3 +1,4 @@
+import {structureMaxHP} from '../data/settlement';
 import {weaponUses} from '../data/weapons';
 import {fuelInterval} from '../data/furnaces';
 import {updateFurnaceUpgrade,flashMissing} from './FurnaceUpgradeUI';
@@ -33,8 +34,8 @@ export class App {
     this.resetOrbit(); this.resetJoystick(); this.game.stopMovement();
     this.root.querySelector('#sprint-button')?.classList.remove('selected');
   }
-  private inspectedWorker?:string;private inspectUntil=0;
-  private inspectWorker(x:number,y:number,touch=false){this.inspectedWorker=this.renderer.workerAt(x,y);this.inspectUntil=touch?performance.now()+3500:Infinity;this.refresh();return !!this.inspectedWorker;}
+  private inspectedWorker?:string;private inspectedStructure?:string;private inspectUntil=0;
+  private inspectWorker(x:number,y:number,touch=false){this.inspectedWorker=this.renderer.workerAt(x,y);this.inspectedStructure=this.inspectedWorker?undefined:this.renderer.structureAt(x,y);this.inspectUntil=touch?performance.now()+3500:Infinity;this.refresh();return !!(this.inspectedWorker||this.inspectedStructure);}
   private collectionEffects: CollectionEffects;
   private damageEffects:DamageEffects; private assistAttack=false;
   constructor(public game: Game, public renderer: Renderer) { this.damageEffects=new DamageEffects(point=>this.renderer.screenPoint(point)); this.collectionEffects = new CollectionEffects(this.root, point => this.renderer.screenPoint(point)); }
@@ -71,7 +72,7 @@ export class App {
       if (e.button === 2 && !drag) { drag = { id: mousePointer, x: e.clientX }; this.aiming = true; canvas.setPointerCapture(mousePointer); }
     });
     window.addEventListener('mouseup', e => { if (e.button === 0) this.firing = false; if (e.button === 2) this.resetOrbit(); });
-    canvas.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'){this.inspectedWorker=undefined;this.refresh();}});
+    canvas.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'){this.inspectedWorker=undefined;this.inspectedStructure=undefined;this.refresh();}});
     canvas.addEventListener('pointermove', e => { if(e.pointerType==='mouse'&&!drag&&!this.placement&&this.mode==='game')this.inspectWorker(e.clientX,e.clientY); if (drag?.id === e.pointerId && this.mode === 'game' && !this.game.paused) { this.renderer.yaw -= (e.clientX - drag.x) * .008; drag.x = e.clientX; } else if (this.placement && e.pointerType !== 'touch') { const p = this.renderer.groundAt(e.clientX, e.clientY); if (p) { this.placement.point = { x: Math.round(p.x * 2) / 2, z: Math.round(p.z * 2) / 2 }; this.previewBuilding(); } } });
     for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(event, e => { if (drag?.id === (e as PointerEvent).pointerId) this.resetOrbit(); if (!(e.type === 'lostpointercapture' && ((e as PointerEvent).buttons & 1))) this.firing = false; });
     canvas.addEventListener('wheel', e => { e.preventDefault(); this.renderer.zoom = Math.max(16, Math.min(65, this.renderer.zoom + e.deltaY * .025)); }, { passive: false });
@@ -174,8 +175,11 @@ export class App {
   refresh() {
     if (this.mode !== 'game') return;
     const s = this.game.state;
-    const inspected=s.workers.find(w=>w.id===this.inspectedWorker),label=this.root.querySelector<HTMLElement>('#worker-inspection')!,point=inspected?this.renderer.screenPoint(inspected):undefined;
-    label.hidden=!inspected||!point||performance.now()>this.inspectUntil;if(inspected&&point){label.textContent=`WORKER / ${Math.ceil(inspected.hp)} / 100 HP`;label.style.left=`${Math.max(8,Math.min(innerWidth-200,point.x-70))}px`;label.style.top=`${Math.max(8,point.y-55)}px`;}
+    const inspected=s.workers.find(w=>w.id===this.inspectedWorker),inspectedBuilding=this.inspectedStructure?this.game.settlement.structures(s.player,s.settings.renderDistance).find(b=>b.id===this.inspectedStructure):undefined;
+    const integrity=inspectedBuilding?this.game.settlement.integrity(inspectedBuilding):undefined,label=this.root.querySelector<HTMLElement>('#worker-inspection')!,target=inspected??inspectedBuilding,point=target?this.renderer.screenPoint(target):undefined;
+    label.hidden=!target||!point||integrity?.stage==='gone'||!!inspected&&this.game.settlement.refuge(inspected.id)?.phase==='hidden'||performance.now()>this.inspectUntil;
+    if(target&&point){label.textContent=inspected?`WORKER / ${Math.ceil(inspected.hp)} / 100 HP`:`${inspectedBuilding!.id==='home'?'Home furnace':BUILDINGS[inspectedBuilding!.type].name}${integrity!.stage==='ruin'?' / RUIN':''} / ${Math.ceil(integrity!.hp)} / ${structureMaxHP(inspectedBuilding!)*(integrity!.stage==='ruin'?.25:1)} HP`;label.style.left=`${Math.max(8,Math.min(innerWidth-Math.min(300,innerWidth-16),point.x-90))}px`;label.style.top=`${Math.max(8,point.y-55)}px`;}
+
     this.root.querySelector('#seed-hud')!.textContent = `SEED ${s.world.seed} / GEN ${s.world.generationVersion}`;
     const compact = (n: number) => Math.abs(n) >= 10000 ? new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n) : String(n);
     const resources = this.root.querySelector('#resources')!;
