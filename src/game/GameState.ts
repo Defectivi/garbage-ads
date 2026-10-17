@@ -5,13 +5,13 @@ import { freshCombat, type CombatState } from './CombatState';
 export interface Point { x: number; z: number }
 export interface Furnace extends Point { id: string; fuel: number; level: number; charcoal: number }
 export interface Building extends Point { id: string; type: BuildingType; rotation: number; construction?:number; burnTime?:number; pulseTime?:number }
-export interface Worker extends Point { id: string; hutId: string; hp: number; sourceId: string | null; load: number; resource?:'wood'|'stone'|'fish'; progress: number; state: 'seeking' | 'gathering' | 'returning' | 'blocked' }
+export interface Worker extends Point { villageId?:string;relocated?:boolean; id: string; hutId: string; hp: number; sourceId: string | null; load: number; resource?:'wood'|'stone'|'fish'; progress: number; state: 'seeking' | 'gathering' | 'returning' | 'blocked' }
 export interface NPCState { inventory: Balances; hp: number }
 export interface GameState {
   world: WorldSpec;
   spawnProtection?:Point & {remaining:number};
   respawnFurnaceId?: string;
-  player: Point & { warmth: number; heading: number; hp: number; hunger?:number; hungerTime?:number; sprintHungerTime?:number; foodCooldown?:number; starvationTime?:number; invulnerable?:number; heatTime?:number; recentDamage?:number; stunned?:number; hypothermia?:{level:1|2;waterTime:number;tick:number} };
+  player: Point & { shelter?:{houseId:string;tick:number}; warmth: number; heading: number; hp: number; hunger?:number; hungerTime?:number; sprintHungerTime?:number; foodCooldown?:number; starvationTime?:number; invulnerable?:number; heatTime?:number; recentDamage?:number; stunned?:number; hypothermia?:{level:1|2;waterTime:number;tick:number} };
   combat: CombatState;
   inventory: Balances; stockpile: Balances;
   furnaces: Furnace[]; buildings: Building[]; workers: Worker[];

@@ -1,9 +1,10 @@
+import {heatRadius} from '../systems/SurvivalSystem';
 import {CITY_OFFERS} from '../data/cityStore';
-import {weaponUses} from '../data/weapons';
+import {WEAPON_IDS,WEAPONS,weaponCost,weaponUses} from '../data/weapons';
 import {paintMap} from './MapPainter';
 import { showTrade } from './TradingUI';
 import type { App } from './App';
-import { BUILDINGS, RESOURCES, RESOURCE_IDS, type BuildingType } from '../data/definitions';
+import { BUILDINGS, CONSTRUCTION_SECONDS, RESOURCES, RESOURCE_IDS, type BuildingType } from '../data/definitions';
 import { exportFull, exportSandbox, importJSON, loadLocal, saveLocal, validateSettings } from '../systems/SaveSystem';
 import { resourceText } from '../systems/InventorySystem';
 import type { Ruin } from '../world/WorldManager';
@@ -16,13 +17,18 @@ export class Panels {
 
   }
   building() {
-    const el = this.app.modal('Make a place in the snow', `<p>Build near your survivor on clear, dry ground. Costs use stored resources first, then carried supplies.</p><div class="building-list">${(Object.keys(BUILDINGS) as BuildingType[]).map(k => `<button data-building="${k}"><b>${BUILDINGS[k].name}</b><small>${resourceText(BUILDINGS[k].costs)}</small><span>${BUILDINGS[k].effect}</span></button>`).join('')}</div>`);
+    const el = this.app.modal('Make a place in the snow', `<p>Build wholly inside an active furnace range, on clear dry ground. Workshop requires its covering furnace at level 5. Costs use stored resources first, then carried supplies.</p><div class="building-list">${(Object.keys(BUILDINGS) as BuildingType[]).map(k => `<button data-building="${k}" ${k==='workshop'&&!this.app.game.state.furnaces.some(f=>f.level>=5&&this.app.game.settlement.ready(f.id)&&heatRadius(f)>0&&Math.hypot(f.x-this.app.game.state.player.x,f.z-this.app.game.state.player.z)<=heatRadius(f)+15)?'disabled title="Upgrade a nearby active furnace to level 5"':''}><b>${BUILDINGS[k].name}</b><small>${resourceText(BUILDINGS[k].costs)}</small><span>${CONSTRUCTION_SECONDS[k]}s construction / ${BUILDINGS[k].effect}</span></button>`).join('')}</div>`);
     const fuel = document.createElement('button'); fuel.textContent = 'Fuel nearest furnace / 1 charcoal / 30 base fuel seconds'; el.querySelector('.modal-content')!.appendChild(fuel); fuel.onclick = () => { const p = this.app.game.state.player, f = [...this.app.game.state.furnaces].sort((a,b) => Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0]; const result=this.app.game.feed(f.id,'charcoal');this.app.report(result);if(result.ok)this.app.closeModal(); };
     el.querySelectorAll<HTMLButtonElement>('[data-building]').forEach(b => b.addEventListener('click', () => { this.app.closeModal(); this.app.beginBuilding(b.dataset.building as BuildingType); }));
   }
   trade(ruin: Ruin, selected?: string) { showTrade(this.app,ruin,selected); }
+  workshop(id:string){
+    const g=this.app.game,shop=g.state.buildings.find(b=>b.id===id);if(!shop||!g.settlement.ready(id)||g.settlement.burning(shop))return;
+    const el=this.app.modal('The Workshop',`<p>Forge and equip weapons. Recipes use stored supplies first, then carried materials. Crafting uses the existing weapon material prices.</p><div class="weapon-shop">${WEAPON_IDS.map(type=>{const cost=weaponCost(type),missing=RESOURCE_IDS.filter(k=>Math.max(0,g.state.inventory[k])+Math.max(0,g.state.stockpile[k])<(cost[k]??0));return `<article class="weapon-offer"><h3>${WEAPONS[type].name}</h3><p>${WEAPONS[type].description}</p><strong>${resourceText(cost)}</strong><button data-craft="${type}" ${missing.length&&!g.state.settings.allowDebt?'disabled':''}>Craft & equip / ${weaponUses(type)} uses</button></article>`;}).join('')}</div>`);el.classList.add('trade-modal','workshop-modal');
+    el.querySelectorAll<HTMLButtonElement>('[data-craft]').forEach(b=>b.onclick=()=>{const result=g.craftWeapon(id,b.dataset.craft as typeof WEAPON_IDS[number]);this.app.report(result);if(result.ok){this.workshop(id);document.getElementById('dialog-status')!.textContent=g.message;}});
+  }
   cityStore(id:string){
-    const g=this.app.game,store=g.state.buildings.find(b=>b.id===id);if(!store||g.settlement.burning(store)||!g.settlement.intact(id)){g.notify('The City Store is unavailable while burning or ruined.');return;}
+    const g=this.app.game,store=g.state.buildings.find(b=>b.id===id);if(!store||g.settlement.burning(store)||!g.settlement.ready(id)){g.notify('The City Store is unavailable while burning or ruined.');return;}
     const el=this.app.modal('City Store',`<p>Prices use carried gold. Weapons equip immediately; bundles go into your pack.</p><div class="shop-wallet">YOUR GOLD <strong>${g.state.inventory.gold}</strong></div><div class="weapon-shop">${CITY_OFFERS.map(o=>`<article class="weapon-offer"><h3>${o.name}</h3><p>${o.weapon?weaponUses(o.weapon)+' uses':'Supply bundle'}</p><button data-city-buy="${o.id}" ${g.state.inventory.gold<o.gold&&!g.state.settings.allowDebt?'disabled':''}>Buy / ${o.gold} gold</button></article>`).join('')}</div>`);el.classList.add('city-store-modal');
     el.querySelectorAll<HTMLButtonElement>('[data-city-buy]').forEach(b=>b.onclick=()=>{const result=g.buyCity(id,b.dataset.cityBuy!);this.app.report(result);if(result.ok){const message=g.message;this.cityStore(id);document.getElementById('dialog-status')!.textContent=message;}});
   }

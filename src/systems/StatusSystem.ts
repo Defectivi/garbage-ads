@@ -18,6 +18,7 @@ export function updateExposure(state:GameState,dt:number,inWater:boolean){
 }
 export function playerEffects(state:GameState):{id:string;label:string;detail:string}[]{
  const p=state.player,status=state.combat.statuses.player,effects=[];
+ if(p.shelter)effects.push({id:'shelter',label:'TAKING SHELTER',detail:'Hostile attacks blocked / +3% max HP each second / F to leave'});
  if(spawnProtected(state))effects.push({id:'spawn',label:`SPAWN SAFE ${Math.ceil(state.spawnProtection!.remaining)}s`,detail:'100 m safe area / hostiles kept outside'});
  if((p.hunger??20)<10)effects.push({id:'hunger',label:(p.hunger??20)<=0?'STARVING':'HUNGRY',detail:`Speed -20%${(p.hunger??20)<5?' / max HP -50%':''}${(p.hunger??20)<=0?' / -15 HP each second':''}`});
  if(isNight(state))effects.push({id:'night',label:'NIGHTFALL',detail:'Double encounters / wolves and bears resist 25% damage / hold molotov for light'});
@@ -26,6 +27,6 @@ export function playerEffects(state:GameState):{id:string;label:string;detail:st
  if((status?.wolfBleed??0)>0)effects.push({id:'wolf-bleed',label:`WOLF BITE ${Math.ceil(status!.wolfBleed!)}s`,detail:'Bleeding / 4 damage each second'});
  if((status?.bleed??0)>0)effects.push({id:'bleed',label:`BLEEDING ${Math.ceil(status!.bleed)}s`,detail:`${status?.bleedDamage??2} damage each second`});
  if((p.invulnerable??0)>0)effects.push({id:'shield',label:`SHIELDED ${p.invulnerable!.toFixed(1)}s`,detail:'Respawn protection'});
- if(inPlayerHeat(state))effects.push({id:'heat',label:'FURNACE PROTECTION',detail:`Incoming damage -50% / heals ${healingAmount(state)} HP every 3s`});
+ if(inPlayerHeat(state)&&!p.shelter)effects.push({id:'heat',label:'FURNACE PROTECTION',detail:`Incoming damage -50% / heals ${healingAmount(state)} HP every 3s`});
  return effects;
 }

@@ -560,3 +560,17 @@ button:focus-visible{outline:2px solid #f1c477;outline-offset:3px}
 @media(max-height:500px){.loading-emblem{margin-bottom:12px}.loading-emblem svg{width:32px;height:32px}.loading-screen>small{margin-top:20px}.loading-screen h1{font-size:26px;margin:10px 0}.loading-screen p{font-size:16px}.loading-screen progress{margin-top:12px}}
 
 .map-key .key-cliff:before{background:#51616b;border:1px solid #d9b764;border-radius:50%}
+
+/* Supplies travel with the title mark, keeping the world view open. */
+.playing header{gap:16px}.playing header .resource-bar{position:static;transform:none;width:auto;max-width:none;min-width:0;margin:0;display:flex;align-items:center;pointer-events:auto}.playing header .resource-bar>span{min-width:50px;padding:6px 9px}.playing header .resource-bar .item-icon{width:22px;height:22px}.playing header .resource-bar b{font-size:11px}
+.hp-meter[data-condition=critical] i,.hunger-meter[data-condition=critical] i{background:#ed594b}.hp-meter[data-condition=healthy] i,.hunger-meter[data-condition=healthy] i{background:#75bd83}.hp-meter[data-condition=full] i{background:#60bbef}.hunger-meter[data-condition=low] i{background:#e4b44c}
+.critical-health #health{color:#ff9f91}.critical-health .combat-hud{border-color:#e95d4b;box-shadow:0 0 20px #e247393b}.critical-health:after{content:'';position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 90px #b11e2444;border:2px solid #df4d4144;z-index:2;animation:health-warning 1.8s ease-in-out infinite}@keyframes health-warning{50%{opacity:.4}}
+@media(prefers-reduced-motion:reduce){.critical-health:after{animation:none}}
+@media(max-width:1100px){.playing header{gap:10px}.playing header .resource-bar>span{min-width:35px;padding:4px}.playing header .resource-bar .item-icon{width:18px;height:18px}.playing header .resource-bar b{font-size:10px}}
+@media(max-width:700px){.playing header{height:66px;padding:12px 3%;gap:6px;align-items:flex-start}.playing header b{font-size:9px;letter-spacing:.03em;white-space:nowrap}.playing header>b .ui-icon{width:17px;height:17px}.playing header .resource-bar{flex:1;gap:0;min-height:27px}.playing header .resource-bar>span{flex:1;min-width:0;gap:2px;padding:4px 2px}.playing header .resource-bar .item-icon{width:13px;height:13px}.playing header .resource-bar b{font-size:9px;letter-spacing:0}.playing header>#seed-hud{position:absolute;top:47px;right:3%;font-size:9px;margin:0}.playing header>button{padding:5px 7px}.playing .survival,.playing #player-effects{top:78px}}
+
+.playing header .resource-bar{overflow-x:auto;scrollbar-width:none}.playing header .resource-bar::-webkit-scrollbar{display:none}@media(max-width:700px){.playing header .resource-bar>span{min-width:29px}}
+
+@media(max-width:700px){.playing header .resource-bar b{font-size:10px}}
+
+.playing header .resource-bar{touch-action:pan-x}

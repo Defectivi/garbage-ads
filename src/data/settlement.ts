@@ -1,9 +1,9 @@
 import { derive } from '../utils/SeededRNG';
 import { WEAPON_IDS } from './weapons';
 
-export const STRUCTURE_HP={hut:1000,storage:2000,shelter:500,furnace:1500,city_store:2000} as const;
+export const STRUCTURE_HP={workshop:1500,hut:1000,storage:2000,shelter:500,furnace:1500,city_store:2000} as const;
 export function structureMaxHP(structure:{id:string;type:keyof typeof STRUCTURE_HP}){return structure.id==='starter:hut'&&structure.type==='hut'?500:STRUCTURE_HP[structure.type];}
-export const SALVAGE_AMOUNT={hut:1,storage:2,shelter:1,furnace:3,city_store:2} as const;
+export const SALVAGE_AMOUNT={workshop:2,hut:1,storage:2,shelter:1,furnace:3,city_store:2} as const;
 export function villageLoot(seed:number,id:string){
   const roll=derive(seed,`category:${id}`)%100,choice=derive(seed,`contents:${id}`),amount=2+choice%3;
   if(roll<50)return{category:'food' as const,resources:{[choice%2?'meat':'fish']:amount}};

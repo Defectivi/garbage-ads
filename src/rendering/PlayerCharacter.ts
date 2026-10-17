@@ -1,3 +1,4 @@
+import {workerTool} from './WorkerTools';
 import { meleePose } from './MeleePose';
 import { solveArm } from './RigIK';
 import * as T from 'three';
@@ -14,6 +15,7 @@ export class PlayerCharacter {
   private mixer?: T.AnimationMixer; private asset?: T.Group;
   private actions = new Map<string,T.AnimationAction>();
   private base?: T.AnimationAction; private upper?: T.AnimationAction; private oneShot = false;
+  private tool?:T.Group;
   private held?: T.Group; private equipped = ''; private type?: WeaponType;
   private previous?: { x:number; z:number }; private speed = 0;
   private attackStamp = -100; private gatherStamp = -100; private hp = 100;
@@ -48,6 +50,7 @@ export class PlayerCharacter {
   reset() {
     this.previous=undefined;this.speed=0;this.attackStamp=-100;this.gatherStamp=-100;this.hp=100;
     this.mixer?.stopAllAction();this.base=undefined;this.upper=undefined;this.oneShot=false;
+    if(this.tool)disposeWeapon(this.tool);this.tool=undefined;
     if(this.held)disposeWeapon(this.held);this.held=undefined;this.equipped='';this.type=undefined;
   }
   update(game:Game,dt:number,aiming=false) {
@@ -62,9 +65,14 @@ export class PlayerCharacter {
     const equipped=game.state.combat.weapons.find(w=>w.id===game.state.combat.equipped&&w.uses>0);
     if(this.equipped!==(equipped?.id??'')) {
       this.oneShot=false;this.upper?.fadeOut(.12);this.upper=undefined;
-      if(this.held)disposeWeapon(this.held);this.held=undefined;this.equipped=equipped?.id??'';this.type=equipped?.type;
+      if(this.tool)disposeWeapon(this.tool);this.tool=undefined;
+    if(this.held)disposeWeapon(this.held);this.held=undefined;this.equipped=equipped?.id??'';this.type=equipped?.type;
       if(equipped){const socket=this.asset!.getObjectByName(equipped.type==='bow'?'HandL':'HandR');this.held=weaponMesh(equipped.type,true);if(equipped.type==='shotgun')this.held.scale.setScalar(.8);if(['stone_sword','wooden_sword','machete','spear'].includes(equipped.type))this.held.rotation.x=equipped.type==='spear'?0:Math.PI;socket?.add(this.held);}
     }
+    this.object.visible=!p.shelter;
+    const gathering=game.gathering?.node,wanted=gathering?(gathering.resource==='wood'?'axe':['stone','gold','metal'].includes(gathering.resource)?'pickaxe':undefined):undefined;
+    if(this.tool?.userData.tool!==wanted){if(this.tool)disposeWeapon(this.tool);this.tool=undefined;if(wanted){this.tool=workerTool(wanted);this.tool.name='player-tool';this.tool.scale.setScalar(1.4);this.asset!.getObjectByName('HandR')?.add(this.tool);}}
+    if(this.held)this.held.visible=!wanted;
     const dead=game.dead;
     if(dead){if(this.base?.getClip().name!=='death'){this.oneShot=false;this.upper?.fadeOut(.1);this.transition('death',false,true);}this.mixer!.update(dt);this.object.userData.animation='death';this.hp=p.hp;return;}
     const locomotion=this.speed>.2?(this.speed>7?'sprint':'walk'):'idle';
@@ -84,7 +92,7 @@ export class PlayerCharacter {
     if(this.upper&&this.upper.getClip().name==='arms_idle')this.upper.setEffectiveTimeScale(motion?0:1);
     this.mixer!.update(game.paused?0:dt);
     if((aiming||this.oneShot)&&this.held&&(this.type==='bow'||this.type==='shotgun')&&this.upper?.getClip().name!=='hurt')this.rangedGrip(this.type);
-    if(this.held&&this.type&&['stone_sword','wooden_sword','machete','spear'].includes(this.type)){if(this.oneShot&&this.upper?.getClip().name===this.type)meleePose(this.object,this.asset!,this.held,this.type,this.upper.time/this.upper.getClip().duration);else this.held.rotation.set(this.type==='spear'?0:Math.PI,0,-.15);}
+    if(this.held&&!wanted&&this.type&&['stone_sword','wooden_sword','machete','spear'].includes(this.type)){if(this.oneShot&&this.upper?.getClip().name===this.type)meleePose(this.object,this.asset!,this.held,this.type,this.upper.time/this.upper.getClip().duration);else this.held.rotation.set(this.type==='spear'?0:Math.PI,0,-.15);}
     this.object.userData.animation=this.oneShot?this.upper?.getClip().name:locomotion;
     this.object.userData.upperAnimation=this.upper?.getClip().name;this.object.userData.weapon=this.type;
   }
@@ -106,5 +114,5 @@ export class PlayerCharacter {
   private disposeAsset(asset:T.Group) {
     const materials=new Set<T.Material>();asset.traverse(o=>{if(o instanceof T.Mesh){o.geometry.dispose();for(const m of Array.isArray(o.material)?o.material:[o.material])materials.add(m);if(o instanceof T.SkinnedMesh)o.skeleton.dispose();}});for(const m of materials)m.dispose();
   }
-  dispose(){this.disposed=true;this.mixer?.stopAllAction();if(this.held)disposeWeapon(this.held);if(this.asset){this.mixer?.uncacheRoot(this.asset);this.disposeAsset(this.asset);}this.object.removeFromParent();}
+  dispose(){this.disposed=true;if(this.tool)disposeWeapon(this.tool);this.mixer?.stopAllAction();if(this.held)disposeWeapon(this.held);if(this.asset){this.mixer?.uncacheRoot(this.asset);this.disposeAsset(this.asset);}this.object.removeFromParent();}
 }

@@ -4,7 +4,7 @@ import type { GameState, Furnace, Point } from '../game/GameState';
 import { distance } from '../world/WorldManager';
 export const heatRadius = (f: Furnace) => f.fuel + f.charcoal > 0 ? furnaceRadius(f.level) : 0;
 export const furnaceTier = (level: number) => Math.floor(level / 5);
-export function structureIntact(state:GameState,id:string){return !state.changes.structures?.[id]||state.changes.structures[id].stage==='intact';}
+export function structureIntact(state:GameState,id:string){return (!state.changes.structures?.[id]||state.changes.structures[id].stage==='intact')&&!state.buildings.some(b=>b.id===id&&(b.construction??0)>0);}
 export function playerHeatSources(state: GameState) {
   return state.furnaces.filter(f => f.id === 'home' || state.buildings.some(b => b.id === f.id && b.type === 'furnace')).filter(f => heatRadius(f) > 0&&structureIntact(state,f.id));
 }
@@ -23,7 +23,7 @@ export function updateSurvival(state: GameState, dt: number, sprint = false, mov
   if(state.player.invulnerable!==undefined)state.player.invulnerable=Math.max(0,state.player.invulnerable-dt);
   if(state.player.recentDamage!==undefined)state.player.recentDamage=Math.max(0,state.player.recentDamage-dt);
   const heated=state.furnaces.some(f=>structureIntact(state,f.id)&&distance(f,state.player)<heatRadius(f));
-  if(heated&&state.player.hp>0){state.player.heatTime=(state.player.heatTime??0)+dt;while(state.player.heatTime>=3-1e-8){state.player.heatTime=Math.max(0,state.player.heatTime-3);state.player.hp=Math.min(maxPlayerHP(state),state.player.hp+healingAmount(state));}}
+  if(heated&&!state.player.shelter&&state.player.hp>0){state.player.heatTime=(state.player.heatTime??0)+dt;while(state.player.heatTime>=3-1e-8){state.player.heatTime=Math.max(0,state.player.heatTime-3);state.player.hp=Math.min(maxPlayerHP(state),state.player.hp+healingAmount(state));}}
   else state.player.heatTime=0;
 
   for (const f of state.furnaces) {

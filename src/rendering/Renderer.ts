@@ -1,3 +1,4 @@
+import {fireVisual,animateFire,furnaceEmbers} from './FireVisuals';
 import {cliffMesh} from './CliffMesh';
 import {visibilityAt} from '../systems/Visibility';
 import {VisibilityFog} from './VisibilityFog';
@@ -12,7 +13,7 @@ import { NPCCharacter } from './NPCCharacter';
 import { characterStyle } from '../data/characters';
 import * as THREE from 'three';
 import type { Game } from '../game/Game';
-import { BUILDINGS, type BuildingType } from '../data/definitions';
+import { BUILDINGS, CONSTRUCTION_SECONDS, type BuildingType } from '../data/definitions';
 import { CombatRenderer } from './CombatRenderer';
 import { PlayerCharacter } from './PlayerCharacter';
 import { heatRadius, furnaceTier } from '../systems/SurvivalSystem';
@@ -58,6 +59,16 @@ export class Renderer {
   private box(group: THREE.Group, x: number, y: number, z: number, w: number, h: number, d: number, material: THREE.Material) { const m = this.mesh(new THREE.BoxGeometry(w, h, d), material, x, y, z); group.add(m); return m; }
   private building(type: BuildingType | 'ruin', rotation = 0) {
     const group = new THREE.Group();
+    if(type==='workshop'){
+      group.name='blacksmith-workshop';const brick=mat(0x6d6660),iron=this.materials.metal;
+      this.box(group,0,.15,0,5,.3,4.2,this.materials.ice);this.box(group,-1.3,1.1,-.65,1.8,2,1.8,brick);this.box(group,-1.3,1.5,.3,1.2,.8,.08,this.materials.dark);
+      for(const side of [-1,1])this.box(group,-1.3+side*.7,1.5,.35,.25,1.5,.3,iron);
+      this.box(group,-1.3,3.5,-.65,.85,3,.9,brick);for(let i=0;i<5;i++)this.box(group,-1.3,2.5+i*.42,-.65,.96,.12,1,this.materials.dark);
+      const fire=fireVisual();fire.name='forge-fire';fire.position.set(-1.3,1.25,.45);fire.scale.set(.7,.7,.4);group.add(fire);const light=new THREE.PointLight(0xffa454,12,8,1.5);light.position.set(-1.3,1.6,1);group.add(light);
+      this.box(group,1.15,.7,1,1.1,1.1,.8,this.materials.wood);this.box(group,1.15,1.35,1,1.5,.28,.55,iron);this.box(group,1.15,1.15,1,.55,.4,.4,iron);const horn=this.mesh(new THREE.ConeGeometry(.26,.85,5),iron,2,1.38,1);horn.rotation.z=-Math.PI/2;group.add(horn);
+      for(const x of [-2.2,2.2])this.box(group,x,1.6,-1.5,.2,3,.2,this.materials.wood);this.box(group,.1,3,-1,4.7,.25,2.1,this.materials.snow);this.box(group,.8,1,-1,2.1,.15,.9,this.materials.wood);for(let i=0;i<3;i++)this.box(group,.2+i*.6,1.15,-1,.28,.2,.3,iron);
+      group.rotation.y=rotation;return group;
+    }
     if(type==='shelter'){
       for(let i=0;i<8;i++){const a=i*Math.PI/4;group.add(this.mesh(new THREE.DodecahedronGeometry(.22,0),this.materials.ice,Math.sin(a)*.75,.15,Math.cos(a)*.75));}
       for(const side of [-1,1]){const log=this.box(group,0,.18,0,1.2,.22,.22,this.materials.wood);log.rotation.y=side*.6;}
@@ -68,7 +79,8 @@ export class Renderer {
       group.add(this.mesh(new THREE.CylinderGeometry(.82, 1.2, 2.4, 10), steel, 0, 1.6));
       group.add(this.mesh(new THREE.CylinderGeometry(.32, .42, 2, 8), dark, 0, 3.65));
       for (const side of [-1, 1]) this.box(group, side * .7, .3, 0, .2, .6, .6, dark);
-      const flame = this.mesh(new THREE.SphereGeometry(.65, 8, 6), this.materials.fire, 0, 1.15, .93); flame.scale.set(.8, 1.15, .25); flame.name = 'flame'; group.add(flame);
+      const flame=fireVisual();flame.position.set(0,.9,.98);flame.scale.set(.8,1,.35);flame.name='flame';group.add(flame);
+      const stone=mat(0x8a7a69);for(let i=0;i<10;i++){const a=i*Math.PI/5,block=this.box(group,Math.cos(a)*1.08,.35,Math.sin(a)*1.08,.65,.6,.4,stone);block.rotation.y=-a;}for(const y of [.65,2.65]){const band=this.mesh(new THREE.TorusGeometry(1.05,.08,5,12),dark,0,y,0);band.rotation.x=Math.PI/2;group.add(band);}this.box(group,1.15,1.45,0,.16,1.7,.16,steel);
       for (let i = -1; i <= 1; i++) this.box(group, i * .32, 1.2, 1.06, .07, 1.3, .08, dark);
       const light = new THREE.PointLight(0xff8d32, 30, 18, 1.6); light.position.set(0, 2, 1.3); light.name = 'warm-light'; group.add(light);
     } else {
@@ -143,8 +155,8 @@ export class Renderer {
     for (const f of data.fishing) { const post = this.mesh(new THREE.CylinderGeometry(.08, .08, 1.5, 5), this.materials.wood, f.x, w.height(f.x, f.z) + .75, f.z); g.add(post); this.box(g, f.x, w.height(f.x, f.z) + 1.35, f.z, .85, .4, .12, mat(0x5a94a6)); }
     return g;
   }
-  private constructionModel(){
-    const g=new THREE.Group();g.name='hut-construction';this.box(g,0,.15,0,4,.3,4,this.materials.wood);
+  private constructionModel(type:BuildingType){
+    const g=new THREE.Group();g.name='hut-construction';g.scale.x=g.scale.z=BUILDINGS[type].radius/2;g.userData.constructionHeight=type==='shelter'?.35:1;this.box(g,0,.15,0,4,.3,4,this.materials.wood);
     for(const x of [-1.8,1.8])for(const z of [-1.8,1.8])this.box(g,x,1.5,z,.18,3,.18,this.materials.wood);
     for(const z of [-1.8,1.8]){this.box(g,0,2.8,z,4,.18,.18,this.materials.wood);const brace=this.box(g,0,1.4,z,.14,4,.14,this.materials.wood);brace.rotation.z=.9;}
     return g;
@@ -153,6 +165,16 @@ export class Renderer {
     const group=this.building('ruin',rotation);group.name=`ruined-${type}`;
     if(type==='storage'){for(let i=0;i<3;i++)this.box(group,-1+i,.45,.5,.65,.65,.7,this.materials.ice);this.box(group,0,.1,0,4.8,.25,4.3,this.materials.metal);}
     if(type==='furnace'){const shell=this.mesh(new THREE.CylinderGeometry(.7,1.15,1.1,8),this.materials.metal,0,.65);group.add(shell);const chimney=this.box(group,.5,.4,.4,.5,.5,2.6,this.materials.dark);chimney.rotation.y=.65;}
+    if(type==='workshop'){
+      group.name='blacksmith-workshop';const brick=mat(0x6d6660),iron=this.materials.metal;
+      this.box(group,0,.15,0,5,.3,4.2,this.materials.ice);this.box(group,-1.3,1.1,-.65,1.8,2,1.8,brick);this.box(group,-1.3,1.5,.3,1.2,.8,.08,this.materials.dark);
+      for(const side of [-1,1])this.box(group,-1.3+side*.7,1.5,.35,.25,1.5,.3,iron);
+      this.box(group,-1.3,3.5,-.65,.85,3,.9,brick);for(let i=0;i<5;i++)this.box(group,-1.3,2.5+i*.42,-.65,.96,.12,1,this.materials.dark);
+      const fire=fireVisual();fire.name='forge-fire';fire.position.set(-1.3,1.25,.45);fire.scale.set(.7,.7,.4);group.add(fire);const light=new THREE.PointLight(0xffa454,12,8,1.5);light.position.set(-1.3,1.6,1);group.add(light);
+      this.box(group,1.15,.7,1,1.1,1.1,.8,this.materials.wood);this.box(group,1.15,1.35,1,1.5,.28,.55,iron);this.box(group,1.15,1.15,1,.55,.4,.4,iron);const horn=this.mesh(new THREE.ConeGeometry(.26,.85,5),iron,2,1.38,1);horn.rotation.z=-Math.PI/2;group.add(horn);
+      for(const x of [-2.2,2.2])this.box(group,x,1.6,-1.5,.2,3,.2,this.materials.wood);this.box(group,.1,3,-1,4.7,.25,2.1,this.materials.snow);this.box(group,.8,1,-1,2.1,.15,.9,this.materials.wood);for(let i=0;i<3;i++)this.box(group,.2+i*.6,1.15,-1,.28,.2,.3,iron);
+      group.rotation.y=rotation;return group;
+    }
     if(type==='shelter'){group.scale.y=.6;for(const side of [-1,1]){const post=this.box(group,side*1.3,.6,0,.2,1.4,.2,this.materials.wood);post.rotation.z=side*.4;}}
     return group;
   }
@@ -201,7 +223,7 @@ export class Renderer {
     this.box(g, r.trader.x, w.height(r.trader.x, r.trader.z) + 2.6, r.trader.z, .45, .45, .1, mat(0xf4cf7c, { emissive: 0xaa7524 }));
   }
   private dispose(group: THREE.Group) {
-    group.traverse(o => { o.userData.ownedTexture?.dispose();if (o instanceof THREE.Mesh||o instanceof THREE.Line) { if (o instanceof THREE.InstancedMesh) o.dispose(); o.geometry.dispose(); const mats = Array.isArray(o.material) ? o.material : [o.material]; for (const m of mats) if (!Object.values(this.materials).includes(m as THREE.MeshStandardMaterial)) m.dispose(); } }); group.removeFromParent();
+    group.traverse(o => { o.userData.ownedTexture?.dispose();if (o instanceof THREE.Mesh||o instanceof THREE.Line||o instanceof THREE.Points) { if (o instanceof THREE.InstancedMesh) o.dispose(); o.geometry.dispose(); const mats = Array.isArray(o.material) ? o.material : [o.material]; for (const m of mats) if (!Object.values(this.materials).includes(m as THREE.MeshStandardMaterial)) m.dispose(); } }); group.removeFromParent();
   }
   refreshChunks(ids:Iterable<string>=this.chunks.keys()) { for (const id of ids) this.dirtyChunks.add(id); }
   private clearChunks() { for (const g of this.chunks.values()) this.dispose(g); this.chunks.clear(); this.dirtyChunks.clear(); }
@@ -293,21 +315,21 @@ export class Renderer {
       const integrity=game.settlement.integrity(b);if(integrity.stage==='gone'||Math.hypot(b.x-p.x,b.z-p.z)>(game.state.settings.renderDistance+1)*game.world.spec.config.chunkSize)continue;
       entityIds.add(b.id); let group = this.dynamic.get(b.id);
       if(group&&(group.userData.stage!==integrity.stage||group.userData.constructing!==!!b.construction)){this.dispose(group);this.dynamic.delete(b.id);group=undefined;}
-      if(!group){group=b.construction&&integrity.stage==='intact'?this.constructionModel():integrity.stage==='ruin'?this.ruinedBuilding(b.type,b.rotation):this.building(b.type,b.rotation);group.userData.stage=integrity.stage;group.userData.constructing=!!b.construction;group.userData.structureId=b.id;this.dynamic.set(b.id,group);this.entities.add(group);}
-      const max=structureMaxHP(b)*(integrity.stage==='ruin'?.25:1),occupants=Object.values(game.state.changes.refuges??{}).filter(r=>r.houseId===b.id&&r.phase==='hidden').length;
-      group.userData.construction=b.construction;group.scale.y=b.construction&&integrity.stage==='intact'?.35+.65*(1-b.construction/10):1;
+      if(!group){group=b.construction&&integrity.stage==='intact'?this.constructionModel(b.type):integrity.stage==='ruin'?this.ruinedBuilding(b.type,b.rotation):this.building(b.type,b.rotation);group.userData.stage=integrity.stage;group.userData.constructing=!!b.construction;group.userData.structureId=b.id;this.dynamic.set(b.id,group);this.entities.add(group);}
+      const max=structureMaxHP(b)*(integrity.stage==='ruin'?.25:1),occupants=Object.values(game.state.changes.refuges??{}).filter(r=>r.houseId===b.id&&r.phase==='hidden').length+(game.state.player.shelter?.houseId===b.id?1:0);
+      group.userData.construction=b.construction;group.scale.y=b.construction&&integrity.stage==='intact'?(group.userData.constructionHeight??1)*(.35+.65*(1-b.construction/CONSTRUCTION_SECONDS[b.type])):1;
       group.userData.hp=integrity.hp;group.userData.occupants=occupants;this.structureBar(group,integrity.hp/max,integrity.hp<max||occupants>0);
       group.position.set(b.x, game.world.height(b.x, b.z), b.z);
-      if(b.type==='shelter'&&integrity.stage==='intact'){const active=(b.burnTime??15)>0;group.getObjectByName('camp-flame')!.visible=active;(group.getObjectByName('camp-light') as THREE.PointLight).intensity=active?22:0;group.userData.remaining=b.burnTime??15;}
-      if (b.type === 'furnace'&&integrity.stage==='intact') {
+      if(b.type==='shelter'&&!b.construction&&integrity.stage==='intact'){const active=(b.burnTime??15)>0;group.getObjectByName('camp-flame')!.visible=active;(group.getObjectByName('camp-light') as THREE.PointLight).intensity=active?22:0;group.userData.remaining=b.burnTime??15;}
+      if (b.type === 'furnace'&&!b.construction&&integrity.stage==='intact') {
         const furnace = game.state.furnaces.find(f => f.id === b.id)!; const active = furnace.fuel + furnace.charcoal > 0;
         const tier = furnaceTier(furnace.level);
         if (group.userData.tier !== tier) { const old = group.getObjectByName('reinforcement'); if (old) this.dispose(old as THREE.Group); const upgrade = new THREE.Group(); upgrade.name = 'reinforcement';
           for (let i = 0; i < tier; i++) { this.box(upgrade, 0, 3.7 + i * .6, 0, .9, .4, .9, this.materials.metal); for (const side of [-1, 1]) this.box(upgrade, side * (1.15 + i * .1), 1.2, 0, .18, 2.4, .7, this.materials.dark); }
           group.add(upgrade); group.userData.tier = tier;
         }
-        const flame = group.getObjectByName('flame')!; flame.visible = active; flame.scale.y = .95 + Math.sin(time * 9) * .13;
-        (group.getObjectByName('warm-light') as THREE.PointLight).intensity = active ? 35 + Math.sin(time * 11) * 3 : 0;
+        const flame = group.getObjectByName('flame')!; flame.visible = active;animateFire(flame,game.state.elapsed,this.reducedMotion.matches); flame.scale.y = this.reducedMotion.matches?1:.95 + Math.sin(game.state.elapsed * 9) * .13;
+        (group.getObjectByName('warm-light') as THREE.PointLight).intensity = active ? 35 + (this.reducedMotion.matches?0:Math.sin(game.state.elapsed * 11) * 3) : 0;
         const old = group.getObjectByName('heat-ring') as THREE.Mesh | undefined, radius = heatRadius(furnace);
         if (old?.userData.radius !== radius) {
           if (old) { old.geometry.dispose(); (old.material as THREE.Material).dispose(); group.remove(old); }
@@ -319,9 +341,11 @@ export class Renderer {
         const aura=group.getObjectByName('heat-aura') as THREE.Mesh|undefined;
         if(aura?.userData.radius!==radius){if(aura)this.dispose(aura as unknown as THREE.Group);if(radius>0)group.add(furnaceAura(game,b,radius));}
         const liveAura=group.getObjectByName('heat-aura');if(liveAura)liveAura.userData.clock.value=this.reducedMotion.matches?0:game.state.elapsed;
+        const embers=group.getObjectByName('heat-embers');if(embers?.userData.radius!==radius){if(embers)this.dispose(embers as THREE.Group);if(radius>0)group.add(furnaceEmbers(game,b,radius));}const liveEmbers=group.getObjectByName('heat-embers');if(liveEmbers)liveEmbers.userData.clock.value=this.reducedMotion.matches?0:game.state.elapsed;
         const ring=group.getObjectByName('heat-ring')!;ring.visible=radius>0;
       }
     }
+    for(const group of this.dynamic.values()){const fire=group.getObjectByName('forge-fire');if(fire)animateFire(fire,game.state.elapsed,this.reducedMotion.matches);}
     for(const pile of game.settlement.loot(p)){
       const key=`loot:${pile.id}`;entityIds.add(key);let group=this.dynamic.get(key);if(!group){group=this.lootModel(pile);this.dynamic.set(key,group);this.entities.add(group);}group.position.set(pile.x,game.world.height(pile.x,pile.z),pile.z);
     }

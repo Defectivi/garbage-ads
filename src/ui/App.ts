@@ -103,7 +103,7 @@ export class App {
   }
   private showGame() {
     this.clearInput(); this.mode = 'game'; this.played = true; this.game.paused = false; this.root.className = 'playing'; this.keys.clear(); this.audio.enabled = this.game.state.settings.sound; this.audio.unlock(); this.audio.ambience(true);
-    this.root.innerHTML = `<header><b>${uiIcon('mountain')} FROSTBOUND</b><span id="seed-hud"></span><button id="menu" aria-label="Pause game">Ⅱ <span>Pause</span></button></header><div id="resources" class="resource-bar" aria-label="Carried resources"></div><section class="survival"><div class="exposure-heading">${uiIcon('flame')}<strong id="warmth"></strong></div><div class="warmth-meter"><i></i></div><span id="fuel"></span><small id="location"></small><small id="recovery-state"></small><small id="structure-status"></small><div id="furnace-upgrade"></div></section><button id="interaction" class="interaction"><kbd>F</kbd><span></span></button><section class="combat-hud"><div class="health-line"><b id="health"></b><b id="warmth-readout"></b><span id="weather"></span><span id="day-night"></span></div><div class="hp-meter"><i></i></div><div class="hunger-line"><b id="hunger"></b><div class="hunger-meter"><i></i></div></div><div id="weapon-rack"></div><small id="weapon-state"></small><small id="furnace-defense"></small><button id="attack-button">ATTACK <kbd>SPACE</kbd></button><button id="sprint-button">SPRINT <kbd>SHIFT</kbd></button></section><aside id="player-effects" aria-label="Active player effects"></aside><div id="worker-inspection" role="status" hidden></div><div id="message" role="status"></div><footer><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move / F interact / E inventory / Shift+S save</footer>`;
+    this.root.innerHTML = `<header><b>${uiIcon('mountain')} FROSTBOUND</b><div id="resources" class="resource-bar" aria-label="Carried resources"></div><span id="seed-hud"></span><button id="menu" aria-label="Pause game">Ⅱ <span>Pause</span></button></header><section class="survival"><div class="exposure-heading">${uiIcon('flame')}<strong id="warmth"></strong></div><div class="warmth-meter"><i></i></div><span id="fuel"></span><small id="location"></small><small id="recovery-state"></small><small id="structure-status"></small><div id="furnace-upgrade"></div></section><button id="interaction" class="interaction"><kbd>F</kbd><span></span></button><section class="combat-hud"><div class="health-line"><b id="health"></b><b id="warmth-readout"></b><span id="weather"></span><span id="day-night"></span></div><div class="hp-meter"><i></i></div><div class="hunger-line"><b id="hunger"></b><div class="hunger-meter"><i></i></div></div><div id="weapon-rack"></div><small id="weapon-state"></small><small id="furnace-defense"></small><button id="attack-button">ATTACK <kbd>SPACE</kbd></button><button id="sprint-button">SPRINT <kbd>SHIFT</kbd></button></section><aside id="player-effects" aria-label="Active player effects"></aside><div id="worker-inspection" role="status" hidden></div><div id="message" role="status"></div><footer><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move / F interact / E inventory / Shift+S save</footer>`;
     this.root.querySelector('#menu')!.addEventListener('click', () => this.pause()); this.root.querySelector('#interaction')!.addEventListener('click', () => this.interact());
     const toolbar = document.createElement('nav'); toolbar.className = 'toolbar'; toolbar.setAttribute('aria-label', 'Field kit'); toolbar.innerHTML = [['inventory', 'pack', 'Rucksack', 'E'], ['build', 'build', 'Build', 'B'], ['map', 'map', 'Map', 'M'], ['saves', 'save', 'World files', 'P'], ['settings', 'settings', 'Settings', '']].map(([id, art, label, key]) => `<button id="${id}" title="${label}${key ? ` (${key})` : ''}" aria-label="${label}">${uiIcon(art)}<span>${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`).join('');
     this.root.appendChild(toolbar); toolbar.querySelector('#inventory')!.addEventListener('click', () => this.panels.inventory()); toolbar.querySelector('#build')!.addEventListener('click', () => this.panels.building()); toolbar.querySelector('#map')!.addEventListener('click', () => this.panels.map()); toolbar.querySelector('#saves')!.addEventListener('click', () => this.panels.saves()); toolbar.querySelector('#settings')!.addEventListener('click', () => this.panels.settings());
@@ -151,9 +151,12 @@ export class App {
   interact() {
     if (this.mode !== 'game' || this.game.paused||this.game.gathering) return;
     if (this.placement) { this.confirmBuilding(); return; }
+    if(this.game.state.player.shelter){this.game.leaveHut();this.refresh();return;}
     const context = this.context(); if (!context) return;
     if(context.kind==='furnace')this.game.bindFurnace(context.id!);
-    if(context.kind==='loot')this.report(this.game.settlement.pickup(context.id!));
+    if(context.kind==='hut')this.report(this.game.enterHut(context.id!));
+    else if(context.kind==='workshop')this.panels.workshop(context.id!);
+    else if(context.kind==='loot')this.report(this.game.settlement.pickup(context.id!));
     else if (context.kind === 'drop') this.game.combat.pickup(context.id!);
     else if (context.kind === 'trader') this.panels.trade(context.ruin!);
     else if(context.kind==='city_store')this.panels.cityStore(context.id!);
@@ -164,10 +167,15 @@ export class App {
   }
   private context() {
     const p = this.game.state.player, chunks = this.game.world.around(p);
-    type Context = { kind:'city_store'|'loot'| 'drop' | 'node' | 'furnace' | 'trader' | 'chest' | 'fishing' | 'storage'; label: string; d: number; id?: string; node?: ReturnType<Game['nodes']>[number]; spot?: typeof chunks[number]['fishing'][number]; ruin?: typeof chunks[number]['ruins'][number] };
+    type Context = { kind:'hut'|'workshop'|'city_store'|'loot'| 'drop' | 'node' | 'furnace' | 'trader' | 'chest' | 'fishing' | 'storage'; label: string; d: number; id?: string; node?: ReturnType<Game['nodes']>[number]; spot?: typeof chunks[number]['fishing'][number]; ruin?: typeof chunks[number]['ruins'][number] };
+    if(this.game.state.player.shelter)return{kind:'hut' as const,id:this.game.state.player.shelter.houseId,label:'Leave hut / F',d:-100};
     const candidates: Context[] = [];
+    for(const b of this.game.settlement.structures(p)){if(distance(b,p)>4||!this.game.settlement.ready(b.id)||this.game.settlement.integrity(b).stage!=='intact'||this.game.settlement.burning(b))continue;
+      if(b.type==='workshop')candidates.push({kind:'workshop',id:b.id,label:'Workshop / craft weapons',d:distance(b,p)-4});
+      if(b.type==='hut'&&!Object.values(this.game.state.changes.refuges??{}).some(r=>r.houseId===b.id&&r.phase!=='returning'))candidates.push({kind:'hut',id:b.id,label:'Hide in hut / heal 3% HP each second',d:distance(b,p)-2});
+    }
     for (const n of this.game.nodes()) if (distance(n, p) < 3 && this.game.nodeRemaining(n) > 0 && !this.game.world.isWater(n.x, n.z)) candidates.push({ kind: 'node', label: `Gather ${this.game.nodeResource(n)} · hold F`, d: distance(n, p), node: n });
-    for (const f of this.game.state.furnaces) if (this.game.settlement.intact(f.id)&&distance(f, p) < 4) candidates.push({ kind: 'furnace', label: `Feed furnace / set respawn${this.game.state.respawnFurnaceId===f.id?' / bound':''}`, d: distance(f, p), id: f.id });
+    for (const f of this.game.state.furnaces) if (this.game.settlement.ready(f.id)&&distance(f, p) < 4) candidates.push({ kind: 'furnace', label: `Feed furnace / set respawn${this.game.state.respawnFurnaceId===f.id?' / bound':''}`, d: distance(f, p), id: f.id });
     for (const c of chunks) {
       for (const f of c.fishing) if (distance(f, p) < 3) candidates.push({ kind: 'fishing', label: `Fish here · 4 seconds · ${Math.max(0, f.availability - (this.game.state.changes.fishing[f.id] ?? 0))} available`, d: distance(f, p), spot: f });
       for (const r of this.game.world.settlements(p).filter(r => Math.floor(r.x / this.game.world.spec.config.chunkSize) === c.cx && Math.floor(r.z / this.game.world.spec.config.chunkSize) === c.cz)) {
@@ -175,11 +183,11 @@ export class App {
         if (distance(r.container, p) < 3 && !this.game.state.changes.containers.includes(r.id)) candidates.push({ kind: 'chest', label: 'Search abandoned supply chest', d: distance(r.container, p), ruin: r });
       }
     }
-    for (const b of this.game.state.buildings) if (b.type === 'storage'&&this.game.state.changes.structures?.[b.id]?.stage!=='gone' && distance(b, p) < 4) candidates.push({ kind: 'storage', label: 'Open shared storage', d: distance(b, p) });
-    for(const b of this.game.state.buildings)if(b.type==='city_store'&&this.game.settlement.intact(b.id)&&distance(b,p)<5&&!this.game.settlement.burning(b))candidates.push({kind:'city_store',id:b.id,label:'City Store / buy with gold',d:distance(b,p)-4});
+    for (const b of this.game.state.buildings) if (b.type === 'storage'&&!b.construction&&this.game.state.changes.structures?.[b.id]?.stage!=='gone' && distance(b, p) < 4) candidates.push({ kind: 'storage', label: 'Open shared storage', d: distance(b, p) });
+    for(const b of this.game.state.buildings)if(b.type==='city_store'&&this.game.settlement.ready(b.id)&&distance(b,p)<5&&!this.game.settlement.burning(b))candidates.push({kind:'city_store',id:b.id,label:'City Store / buy with gold',d:distance(b,p)-4});
     for (const drop of this.game.state.combat.drops) if (distance(drop,p) < 3) candidates.push({kind:'drop', id:drop.id, label:`Pick up ${WEAPONS[drop.weapon].name}`, d:distance(drop,p)-3});
     for(const pile of this.game.settlement.loot(p))if(distance(pile,p)<3)candidates.push({kind:'loot',id:pile.id,label:pile.weapon?`Take ${WEAPONS[pile.weapon].name}`:`Collect supplies / ${Object.entries(pile.resources).map(([r,n])=>`${n} ${r}`).join(', ')}`,d:distance(pile,p)-2});
-    const priority = (kind: Context['kind']) => ['city_store','trader', 'chest', 'fishing', 'storage'].includes(kind) ? 4 : 0;
+    const priority = (kind: Context['kind']) => ['workshop','city_store','trader', 'chest', 'fishing', 'storage'].includes(kind) ? 4 : 0;
     return candidates.sort((a, b) => a.d - priority(a.kind) - b.d + priority(b.kind))[0];
   }
   refresh() {
@@ -206,13 +214,14 @@ export class App {
     this.root.querySelector('#warmth')!.textContent = `${Math.round(temperature(s))}°C · Warmth ${Math.round(s.player.warmth)}%`;
     this.root.querySelector('#fuel')!.textContent = `Home · ${Math.ceil((s.furnaces[0].fuel + s.furnaces[0].charcoal)*fuelInterval(s.furnaces[0].level)/(s.combat.weather.mode==='snow'?3:1))}s fuel · Level ${s.furnaces[0].level}`;
     this.root.querySelector('#location')!.textContent = `${this.game.world.biome(s.player.x, s.player.z)} / ${Math.round(s.player.x)}, ${Math.round(s.player.z)}`;
-    this.root.querySelector('#recovery-state')!.textContent=(s.player.invulnerable??0)>0?`RESPAWN SHIELD / ${s.player.invulnerable!.toFixed(1)}s`:s.player.hp<maxPlayerHP(s)&&s.furnaces.some(f=>this.game.settlement.intact(f.id)&&distance(f,s.player)<heatRadius(f))?`+${healingAmount(s)} HP in ${(3-(s.player.heatTime??0)).toFixed(1)}s`:'';
+    this.root.querySelector('#recovery-state')!.textContent=(s.player.invulnerable??0)>0?`RESPAWN SHIELD / ${s.player.invulnerable!.toFixed(1)}s`:s.player.shelter?`HUT / +${(maxPlayerHP(s)*.03).toFixed(1)} HP in ${(1-s.player.shelter.tick).toFixed(1)}s`:s.player.hp<maxPlayerHP(s)&&s.furnaces.some(f=>this.game.settlement.ready(f.id)&&distance(f,s.player)<heatRadius(f))?`+${healingAmount(s)} HP in ${(3-(s.player.heatTime??0)).toFixed(1)}s`:'';
     updateFurnaceUpgrade(this.root,this.game,()=>this.upgradeFurnace());
     this.root.querySelector('#warmth-readout')!.textContent=`WARMTH ${Math.round(s.player.warmth)}%`;
     const structure=this.game.settlement.structures().filter(b=>distance(b,s.player)<5&&this.game.settlement.integrity(b).stage!=='gone').sort((a,b)=>distance(a,s.player)-distance(b,s.player))[0];
     this.root.querySelector('#structure-status')!.textContent=structure?`${structure.id==='home'?'Home furnace':structure.generated?'Village house':BUILDINGS[structure.type].name} / ${this.game.settlement.integrity(structure).stage} / ${Math.ceil(this.game.settlement.integrity(structure).hp)} HP${structure.construction!==undefined?' / building '+structure.construction.toFixed(1)+'s':''}`:'';
     const c = s.combat, equipped = c.weapons.find(w => w.id === c.equipped&&w.uses>0);
     this.root.querySelector('#hunger')!.textContent=`HUNGER ${Math.ceil(s.player.hunger??20)} / 20`; (this.root.querySelector('.hunger-meter i') as HTMLElement).style.width=`${(s.player.hunger??20)*5}%`;
+    const hp=s.player.hp/maxPlayerHP(s),hunger=(s.player.hunger??20)/20;this.root.querySelector('.hp-meter')!.setAttribute('data-condition',hp<.15?'critical':hp>=1?'full':'healthy');this.root.querySelector('.hunger-meter')!.setAttribute('data-condition',hunger<.15?'critical':hunger<.5?'low':'healthy');this.root.classList.toggle('critical-health',hp<.15);
     this.root.querySelector('#health')!.textContent = `${Math.ceil(s.player.hp)} / ${maxPlayerHP(s)} HP`;
     (this.root.querySelector('.hp-meter i') as HTMLElement).style.width = `${s.player.hp/maxPlayerHP(s)*100}%`;
     this.root.querySelector('#weather')!.innerHTML = c.weather.mode === 'snow' ? `${uiIcon('storm')} STORM / FUEL x3` : `${uiIcon('sun')} SUNNY`;
@@ -220,7 +229,7 @@ export class App {
     const rack = this.root.querySelector('#weapon-rack')!; const rackHTML = c.weapons.filter(w => w.uses > 0).map((w,i) => `<button data-weapon="${w.id}" class="${w.id === c.equipped ? 'selected' : ''}" title="${WEAPONS[w.type].name}"><kbd>${i < 6 ? i+1 : ''}</kbd><b>${WEAPONS[w.type].name}</b><small>${w.uses}/${weaponUses(w.type)}</small></button>`).join('');
     if (rack.innerHTML !== rackHTML) { rack.innerHTML = rackHTML; rack.querySelectorAll<HTMLButtonElement>('[data-weapon]').forEach(b => b.onclick = () => { c.equipped = b.dataset.weapon!; this.refresh(); }); }
     this.root.querySelector('#weapon-state')!.textContent = equipped ? `${WEAPONS[equipped.type].name} / ${equipped.uses} uses / ${c.cooldown > 0 ? c.cooldown.toFixed(1)+'s' : 'READY'} / ${equipped&&WEAPONS[equipped.type].type==='melee'?'wear on enemy hit':'unlimited ammo'}` : `Unarmed / 2 damage / ${c.cooldown>0?c.cooldown.toFixed(1)+'s':'READY'}`;
-    this.root.querySelector('#furnace-defense')!.textContent = inPlayerHeat(s) ? 'FURNACE / incoming damage -50% / enemies: damage taken x2, speed -50%' : '';
+    this.root.querySelector('#furnace-defense')!.textContent = s.player.shelter?'HUT / hostile attacks blocked / enemies can attack this hut':inPlayerHeat(s) ? 'FURNACE / incoming damage -50% / enemies: damage taken x2, speed -50%' : '';
     const effects=this.root.querySelector('#player-effects')!,effectsHTML=playerEffects(s).map(e=>`<div class="effect-card effect-${e.id}"><strong>${e.label}</strong><span>${e.detail}</span></div>`).join('');if(effects.innerHTML!==effectsHTML)effects.innerHTML=effectsHTML;
     const context = this.context(); const button = this.root.querySelector<HTMLButtonElement>('#interaction')!;
     button.querySelector('span')!.textContent = this.game.gathering ? `Gathering / ${this.game.gathering.remaining.toFixed(1)}s` : this.game.fishing ? `Fishing… ${Math.ceil(this.game.fishing.remaining)}s` : this.placement ? 'Confirm building placement' : context ? context.label : ''; button.disabled = !context && !this.placement || !!this.game.fishing||!!this.game.gathering; button.hidden = !context && !this.placement && !this.game.fishing&&!this.game.gathering;

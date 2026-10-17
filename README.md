@@ -33,7 +33,7 @@ The built application is in `dist/`; preview serves it at **http://localhost:417
 1. Enter a **number from 0 to 4,294,967,295 or a text seed**, randomize it, or enter the current world.
 2. **F** starts gathering (wood 0.3s, stone 0.7s, metal 1.1s, gold 2.2s) within three units. Hold it to repeatedly gather timber, stone, or metal. Guaranteed wood and stone sources are beside home.
 3. Approach a furnace and press F to burn **one wood for 10 base seconds or one charcoal for 30** (charcoal is selected first). A bold ring and animated flame-like aura show the active warmth area. New worlds start with 60 seconds of fuel and a completed 500-HP worker hut with two workers.
-4. Open **Build**. A **hut costs 20 wood**, takes 10 simulation seconds to build, and recruits two workers for wood, stone and fish. Press **T** near a furnace to upgrade; the HUD shows costs and shortages. Storehouses, trail shelters, and outpost furnaces have distinct functional effects. Preview, rotate, confirm or cancel construction.
+4. Open **Build**. A **hut costs 20 wood**, takes 10 simulation seconds to build, and recruits two workers for wood, stone and fish. Press **T** near a furnace to upgrade; the HUD shows costs and shortages. All new building footprints must fit inside an active furnace range. Storehouses, campfires, City Stores, Workshops and outpost furnaces have distinct functional effects. Preview, rotate, confirm or cancel construction.
 5. The map gives a rumour of a generated settlement. Follow it, search the chest, and interact with the trader. Gold purchases and direct resource barter are supported.
 6. Follow a riverbank to a **blue fishing post**. Interact and remain still for four seconds to catch fish. Fish can restore warmth or be traded.
 7. Use **Save / JSON** to save locally, download full worlds, or create/import fresh sandbox starting configurations.
@@ -241,3 +241,16 @@ Chopped or burned trees leave a stump and regrow after 20 simulation minutes. Ho
 World entry shows real preparation progress while survival is paused. The visible area plus an outer ring is generated, nearby character assets are readied, and shaders are warmed before play. Exploration builds one chunk mesh per frame and prefetches the next ring; harvesting invalidates only affected chunks. Bounded lake/cliff region caches reduce repeated terrain queries. This reduces avoidable work but does not guarantee a fixed FPS on every device.
 
 Bandits also roll an independent 25% chance for 0-4 gold; weapon-drop rules are unchanged. Zero is a valid roll. Gold is collected from the resulting supply pile with the existing collection feedback. See [implementation and verification](docs/CLIFFS_REGROWTH_LOADING.md). Run `npm run test:cliffs` for the focused browser checks.
+
+
+## Workshops, construction and shelter
+
+Build a **Workshop** for **25 wood + 10 stone + 3 metal**, taking **10 seconds**. Its entire footprint must be covered by an active, completed furnace at **level 5 or higher**, including village furnaces. The blacksmith model includes a forge, chimney, workbench and anvil. Approach and press **F** to craft/equip weapons using their existing material prices, spending stored supplies before carried supplies. Workshop HP defaults to 1500. Burning, ruined and unfinished Workshops are unavailable.
+
+Every new building must fit wholly inside an active furnace range, wherever it is placed. Existing buildings are preserved. Construction takes: worker hut **10s**, storehouse **5s**, campfire **3s**, City Store **10s**, outpost furnace **30s**, Workshop **10s**. Unfinished buildings provide no service, heat, fuel acceptance, campfire healing or storage bonus. Destroying a worksite cancels construction without granting workers or completed effects.
+
+Press **F** beside an unoccupied, completed hut to hide; press **F** again (or use Interact on touch) to leave. It heals **3% of current maximum HP per second**, blocks hostile damage and hides the survivor from enemies. Enemies can attack the hut, and ruin or fire ejects the player. Furnace healing does not stack while sheltered. Hunger and environmental exposure remain active. Workers whose hut becomes a ruin stop working and travel toward the nearest village, retaining carried supplies; they remain displaced villagers rather than producing supplies at the lost hut.
+
+Player chopping/mining now shows an axe/pickaxe and faces the resource during the deliberate action. Movement continues to set ordinary facing. Furnaces have stronger fire visuals and bounded floating embers, with reduced-motion support. Resource counters sit beside the title, and blizzard maps use pale mist instead of opaque darkness. HP is red below 15%, green otherwise and blue at full health; hunger is red below 15%, amber below 50%, and green from 50-100%. Critical HP adds a slow, reduced-motion-aware edge warning.
+
+See [Workshop and shelter verification](docs/WORKSHOP_AND_SHELTER.md). Run `npm run test:workshop` for the focused browser suite.
