@@ -2,17 +2,21 @@ import { SeededRNG, derive, noise, smooth } from '../utils/SeededRNG';
 import type { WorldSpec } from '../game/GameConfig';
 import type { Point } from '../game/GameState';
 import type { Resource } from '../data/definitions';
-export interface Node extends Point { id: string; resource: Resource; amount: number; radius: number; kind?:'tree'|'boulder'|'fragment'|'log'; scale?:number }
+export interface Node extends Point { id: string; resource: Resource; amount: number; radius: number; kind?:'tree'|'boulder'|'fragment'|'log'|'ore'; scale?:number }
 export interface Tree extends Point { scale: number }
 export interface Ruin extends Point { id: string; name: string; variant: number; houses: number; trader: Point; container: Point }
 export interface Village extends Ruin { guardCount: number }
 export const VILLAGE_SITES = [{ id: 'village:hearth', name: 'Hearthwatch', x: 40, z: 8 }, { id: 'village:quarry', name: 'Stonehaven', x: -72, z: -32 }, { id: 'village:river', name: 'Northpass', x: 132, z: 112 }];
 export const DISTANT_VILLAGE_SITES = VILLAGE_SITES.map((v,i)=>({...v,x:[128,-144,192][i],z:[8,-32,176][i]}));
+export interface Cliff extends Point{id:string;radius:number;height:number}
 export interface Lake extends Point{id:string;rx:number;rz:number}
 export interface FishingSpot extends Point { id: string; availability: number }
 export interface Chunk { id: string; cx: number; cz: number; trees: Tree[]; nodes: Node[]; ruins: Ruin[]; fishing: FishingSpot[] }
 export const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
 export class WorldManager {
+  private cliffRegions=new Map<string,Cliff[]>();
+  private lakeRegions=new Map<string,Lake[]>();
+  private cliffCache=new Map<string,Cliff|undefined>();
   private lakeCache=new Map<string,Lake|undefined>();
   private cache = new Map<string, Chunk>();
   constructor(readonly spec: WorldSpec) {}
@@ -26,7 +30,7 @@ export class WorldManager {
   }
   lakes(point:Point,radius=1):Lake[]{
     if(this.spec.generationVersion<5||this.spec.config.riverDensity===0)return[];
-    const cx=Math.floor(point.x/128),cz=Math.floor(point.z/128),out:Lake[]=[];
+    const cx=Math.floor(point.x/128),cz=Math.floor(point.z/128),key=`${cx},${cz},${radius}`,cached=this.lakeRegions.get(key);if(cached)return cached.slice();const out:Lake[]=[];
     for(let x=cx-radius;x<=cx+radius;x++)for(let z=cz-radius;z<=cz+radius;z++){
       const id=`lake:${x}:${z}`;
       if(!this.lakeCache.has(id)){
@@ -37,11 +41,28 @@ export class WorldManager {
         this.lakeCache.set(id,spawn&&clear?lake:undefined);
       }
       const lake=this.lakeCache.get(id);if(lake)out.push(lake);
-    }return out;
+    }if(this.lakeRegions.size>256)this.lakeRegions.delete(this.lakeRegions.keys().next().value!);this.lakeRegions.set(key,out);return out.slice();
+  }
+  cliffs(point:Point,radius=1):Cliff[]{
+    if(this.spec.generationVersion<6)return[];
+    const cx=Math.floor(point.x/128),cz=Math.floor(point.z/128),key=`${cx},${cz},${radius}`,cached=this.cliffRegions.get(key);if(cached)return cached.slice();const out:Cliff[]=[];
+    for(let x=cx-radius;x<=cx+radius;x++)for(let z=cz-radius;z<=cz+radius;z++){
+      const id=`cliff:${x}:${z}`;if(!this.cliffCache.has(id)){
+        const rng=new SeededRNG(derive(this.spec.seeds.terrain,'cliffs',x,z)),spawn=rng.next()<.8;
+        const cliff={id,x:x*128+rng.range(40,110),z:z*128+rng.range(40,110),radius:rng.range(7,11),height:rng.range(28,46)};
+        const river=this.river(cliff.x,cliff.z),clear=distance(cliff,{x:0,z:0})>60&&this.villages().every(v=>distance(v,cliff)>cliff.radius+30)&&this.nearbyRuins(Math.floor(cliff.x/this.spec.config.chunkSize),Math.floor(cliff.z/this.spec.config.chunkSize)).every(r=>distance(r,cliff)>cliff.radius+25)&&(this.spec.config.riverDensity===0||river.distance>river.width+cliff.radius+10)&&this.lakes(cliff).every(l=>this.lakeDistance(cliff,l)>1.8)&&this.cliffOres(cliff).every(ore=>!this.isWater(ore.x,ore.z)&&!this.bridgeAt(ore.x,ore.z));
+        if(this.cliffCache.size>256)this.cliffCache.delete(this.cliffCache.keys().next().value!);this.cliffCache.set(id,spawn&&clear?cliff:undefined);
+      }const cliff=this.cliffCache.get(id);if(cliff)out.push(cliff);
+    }if(this.cliffRegions.size>256)this.cliffRegions.delete(this.cliffRegions.keys().next().value!);this.cliffRegions.set(key,out);return out.slice();
+  }
+  cliffAt(point:Point,padding=0){return this.cliffs(point).find(c=>distance(c,point)<c.radius+padding);}
+  cliffOres(cliff:Cliff):Node[]{
+    return Array.from({length:9},(_,i)=>{const angle=i*Math.PI*2/9,r=cliff.radius+1.7,resource=(['gold','stone','metal'] as const)[i%3];return{id:`${cliff.id}:ore:${i}`,x:cliff.x+Math.cos(angle)*r,z:cliff.z+Math.sin(angle)*r,resource,amount:resource==='gold'?4+derive(this.spec.seeds.resources,cliff.id,i)%5:8+derive(this.spec.seeds.resources,cliff.id,i)%7,radius:.7,kind:'ore' as const};});
   }
   lakeDistance(point:Point,lake:Lake){return Math.hypot((point.x-lake.x)/lake.rx,(point.z-lake.z)/lake.rz);}
   visible(a:Point,b:Point,eye=1.5){
     const d=distance(a,b),steps=Math.min(128,Math.ceil(d/1.5)),ay=this.walkHeight(a.x,a.z)+eye,by=this.walkHeight(b.x,b.z)+eye;
+    if(this.cliffs(a,Math.max(1,Math.ceil(d/128))).some(c=>{const t=Math.max(0,Math.min(1,((c.x-a.x)*(b.x-a.x)+(c.z-a.z)*(b.z-a.z))/(d*d||1))),x=a.x+(b.x-a.x)*t,z=a.z+(b.z-a.z)*t;return Math.hypot(x-c.x,z-c.z)<c.radius&&this.height(c.x,c.z)+c.height>ay+(by-ay)*t;}))return false;
     for(let i=1;i<steps;i++){const t=i/steps,x=a.x+(b.x-a.x)*t,z=a.z+(b.z-a.z)*t;if(this.height(x,z)>ay+(by-ay)*t)return false;}return true;
   }
   height(x: number, z: number) {
@@ -94,15 +115,19 @@ export class WorldManager {
     const veg = new SeededRNG(derive(this.spec.seeds.biomes, 'trees', cx, cz));
     for (let i = 0; i < 35; i++) {
       const x = cx * n + veg.range(.7, n - .7), z = cz * n + veg.range(.7, n - .7), scale = veg.range(.8, 1.5), sparse = veg.next();
-      if (Math.hypot(x, z) < 13 || this.isWater(x, z) || ruins.some(r => distance(r, { x, z }) < 15) || this.villages().some(v => distance(v, { x, z }) < 19) || (this.biome(x, z) !== 'Pinewood' && sparse > .35)) continue;
+      if (this.cliffAt({x,z},5)||Math.hypot(x, z) < 13 || this.isWater(x, z) || ruins.some(r => distance(r, { x, z }) < 15) || this.villages().some(v => distance(v, { x, z }) < 19) || (this.biome(x, z) !== 'Pinewood' && sparse > .35)) continue;
       trees.push({ x, z, scale });
     }
     if (this.spec.config.riverDensity > 0) {
       const x = cx * n + n * .4, r = this.river(x, cz * n + n / 2), z = r.center - r.width - 1.5;
       if (Math.floor(z / n) === cz) fishing.push({ id: `fish:${cx}:${r.row}`, x, z, availability: 8 + derive(this.spec.seeds.resources, 'fish', cx, r.row) % 16 });
     }
-    const result = { id, cx, cz, trees, nodes, fishing, ruins: ruins.filter(r => Math.floor(r.x / n) === cx && Math.floor(r.z / n) === cz) };
+    const accessible=[...nodes];
+    for(const cliff of this.cliffs({x:cx*n+n/2,z:cz*n+n/2}))accessible.push(...this.cliffOres(cliff).filter(node=>Math.floor(node.x/n)===cx&&Math.floor(node.z/n)===cz));
+    const result = { id, cx, cz, trees, nodes:accessible, fishing, ruins: ruins.filter(r => Math.floor(r.x / n) === cx && Math.floor(r.z / n) === cz) };
     if (this.cache.size > 128) this.cache.delete(this.cache.keys().next().value!); this.cache.set(id, result); return result;
   }
+  chunkCoordinates(point:Point,radius=1){const n=this.spec.config.chunkSize,cx=Math.floor(point.x/n),cz=Math.floor(point.z/n),out:{id:string;cx:number;cz:number}[]=[];for(let x=cx-radius;x<=cx+radius;x++)for(let z=cz-radius;z<=cz+radius;z++)out.push({id:`${x},${z}`,cx:x,cz:z});return out.sort((a,b)=>Math.hypot(a.cx-cx,a.cz-cz)-Math.hypot(b.cx-cx,b.cz-cz));}
+  cachedChunk(id:string){return this.cache.get(id);}
   around(point: Point, radius = 1) { const n = this.spec.config.chunkSize, cx = Math.floor(point.x / n), cz = Math.floor(point.z / n), out: Chunk[] = []; for (let x = cx - radius; x <= cx + radius; x++) for (let z = cz - radius; z <= cz + radius; z++) out.push(this.chunk(x, z)); return out; }
 }

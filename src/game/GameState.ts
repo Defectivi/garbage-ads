@@ -15,11 +15,11 @@ export interface GameState {
   combat: CombatState;
   inventory: Balances; stockpile: Balances;
   furnaces: Furnace[]; buildings: Building[]; workers: Worker[];
-  changes: { nodes: Record<string, number>; containers: string[]; fishing: Record<string, number>; npcs: Record<string, NPCState>; terrain?:Record<string,'felled'|'broken'>; structures?:Record<string,Integrity>; refuges?:Record<string,Refuge>; lootTaken?:string[]; groundLoot?:Record<string,LootPile> };
+  changes: { nodes: Record<string, number>; containers: string[]; fishing: Record<string, number>; npcs: Record<string, NPCState>; terrain?:Record<string,'felled'|'broken'>; treeRegrowth?:Record<string,number>; structures?:Record<string,Integrity>; refuges?:Record<string,Refuge>; lootTaken?:string[]; groundLoot?:Record<string,LootPile> };
   discovered: string[]; elapsed: number; nextId: number; settings: Settings;
 }
 export function newState(world: WorldSpec, settings: Partial<Settings> = {}): GameState {
-  return { world: structuredClone(world), player: { x: 0, z: 4, warmth: 100, heading: 0, hp: 100, hunger:20 }, combat: freshCombat(), inventory: balances({ wood: 12, fish: 3 }), stockpile: balances(), furnaces: [{ id: 'home', x: 0, z: 0, fuel: 60, charcoal: 0, level: 1 }], buildings: [{id:'starter:hut',type:'hut',x:-7,z:-7,rotation:0}], workers: [0,1].map(i=>({id:`worker:starter:hut:${i}`,hutId:'starter:hut',hp:100,x:-7+(i?1:-1),z:-4,sourceId:null,load:0,progress:0,state:'seeking'})), spawnProtection:{x:0,z:4,remaining:12}, changes: { nodes: {}, containers: [], fishing: {}, npcs: {}, terrain:{}, structures:{}, refuges:{}, lootTaken:[], groundLoot:{} }, discovered: ['home'], elapsed: 0, nextId: 1, settings: { ...DEFAULT_SETTINGS, ...settings } };
+  return { world: structuredClone(world), player: { x: 0, z: 4, warmth: 100, heading: 0, hp: 100, hunger:20 }, combat: freshCombat(), inventory: balances({ wood: 12, fish: 3 }), stockpile: balances(), furnaces: [{ id: 'home', x: 0, z: 0, fuel: 60, charcoal: 0, level: 1 }], buildings: [{id:'starter:hut',type:'hut',x:-7,z:-7,rotation:0}], workers: [0,1].map(i=>({id:`worker:starter:hut:${i}`,hutId:'starter:hut',hp:100,x:-7+(i?1:-1),z:-4,sourceId:null,load:0,progress:0,state:'seeking'})), spawnProtection:{x:0,z:4,remaining:12}, changes: { nodes: {}, containers: [], fishing: {}, npcs: {}, terrain:{}, treeRegrowth:{}, structures:{}, refuges:{}, lootTaken:[], groundLoot:{} }, discovered: ['home'], elapsed: 0, nextId: 1, settings: { ...DEFAULT_SETTINGS, ...settings } };
 }
 
 export function maxPlayerHP(state:GameState){return (state.player.hypothermia?90:100)*((state.player.hunger??20)<5?.5:1);}

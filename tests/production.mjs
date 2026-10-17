@@ -6,7 +6,7 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } }), errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.goto('http://localhost:4173'); await page.locator('#seed').fill('0'); await page.locator('#new-world').click();
+  await page.goto('http://localhost:4173'); await page.locator('#seed').fill('0'); await page.locator('#new-world').click();await page.locator('#resources').waitFor();
   await page.keyboard.down('d'); await page.waitForTimeout(400); await page.keyboard.up('d');
   assert.match(await page.locator('#seed-hud').textContent(), /SEED 0/);
   assert.equal(await page.evaluate(() => typeof window.__frostbound), 'undefined');

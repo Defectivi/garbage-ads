@@ -6,7 +6,7 @@ const edge='C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const browser=await chromium.launch({headless:true,executablePath:existsSync(edge)?edge:undefined});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('http://localhost:5173');await page.locator('#seed').fill('42');await page.locator('#new-world').click();await isolateStartingCamp(page);
+ await page.goto('http://localhost:5173');await page.locator('#seed').fill('42');await page.locator('#new-world').click();await page.locator('#resources').waitFor();await isolateStartingCamp(page);
  await page.waitForFunction(()=>window.__frostbound.renderer.playerCharacter.ready);
  await page.evaluate(()=>{
   const a=window.__frostbound,g=a.game,v=g.world.villages()[0];g.state.player.x=v.x;g.state.player.z=v.z+4;g.stopMovement();g.combat.ensureEncounters();g.combat.ensureEncounters=()=>{};

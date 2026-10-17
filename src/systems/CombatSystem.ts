@@ -14,6 +14,7 @@ import { transact } from './InventorySystem';
 export interface CombatUnit extends Point { id: string; hp: number; kind: 'player' | 'guard' | 'enemy' | 'npc'|'building'; radius?:number; villageId?: string | null }
 export function shotgunDamage(range:number,angle=0){const band=Math.max(range/3,Math.abs(angle)/(Math.PI*2/9));return band<=1/3?105:band<=2/3?50:15;}
 export function equipmentDrops(seed: number, id: string, chance=.07) { return derive(seed, `equipment:${id}`) / 4294967296 < chance; }
+export function banditGold(seed:number,id:string){return equipmentDrops(seed,`gold:${id}`,.25)?derive(seed,`gold-amount:${id}`)%5:0;}
 export function droppedWeaponUses(seed:number,id:string,weapon:WeaponType){
  const roll=derive(seed,`equipment-wear:${id}`);if(weapon==='molotov')return 1+roll%5;
  const max=weaponUses(weapon),low=Math.ceil(max*.2),high=Math.floor(max*.6);return low+roll%(high-low+1);
@@ -100,6 +101,7 @@ export class CombatSystem {
       if (actor.villageId && ownerId === 'player' && !this.c.villageAlerts.includes(actor.villageId)) this.c.villageAlerts.push(actor.villageId);
       if (wasAlive && actor.hp <= 0) {
         if(actor.type==='wolf'){const meat=derive(this.s.world.seeds.loot,`wolf-meat:${actor.id}`)%3;if(meat){const loot=this.s.changes.groundLoot??(this.s.changes.groundLoot={});const id=`wolf-meat:${actor.id}`;loot[id]={id,x:actor.x,z:actor.z,resources:{meat}};}}
+        if(actor.type==='bandit'){const gold=banditGold(this.s.world.seeds.loot,actor.id);if(gold){const loot=this.s.changes.groundLoot??(this.s.changes.groundLoot={}),id=`bandit-gold:${actor.id}`;loot[id]={id,x:actor.x,z:actor.z,resources:{gold}};}}
         this.c.kills++; delete this.c.statuses[actor.id];
         if (actor.weapon && equipmentDrops(this.s.world.seeds.loot, actor.id,actor.type==='bandit'?.25:.07)) this.c.drops.push({ id: this.nextId('drop'), x: actor.x, z: actor.z, weapon: actor.weapon, uses: actor.type==='bandit'||actor.weapon==='molotov'?droppedWeaponUses(this.s.world.seeds.loot,actor.id,actor.weapon):weaponUses(actor.weapon) });
         this.game.notify(`${actor.type === 'polar_bear' ? 'Polar bear' : actor.type === 'guard' ? 'Guard' : actor.type==='wolf'?'Wolf':'Raider'} defeated.`);
@@ -224,9 +226,9 @@ export class CombatSystem {
   private charTimber(point: Point) {
     for (const chunk of this.game.world.around(point)) {
       for (const n of this.game.nodesInChunk(chunk)) if (n.resource === 'wood' && distance(n, point) <= 4 && this.game.nodeRemaining(n) > 0 && !this.c.charredNodes.includes(n.id)) this.c.charredNodes.push(n.id);
-      chunk.trees.forEach((tree, i) => { const id = `tree:${chunk.id.replace(',', ':')}:${i}`; if (distance(tree, point) <= 4 && !this.c.charredTrees.includes(id)&&this.s.changes.terrain?.[id]!=='felled') this.c.charredTrees.push(id); });
+      chunk.trees.forEach((tree, i) => { const id = `tree:${chunk.id.replace(',', ':')}:${i}`; if (distance(tree, point) <= 4 && !this.c.charredTrees.includes(id)&&this.s.changes.terrain?.[id]!=='felled') {this.c.charredTrees.push(id);this.game.treeGrowth.fell(id);} });
     }
-    this.game.revision++;
+    this.game.markTerrainChanged(point);for(const c of this.game.world.around(point))this.game.dirtyTerrainChunks.add(c.id);
   }
   update(dt: number) {
     this.clearSpawnZone();this.ensureEncounters(); this.c.cooldown = Math.max(0, this.c.cooldown - dt);

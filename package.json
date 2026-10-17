@@ -30,7 +30,8 @@
     "test:workers": "node tests/worker-pause.mjs",
     "test:seeds": "node tests/seed-hud.mjs",
     "test:harvest": "node tests/worker-harvest.mjs",
-    "test:field": "node tests/field-ui-night.mjs"
+    "test:field": "node tests/field-ui-night.mjs",
+    "test:cliffs": "node tests/cliffs-loading.mjs"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.3.0",

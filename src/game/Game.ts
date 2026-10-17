@@ -1,3 +1,4 @@
+import {TreeGrowth} from '../systems/TreeGrowth';
 import {isNight} from '../systems/DayNight';
 import {harvestRoute,workerHarvestReach} from '../systems/WorkerHarvest';
 import {CITY_OFFERS} from '../data/cityStore';
@@ -21,6 +22,9 @@ import { WEAPONS, weaponCost, weaponUses, type WeaponType } from '../data/weapon
 export interface Input { x: number; z: number; sprint?: boolean }
 export class Game {
   readonly world: WorldManager;
+  readonly treeGrowth:TreeGrowth;
+  readonly dirtyTerrainChunks=new Set<string>();
+  markTerrainChanged(point:Point){const n=this.state.world.config.chunkSize;this.dirtyTerrainChunks.add(`${Math.floor(point.x/n)},${Math.floor(point.z/n)}`);this.revision++;}
   readonly combat: CombatSystem;
   readonly settlement:SettlementSystem;
   paused = true;
@@ -42,16 +46,16 @@ export class Game {
   private fuelTasks=new Map<string,string>();
   private paths = new Map<string, Point[]>();
   private velocity = { x: 0, z: 0 };
-  constructor(public state: GameState) { for(const w of state.combat.weapons)w.uses=Math.min(w.uses,weaponUses(w.type));this.world = new WorldManager(state.world); this.combat = new CombatSystem(this);this.settlement=new SettlementSystem(this); }
+  constructor(public state: GameState) { for(const w of state.combat.weapons)w.uses=Math.min(w.uses,weaponUses(w.type));this.world = new WorldManager(state.world); this.combat = new CombatSystem(this);this.settlement=new SettlementSystem(this);this.treeGrowth=new TreeGrowth(this); }
   get inventoryLimit() { return this.state.settings.inventoryLimit ? Math.min(INT32_MAX,this.state.settings.inventoryLimit + this.state.buildings.filter(b => b.type === 'storage'&&this.settlement.intact(b.id)).length * 50) : 0; }
   get dead() { return this.state.player.hp <= 0 || this.state.settings.difficulty === 'survival' && this.state.player.warmth <= 0; }
   notify(message: string) { this.message = message; }
-  nodeRemaining(node: Node) { if(node.id.startsWith('fish:'))return Math.max(0,node.amount-(this.state.changes.fishing[node.id]??0));return this.state.changes.nodes[node.id] ?? node.amount; }
+  nodeRemaining(node: Node) { if(node.kind==='log'&&this.state.changes.terrain?.[node.id.slice(4)]!=='felled')return 0;if(node.id.startsWith('charcoal:tree:')&&!this.state.combat.charredTrees.includes(node.id.slice(9)))return 0;if(node.id.startsWith('fish:'))return Math.max(0,node.amount-(this.state.changes.fishing[node.id]??0));return this.state.changes.nodes[node.id] ?? node.amount; }
   nodeResource(node: Node): Resource { return this.state.combat.charredNodes.includes(node.id) ? 'charcoal' : node.resource; }
   nodesInChunk(chunk: Chunk): Node[] {
     const terrain=this.state.changes.terrain??{};
-    const nodes=chunk.nodes.filter(n=>!this.state.buildings.some(b=>b.id==='starter:hut'&&distance(b,n)<3.5)).filter(n=>!this.world.bridgeAt(n.x,n.z)).filter(n=>this.state.world.generationVersion<4||!this.world.villages().some(v=>distance(v,n)<15)).flatMap((n):Node[]=>{
-      const large=n.resource==='stone'&&!n.id.startsWith('starter:')&&derive(this.state.world.seeds.resources,n.id)%3===0;
+    const nodes=chunk.nodes.filter(n=>!this.world.cliffAt(n)).filter(n=>!this.state.buildings.some(b=>b.id==='starter:hut'&&distance(b,n)<3.5)).filter(n=>!this.world.bridgeAt(n.x,n.z)).filter(n=>this.state.world.generationVersion<4||!this.world.villages().some(v=>distance(v,n)<15)).flatMap((n):Node[]=>{
+      const large=!n.kind&&n.resource==='stone'&&!n.id.startsWith('starter:')&&derive(this.state.world.seeds.resources,n.id)%3===0;
       if(!large)return[n];
       if(terrain[n.id]==='broken')return Array.from({length:3},(_,i)=>({...n,id:`fragment:${n.id}:${i}`,x:n.x+Math.cos(i*2.1)*.6,z:n.z+Math.sin(i*2.1)*.6,amount:Math.floor(this.nodeRemaining(n)/3)+(i<this.nodeRemaining(n)%3?1:0),radius:.4,kind:'fragment' as const}));
       return[{...n,kind:'boulder',radius:1.7}];
@@ -59,7 +63,7 @@ export class Game {
     return [...nodes,...chunk.trees.flatMap((tree,i):Node[]=>{
       const id=`tree:${chunk.cx}:${chunk.cz}:${i}`;if(this.world.bridgeAt(tree.x,tree.z))return[];
       if(this.state.combat.charredTrees.includes(id))return[{...tree,id:`charcoal:${id}`,resource:'charcoal',amount:3,radius:.4}];
-      if(terrain[id]==='felled')return[{...tree,id:`log:${id}`,resource:'wood',amount:3+Math.floor(tree.scale*2),radius:.7,kind:'log'}];
+      if(terrain[id]==='felled')return[{...tree,x:tree.x+1,z:tree.z+.4,id:`log:${id}`,resource:'wood',amount:3+Math.floor(tree.scale*2),radius:.7,kind:'log'}];
       return[{...tree,id,resource:'wood',amount:1,radius:.38*tree.scale,kind:'tree',scale:tree.scale}];
     })];
   }
@@ -68,7 +72,7 @@ export class Game {
     const trees = this.world.around(point).flatMap(c => c.trees.flatMap((t, i) => (this.world.bridgeAt(t.x,t.z)||this.state.combat.charredTrees.includes(`tree:${c.cx}:${c.cz}:${i}`)||this.state.changes.terrain?.[`tree:${c.cx}:${c.cz}:${i}`]==='felled') ? [] : [{ ...t, radius: .38 * t.scale }]));
     const ruins=this.world.settlements(point).flatMap(r=>[...(this.npc(r).hp>0&&this.settlement.refuge(`npc:${r.id}`)?.phase!=='hidden'?[{id:`npc:${r.id}`,...this.settlement.position(`npc:${r.id}`,r.trader),radius:.5}]:[]),{...r.container,radius:.65}]);
     const rocks=this.world.around(point).flatMap(c=>this.nodesInChunk(c)).filter(n=>n.kind==='boulder'&&this.nodeRemaining(n)>0).map(n=>({...n,radius:1.45}));
-    return [...trees,...rocks,...ruins,...this.settlement.structures(point).filter(b=>this.settlement.integrity(b).stage!=='gone').map(b=>({...b,radius:BUILDINGS[b.type].radius}))];
+    return [...this.world.cliffs(point).map(c=>({...c,radius:c.radius})),...trees,...rocks,...ruins,...this.settlement.structures(point).filter(b=>this.settlement.integrity(b).stage!=='gone').map(b=>({...b,radius:BUILDINGS[b.type].radius}))];
   }
   move(point: Point, dx: number, dz: number, radius = .42,ignoreId?:string) {
     let x = point.x + dx, z = point.z + dz;
@@ -98,7 +102,7 @@ export class Game {
     const beforeMove={x:this.state.player.x,z:this.state.player.z};
     this.move(this.state.player, this.velocity.x * dt, this.velocity.z * dt);
     if (len > .1) this.state.player.heading = Math.atan2(input.x, input.z);
-    this.combat.update(dt); updateSurvival(this.state, dt, sprint,distance(beforeMove,this.state.player)>.0001);
+    this.combat.update(dt); updateSurvival(this.state, dt, sprint,distance(beforeMove,this.state.player)>.0001);this.treeGrowth.update();
     for (const r of this.world.settlements(this.state.player)) if (distance(r, this.state.player) < 20 && !this.state.discovered.includes(r.id)) { this.state.discovered.push(r.id); this.notify(`Discovered ${r.name}. Search the chest and speak to the trader.`); }
     if (this.fishing) {
       if (distance(this.fishing.spot, this.state.player) > 3 || len > .1) { this.fishing = undefined; this.notify('Fishing cancelled.'); }
@@ -130,15 +134,15 @@ export class Game {
     if(node.kind!=='tree'&&node.kind!=='boulder')return false;
     const terrain=this.state.changes.terrain??(this.state.changes.terrain={});if(terrain[node.id])return true;
     terrain[node.id]=node.kind==='tree'?'felled':'broken';
-    if(node.kind==='tree'){if(this.terrainEvents.length>=16)this.terrainEvents.shift();this.terrainEvents.push({id:node.id,x:node.x,z:node.z,scale:node.scale??1});}
-    this.revision++;this.notify(node.kind==='tree'?'Tree felled. Gather the timber.':'Boulder broken. Gather the smaller stones.');return true;
+    if(node.kind==='tree'){this.treeGrowth.fell(node.id);if(this.terrainEvents.length>=16)this.terrainEvents.shift();this.terrainEvents.push({id:node.id,x:node.x,z:node.z,scale:node.scale??1});}
+    this.markTerrainChanged(node);this.notify(node.kind==='tree'?'Tree felled. Gather the timber.':'Boulder broken. Gather the smaller stones.');return true;
   }
   gather(node: Node): Result {
     if (distance(this.state.player, node) > 3) return { ok: false, error: 'Move closer to gather this resource.' };
     const left = this.nodeRemaining(node); if (left <= 0) return { ok: false, error: 'This resource is exhausted.' };
     if(this.breakNatural(node))return{ok:true};
     const resource = this.nodeResource(node), result = transact([{ account: this.state.inventory, delta: single(resource, 1), capacity: this.inventoryLimit }], this.state.settings);
-    if (result.ok) { this.state.changes.nodes[node.id] = left - 1; this.lastGather = this.state.elapsed; this.collected(resource, 1, node); if (left === 1) this.revision++; this.notify(`+1 ${resource}`); }
+    if (result.ok) { this.state.changes.nodes[node.id] = left - 1; this.lastGather = this.state.elapsed; this.collected(resource, 1, node); if (left === 1) this.markTerrainChanged(node); this.notify(`+1 ${resource}`); }
     return result;
   }
   feed(id = 'home', resource: 'wood' | 'charcoal' = Math.max(0,this.state.inventory.charcoal)+Math.max(0,this.state.stockpile.charcoal)>0?'charcoal':'wood'): Result {
@@ -317,7 +321,7 @@ export class Game {
         if(source)this.harvestTargets.set(w.id,source);
         w.progress += dt;
         if(source&&w.progress>=gatherSeconds(source.resource)-1e-8&&(source.kind==='tree'||source.kind==='boulder')){this.breakNatural(source);w.sourceId=source.kind==='tree'?`log:${source.id}`:`fragment:${source.id}:0`;w.state='seeking';w.progress=0;this.harvestTargets.delete(w.id);this.paths.delete(w.id);continue;}
-        if (source && w.progress >= gatherSeconds(source.resource)-1e-8) { if(source.resource==='fish')this.state.changes.fishing[source.id]=(this.state.changes.fishing[source.id]??0)+1;else this.state.changes.nodes[source.id] = this.nodeRemaining(source) - 1; if (this.nodeRemaining(source) === 0) this.revision++; w.load++; w.progress = 0; }
+        if (source && w.progress >= gatherSeconds(source.resource)-1e-8) { if(source.resource==='fish')this.state.changes.fishing[source.id]=(this.state.changes.fishing[source.id]??0)+1;else this.state.changes.nodes[source.id] = this.nodeRemaining(source) - 1; if (this.nodeRemaining(source) === 0) this.markTerrainChanged(source); w.load++; w.progress = 0; }
         if (!source || w.load >= 3) { w.state = 'returning'; this.paths.delete(w.id); }
         continue;
       }

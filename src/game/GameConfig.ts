@@ -1,5 +1,5 @@
 import { derive } from '../utils/SeededRNG';
-export const GENERATION_VERSION = 5;
+export const GENERATION_VERSION = 6;
 export const INT32_MIN=-2147483648,INT32_MAX=2147483647,UINT32_MAX=4294967295;
 export interface WorldConfig { chunkSize: number; initialRegionSize: number; worldScale: number; riverDensity: number; ruinDensity: number; resourceDensity: number }
 export interface WorldSpec { seed: number; seedText?:string; generationVersion: number; seeds: { terrain: number; rivers: number; biomes: number; resources: number; ruins: number; wildlife: number; villages: number; loot: number }; config: WorldConfig }

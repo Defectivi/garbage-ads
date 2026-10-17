@@ -8,7 +8,7 @@ const errors=[];mkdirSync('test-results',{recursive:true});
 const attach=page=>page.on('pageerror',e=>errors.push(e.message));
 try {
   const page=await browser.newPage({viewport:{width:1440,height:1000}});attach(page);
-  await page.goto('http://localhost:5173');await page.locator('#seed').fill('42');await page.locator('#new-world').click();await isolateStartingCamp(page);
+  await page.goto('http://localhost:5173');await page.locator('#seed').fill('42');await page.locator('#new-world').click();await page.locator('#resources').waitFor();await isolateStartingCamp(page);
   await page.waitForFunction(()=>window.__frostbound.renderer.playerCharacter.ready&&window.__frostbound.renderer.chunks.size===25);
   assert.equal(await page.evaluate(()=>window.__frostbound.renderer.playerCharacter.source),'glb');
   const terrain=await page.evaluate(()=>{
@@ -67,7 +67,7 @@ try {
   await page.locator('#recover').click();await page.waitForFunction(()=>window.__frostbound.renderer.playerCharacter.object.userData.animation==='idle');
   // Native touch collection and a viewport change during flight.
   const mobile=await browser.newPage({viewport:{width:390,height:844},hasTouch:true,isMobile:true});attach(mobile);
-  await mobile.goto('http://localhost:5173');await mobile.locator('#enter-world').tap();await isolateStartingCamp(mobile);await mobile.waitForFunction(()=>window.__frostbound.renderer.playerCharacter.ready);
+  await mobile.goto('http://localhost:5173');await mobile.locator('#enter-world').tap();await mobile.locator('#resources').waitFor();await isolateStartingCamp(mobile);await mobile.waitForFunction(()=>window.__frostbound.renderer.playerCharacter.ready);
   await mobile.evaluate(()=>{const a=window.__frostbound;a.game.state.player.x=3.4;a.game.state.player.z=4;a.refresh();});
   await mobile.locator('#touch-interact').tap();await mobile.waitForSelector('.collection-flight[data-resource="wood"]');
   await mobile.screenshot({path:'test-results/collection-flight-mobile.png'});await mobile.setViewportSize({width:844,height:390});
@@ -76,7 +76,7 @@ try {
   await mobile.evaluate(()=>{const g=window.__frostbound.game,n=g.nodes().find(n=>n.id==='starter:wood');g.state.changes.nodes[n.id]=100;for(let i=0;i<60;i++)g.gather(n);});
   await mobile.waitForSelector('.collection-flight');assert((await mobile.locator('.collection-flight').count())<=12);
   await mobile.waitForTimeout(1300);assert.equal(await mobile.locator('.collection-flight').count(),0);assert.equal(await mobile.evaluate(()=>window.__frostbound.game.state.inventory.wood),73);
-  const reduced=await browser.newPage({reducedMotion:'reduce'});attach(reduced);await reduced.goto('http://localhost:5173');await reduced.locator('#enter-world').click();await isolateStartingCamp(reduced);
+  const reduced=await browser.newPage({reducedMotion:'reduce'});attach(reduced);await reduced.goto('http://localhost:5173');await reduced.locator('#enter-world').click();await reduced.locator('#resources').waitFor();await isolateStartingCamp(reduced);
   await reduced.evaluate(()=>{const a=window.__frostbound;a.game.state.player.x=3.4;a.game.state.player.z=4;a.refresh();});await reduced.keyboard.press('f');await reduced.waitForFunction(()=>window.__frostbound.game.state.inventory.wood===13);
   assert.equal(await reduced.locator('.collection-flight').count(),0);assert.equal(await reduced.evaluate(()=>window.__frostbound.game.state.inventory.wood),13);
   assert.equal(await reduced.locator('[data-resource="wood"] b').evaluate(el=>el.getAnimations().length),0);

@@ -23,7 +23,7 @@ export function validateBalances(v: unknown, settings: Settings, path = 'resourc
 }
 export function validateWorld(v: unknown): WorldSpec {
   const w = record(v, 'world');
-  if (![1, 2, 3, 4, GENERATION_VERSION].includes(w.generationVersion as number)) throw new Error(`Unsupported generation version ${String(w.generationVersion)}. Supported terrain generations: 1, 2, 3, 4 and ${GENERATION_VERSION}.`);
+  if (![1, 2, 3, 4, 5, GENERATION_VERSION].includes(w.generationVersion as number)) throw new Error(`Unsupported generation version ${String(w.generationVersion)}. Supported terrain generations: 1, 2, 3, 4, 5 and ${GENERATION_VERSION}.`);
   const seeds = record(w.seeds, 'world.seeds'), c = record(w.config, 'world.config');
   const read = (k: string) => num(seeds[k], `seeds.${k}`, 0, UINT32_MAX, true);
   let seedText:string|undefined;if(w.seedText!==undefined){if(typeof w.seedText!=='string')throw new Error('seedText must be text.');const parsed=parseSeed(w.seedText);if(!parsed.seedText||parsed.seed!==w.seed)throw new Error('seedText does not match the numeric seed.');seedText=parsed.seedText;}
@@ -126,6 +126,7 @@ export function importJSON(text: string, expectedMode?: 'full-save' | 'sandbox-c
   const npcs = record(changes.npcs, 'npcs'); if (Object.keys(npcs).length > 10000) throw new Error('Too many NPC records.');
   for (const [key, value] of Object.entries(npcs)) state.changes.npcs[id(key, 'npc.id')] = { inventory: validateBalances(record(value, 'NPC').inventory, settings, 'NPC inventory'), hp: num(record(value, 'NPC').hp, 'NPC.hp', 0, 100) };
   const worldManager=new WorldManager(world);
+  if(changes.treeRegrowth!==undefined){const timers=record(changes.treeRegrowth,'treeRegrowth');if(Object.keys(timers).length>50000)throw new Error('Too many tree timers.');for(const [key,value]of Object.entries(timers)){const match=/^tree:(-?\d+):(-?\d+):(\d+)$/.exec(key);if(!match||Math.abs(Number(match[1]))*world.config.chunkSize>1e6+64||Math.abs(Number(match[2]))*world.config.chunkSize>1e6+64||(state.changes.terrain?.[key]!=='felled'&&!state.combat.charredTrees.includes(key))||!worldManager.chunk(Number(match[1]),Number(match[2])).trees[Number(match[3])])throw new Error('Unknown regrowing tree.');state.changes.treeRegrowth![id(key,'treeRegrowth.id')]=num(value,'treeRegrowth.readyAt',0,1e12+1200);}}
   const resolveStructure=(key:string)=>{
     const placed=state.buildings.find(b=>b.id===key);if(placed)return placed;
     const furnace=state.furnaces.find(f=>f.id===key);if(furnace)return{...furnace,type:'furnace' as const};

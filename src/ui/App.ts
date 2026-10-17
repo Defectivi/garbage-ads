@@ -21,7 +21,7 @@ import { AudioSystem } from '../game/audio';
 import { itemIcon, uiIcon } from './Icons';
 export class App {
   private root = document.getElementById('interface')!;
-  private keys = new Set<string>(); private mode: 'menu' | 'game' = 'menu'; private previous = 0; private clock = 0;
+  private keys = new Set<string>(); private mode: 'menu' | 'loading' | 'game' = 'menu'; private previous = 0; private clock = 0;
   private panels = new Panels(this); private audio = new AudioSystem(); private played = false;
   private stick = { x: 0, z: 0 }; private touchAction = false; private actionTimer = 0; private autosave = 0; private revision = -1;
   private placement?: { type: BuildingType; point: Point; rotation: number };
@@ -34,8 +34,8 @@ export class App {
     this.resetOrbit(); this.resetJoystick(); this.game.stopMovement();
     this.root.querySelector('#sprint-button')?.classList.remove('selected');
   }
-  private inspectedWorker?:string;private inspectedStructure?:string;private inspectUntil=0;
-  private inspectWorker(x:number,y:number,touch=false){this.inspectedWorker=this.renderer.workerAt(x,y);this.inspectedStructure=this.inspectedWorker?undefined:this.renderer.structureAt(x,y);this.inspectUntil=touch?performance.now()+3500:Infinity;this.refresh();return !!(this.inspectedWorker||this.inspectedStructure);}
+  private inspectedWorker?:string;private inspectedStructure?:string;private inspectedStump?:string;private inspectUntil=0;
+  private inspectWorker(x:number,y:number,touch=false){this.inspectedWorker=this.renderer.workerAt(x,y);this.inspectedStructure=this.inspectedWorker?undefined:this.renderer.structureAt(x,y);this.inspectedStump=this.inspectedWorker||this.inspectedStructure?undefined:this.renderer.stumpAt(x,y);this.inspectUntil=touch?performance.now()+3500:Infinity;this.refresh();return !!(this.inspectedWorker||this.inspectedStructure||this.inspectedStump);}
   private collectionEffects: CollectionEffects;
   private damageEffects:DamageEffects; private assistAttack=false;
   constructor(public game: Game, public renderer: Renderer) { this.damageEffects=new DamageEffects(point=>this.renderer.screenPoint(point)); this.collectionEffects = new CollectionEffects(this.root, point => this.renderer.screenPoint(point)); }
@@ -72,7 +72,7 @@ export class App {
       if (e.button === 2 && !drag) { drag = { id: mousePointer, x: e.clientX }; this.aiming = true; canvas.setPointerCapture(mousePointer); }
     });
     window.addEventListener('mouseup', e => { if (e.button === 0) this.firing = false; if (e.button === 2) this.resetOrbit(); });
-    canvas.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'){this.inspectedWorker=undefined;this.inspectedStructure=undefined;this.refresh();}});
+    canvas.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'){this.inspectedWorker=undefined;this.inspectedStructure=undefined;this.inspectedStump=undefined;this.refresh();}});
     canvas.addEventListener('pointermove', e => { if(e.pointerType==='mouse'&&!drag&&!this.placement&&this.mode==='game')this.inspectWorker(e.clientX,e.clientY); if (drag?.id === e.pointerId && this.mode === 'game' && !this.game.paused) { this.renderer.yaw -= (e.clientX - drag.x) * .008; drag.x = e.clientX; } else if (this.placement && e.pointerType !== 'touch') { const p = this.renderer.groundAt(e.clientX, e.clientY); if (p) { this.placement.point = { x: Math.round(p.x * 2) / 2, z: Math.round(p.z * 2) / 2 }; this.previewBuilding(); } } });
     for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(event, e => { if (drag?.id === (e as PointerEvent).pointerId) this.resetOrbit(); if (!(e.type === 'lostpointercapture' && ((e as PointerEvent).buttons & 1))) this.firing = false; });
     canvas.addEventListener('wheel', e => { e.preventDefault(); this.renderer.zoom = Math.max(16, Math.min(65, this.renderer.zoom + e.deltaY * .025)); }, { passive: false });
@@ -91,7 +91,17 @@ export class App {
     extra.querySelector('#load-save')!.addEventListener('click', () => { try { this.offerWorld(loadLocal(), 'Load the saved world? This replaces the active world.'); } catch (e) { this.error(e); } });
     extra.querySelector('#import-save')!.addEventListener('click', () => this.panels.saves('full-save')); extra.querySelector('#import-config')!.addEventListener('click', () => this.panels.saves('sandbox-config')); extra.querySelector('#settings-menu')!.addEventListener('click', () => this.panels.settings());
   }
-  enter() {
+  async enter() {
+    if(this.mode==='loading')return;
+    this.clearInput();this.audio.enabled=this.game.state.settings.sound;this.audio.unlock();this.game.paused=true;this.mode='loading';this.root.className='loading';this.audio.ambience(false);
+    this.root.innerHTML=`<main class="loading-screen"><div class="loading-emblem">${uiIcon('mountain')}</div><span class="eyebrow">FROSTBOUND / EXPEDITION PREPARATION</span><h1>Finding your foothold.</h1><p>The world is being prepared. Your fire and survival clocks are paused.</p><progress id="world-progress" max="1" value="0" aria-label="World loading progress"></progress><div class="loading-readout"><strong id="loading-stage" role="status">Preparing terrain</strong><span id="loading-percent">0%</span></div><small>KEEP THE FIRE. FIND YOUR WAY.</small><button id="loading-retry" hidden>Return to title</button></main>`;
+    try{
+      await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
+      await this.renderer.prepareWorld((value,label)=>{(this.root.querySelector('#world-progress') as HTMLProgressElement).value=value;this.root.querySelector('#loading-stage')!.textContent=label;this.root.querySelector('#loading-percent')!.textContent=`${Math.round(value*100)}%`;});
+      this.previous=0;this.revision=this.game.revision;this.game.dirtyTerrainChunks.clear();this.showGame();
+    }catch(error){this.root.querySelector('#loading-stage')!.textContent=error instanceof Error?error.message:'World preparation failed.';const retry=this.root.querySelector<HTMLButtonElement>('#loading-retry')!;retry.hidden=false;retry.onclick=()=>this.menu();}
+  }
+  private showGame() {
     this.clearInput(); this.mode = 'game'; this.played = true; this.game.paused = false; this.root.className = 'playing'; this.keys.clear(); this.audio.enabled = this.game.state.settings.sound; this.audio.unlock(); this.audio.ambience(true);
     this.root.innerHTML = `<header><b>${uiIcon('mountain')} FROSTBOUND</b><span id="seed-hud"></span><button id="menu" aria-label="Pause game">Ⅱ <span>Pause</span></button></header><div id="resources" class="resource-bar" aria-label="Carried resources"></div><section class="survival"><div class="exposure-heading">${uiIcon('flame')}<strong id="warmth"></strong></div><div class="warmth-meter"><i></i></div><span id="fuel"></span><small id="location"></small><small id="recovery-state"></small><small id="structure-status"></small><div id="furnace-upgrade"></div></section><button id="interaction" class="interaction"><kbd>F</kbd><span></span></button><section class="combat-hud"><div class="health-line"><b id="health"></b><b id="warmth-readout"></b><span id="weather"></span><span id="day-night"></span></div><div class="hp-meter"><i></i></div><div class="hunger-line"><b id="hunger"></b><div class="hunger-meter"><i></i></div></div><div id="weapon-rack"></div><small id="weapon-state"></small><small id="furnace-defense"></small><button id="attack-button">ATTACK <kbd>SPACE</kbd></button><button id="sprint-button">SPRINT <kbd>SHIFT</kbd></button></section><aside id="player-effects" aria-label="Active player effects"></aside><div id="worker-inspection" role="status" hidden></div><div id="message" role="status"></div><footer><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move / F interact / E inventory / Shift+S save</footer>`;
     this.root.querySelector('#menu')!.addEventListener('click', () => this.pause()); this.root.querySelector('#interaction')!.addEventListener('click', () => this.interact());
@@ -123,7 +133,7 @@ export class App {
   closeModal() { if(this.mode==='game'&&this.game.dead)return; this.root.querySelector('.modal-backdrop')?.remove(); this.clearInput(); if (this.mode === 'game') { this.game.paused = false; this.audio.enabled = this.game.state.settings.sound; this.audio.ambience(true); } }
   error(e: unknown) { const message = e instanceof Error ? e.message : String(e); this.game.notify(message); const status = this.root.querySelector('#dialog-status') ?? this.root.querySelector('#menu-error'); if (status) status.textContent = message; }
   report(result: Result) { if (!result.ok) this.error(result.error); else { this.audio.tone('collect'); const el = this.root.querySelector('#dialog-status'); if (el) el.textContent = this.game.message; } this.refresh(); }
-  replaceWorld(state: GameState) { const saved=saveLocal(state); this.collectionEffects.clear(); this.damageEffects.clear(); this.cancelBuilding(); this.game = new Game(state); this.renderer.setGame(this.game); this.revision = -1; this.autosave = 0; this.enter();if(!saved.ok)this.error(saved.message); }
+  async replaceWorld(state: GameState) { const saved=saveLocal(state); this.collectionEffects.clear(); this.damageEffects.clear(); this.cancelBuilding(); this.game = new Game(state); this.renderer.setGame(this.game); this.revision = -1; this.autosave = 0; await this.enter();if(!saved.ok)this.error(saved.message); }
   private offerWorld(state: GameState, message: string) { const el = this.modal('A new chapter?', '<p id="replace-description"></p><div class="button-row"><button id="confirm-world" class="primary">Confirm replacement</button><button id="cancel-world">Cancel</button></div>'); el.querySelector('#replace-description')!.textContent = `${message} Seed ${state.world.seed}, generation ${state.world.generationVersion}.`; el.querySelector('#confirm-world')!.addEventListener('click', () => this.replaceWorld(state)); el.querySelector('#cancel-world')!.addEventListener('click', () => this.closeModal()); }
   private pause() {
     const el=this.modal('Expedition paused',`<p class="pause-intro">Take a breath. Your fire, workers and world are waiting.</p><div class="pause-summary"><span>WORLD SEED<strong>${this.game.state.world.seed}</strong></span><span>SURVIVOR<strong>${Math.ceil(this.game.state.player.hp)} HP</strong></span><span>EXPEDITION<strong>${Math.floor(this.game.state.elapsed/60)} min</strong></span></div><div class="pause-actions"><button id="resume" class="primary">Resume expedition <span>ESC</span></button><div><button id="pause-save">${uiIcon('save')} Save locally</button><button id="exit-menu">${uiIcon('arrow')} Exit to title</button></div></div><details class="pause-guide"><summary>Controls & field guide</summary><div class="pause-controls"><section><h3>Keyboard & mouse</h3><dl><dt><kbd>WASD</kbd> / arrows</dt><dd>Move & face</dd><dt><kbd>Shift</kbd></dt><dd>Hold to sprint</dd><dt>Right drag / wheel</dt><dd>Orbit / zoom</dd><dt>Left click / <kbd>Space</kbd></dt><dd>Attack / forward attack</dd><dt><kbd>F</kbd></dt><dd>Interact / gather</dd><dt><kbd>E</kbd> / <kbd>B</kbd> / <kbd>M</kbd></dt><dd>Inventory / build / map</dd><dt><kbd>T</kbd> / <kbd>Shift+S</kbd></dt><dd>Upgrade furnace / save</dd></dl></section><section><h3>Touch</h3><dl><dt>Left joystick</dt><dd>Move & face</dd><dt>Right-side drag</dt><dd>Orbit camera</dd><dt><kbd>+</kbd> / <kbd>-</kbd></dt><dd>Zoom</dd><dt>Attack / Sprint</dt><dd>Hold to use</dd><dt>Interact</dt><dd>Use nearby prompt</dd><dt>Tap a worker</dt><dd>Inspect health</dd></dl></section></div></details><div class="pause-reset"><span>Start this seed over. Replaces your current world.</span><button id="reset-world">Reset world</button></div>`);
@@ -176,9 +186,10 @@ export class App {
     if (this.mode !== 'game') return;
     const s = this.game.state;
     const inspected=s.workers.find(w=>w.id===this.inspectedWorker),inspectedBuilding=this.inspectedStructure?this.game.settlement.structures(s.player,s.settings.renderDistance).find(b=>b.id===this.inspectedStructure):undefined;
-    const integrity=inspectedBuilding?this.game.settlement.integrity(inspectedBuilding):undefined,label=this.root.querySelector<HTMLElement>('#worker-inspection')!,target=inspected??inspectedBuilding,point=target?this.renderer.screenPoint(target):undefined;
+    const stump=this.inspectedStump?this.game.treeGrowth.stumps(s.player).find(t=>t.id===this.inspectedStump):undefined;
+    const integrity=inspectedBuilding?this.game.settlement.integrity(inspectedBuilding):undefined,label=this.root.querySelector<HTMLElement>('#worker-inspection')!,target=inspected??inspectedBuilding??stump,point=target?this.renderer.screenPoint(target):undefined;
     label.hidden=!target||!point||integrity?.stage==='gone'||!!inspected&&this.game.settlement.refuge(inspected.id)?.phase==='hidden'||performance.now()>this.inspectUntil;
-    if(target&&point){label.textContent=inspected?`WORKER / ${Math.ceil(inspected.hp)} / 100 HP`:`${inspectedBuilding!.id==='home'?'Home furnace':BUILDINGS[inspectedBuilding!.type].name}${integrity!.stage==='ruin'?' / RUIN':''} / ${Math.ceil(integrity!.hp)} / ${structureMaxHP(inspectedBuilding!)*(integrity!.stage==='ruin'?.25:1)} HP`;label.style.left=`${Math.max(8,Math.min(innerWidth-Math.min(300,innerWidth-16),point.x-90))}px`;label.style.top=`${Math.max(8,point.y-55)}px`;}
+    if(target&&point){label.textContent=stump?`TREE STUMP / regrows in ${Math.floor(Math.ceil(stump.remaining)/60)}:${String(Math.ceil(stump.remaining)%60).padStart(2,'0')}`:inspected?`WORKER / ${Math.ceil(inspected.hp)} / 100 HP`:`${inspectedBuilding!.id==='home'?'Home furnace':BUILDINGS[inspectedBuilding!.type].name}${integrity!.stage==='ruin'?' / RUIN':''} / ${Math.ceil(integrity!.hp)} / ${structureMaxHP(inspectedBuilding!)*(integrity!.stage==='ruin'?.25:1)} HP`;label.style.left=`${Math.max(8,Math.min(innerWidth-Math.min(300,innerWidth-16),point.x-90))}px`;label.style.top=`${Math.max(8,point.y-55)}px`;}
 
     this.root.querySelector('#seed-hud')!.textContent = `SEED ${s.world.seed} / GEN ${s.world.generationVersion}`;
     const compact = (n: number) => Math.abs(n) >= 10000 ? new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n) : String(n);
@@ -235,12 +246,13 @@ export class App {
     el.querySelector('#death-new')!.addEventListener('click',()=>{const fresh=newState(worldSpec(randomSeed()),this.game.state.settings),result=saveLocal(fresh);if(!result.ok){this.error(result.message);return;}this.replaceWorld(fresh);});
   }
   private frame(time: number) {
+    if(this.mode!=='game'){if(this.mode==='menu')this.renderer.renderIdle();this.previous=time;requestAnimationFrame(t=>this.frame(t));return;}
     const dt = Math.min(.05, (time - (this.previous || time)) / 1000); this.previous = time;
     const x = this.stick.x + (this.keys.has('d') || this.keys.has('arrowright') ? 1 : 0) - (this.keys.has('a') || this.keys.has('arrowleft') ? 1 : 0), z = this.stick.z + (this.keys.has('s') || this.keys.has('arrowdown') ? 1 : 0) - (this.keys.has('w') || this.keys.has('arrowup') ? 1 : 0), yaw = this.renderer.yaw;
     this.game.update(dt, { ...cameraRelativeMovement(x, z, yaw), sprint: this.keys.has('shift') || this.sprintTouch });
     if (!this.game.paused && !this.placement && (this.firing || this.keys.has(' '))) this.attack(this.firing&&this.assistAttack);
     this.actionTimer -= dt; if (!this.game.paused && !this.game.gathering && (this.keys.has('f') || this.touchAction) && this.actionTimer <= 0 && this.context()?.kind === 'node') this.interact();
-    if (this.revision !== this.game.revision) { this.revision = this.game.revision; this.renderer.refreshChunks(); }
+    if (this.revision !== this.game.revision) { this.revision = this.game.revision; this.renderer.refreshChunks(this.game.dirtyTerrainChunks.size?this.game.dirtyTerrainChunks:undefined);this.game.dirtyTerrainChunks.clear(); }
     this.renderer.update(dt, time / 1000, !!(x || z) && !this.game.paused, this.aiming);
     if (this.game.collectionEvents.length) {
       const events = this.game.collectionEvents.splice(0); this.refresh();

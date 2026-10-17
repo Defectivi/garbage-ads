@@ -7,7 +7,7 @@ const browser=await chromium.launch({headless:true,executablePath:existsSync(edg
 const errors=[];mkdirSync('test-results',{recursive:true});
 try{
  for(const width of [1440,390]){
-  const page=await browser.newPage({viewport:{width,height:900},hasTouch:width===390,isMobile:width===390});page.on('pageerror',e=>errors.push(e.message));await page.goto('http://localhost:5173');await page.locator('#enter-world').click();await isolateStartingCamp(page);
+  const page=await browser.newPage({viewport:{width,height:900},hasTouch:width===390,isMobile:width===390});page.on('pageerror',e=>errors.push(e.message));await page.goto('http://localhost:5173');await page.locator('#enter-world').click();await page.locator('#resources').waitFor();await isolateStartingCamp(page);
   await page.evaluate(async()=>{
    const T=await import('/node_modules/.vite/deps/three.js'),{CombatRenderer}=await import('/src/rendering/CombatRenderer.ts');
    const a=window.__frostbound,g=a.game;g.paused=true;a.renderer.update=()=>{};document.getElementById('interface').style.display='none';

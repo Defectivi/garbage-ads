@@ -1,3 +1,4 @@
+import {cliffMesh} from './CliffMesh';
 import {visibilityAt} from '../systems/Visibility';
 import {VisibilityFog} from './VisibilityFog';
 import {nightBlend} from '../systems/DayNight';
@@ -32,7 +33,7 @@ export class Renderer {
   private shaking?:{id:string;entries:{mesh:THREE.InstancedMesh;index:number;matrix:THREE.Matrix4}[]};
   private weather = new SnowWeather(); private snowfall = this.weather.points;
   private reducedMotion=matchMedia('(prefers-reduced-motion: reduce)'); private combatVisual = new CombatRenderer();
-  private materials = { snow: mat(0xe4edf0), dark: mat(0x314e5b), wood: mat(0x87664b), ice: mat(0x658d9f), metal: mat(0x5a7279), fire: mat(0xffa343, { emissive: 0xff781c, emissiveIntensity: 1.6 }), water: mat(0x407e9c, { roughness: .25, metalness: .25, transparent: true, opacity: .87 }) };
+  private materials = { snow: mat(0xe4edf0), dark: mat(0x314e5b), wood: mat(0x87664b), ice: mat(0x658d9f), metal: mat(0x5a7279), gold:mat(0xd9ae4c,{metalness:.5,roughness:.45}), fire: mat(0xffa343, { emissive: 0xff781c, emissiveIntensity: 1.6 }), water: mat(0x407e9c, { roughness: .25, metalness: .25, transparent: true, opacity: .87 }) };
   private flowTime={value:0};
   constructor(private host: HTMLElement, public game: Game) {
     this.materials.water.onBeforeCompile=shader=>{
@@ -113,10 +114,16 @@ export class Renderer {
       this.instance(g, new THREE.ConeGeometry(1.7 * scale, 2.5, 7), this.materials.dark, trees.map(t => ({ id:t.id, x: t.x, y: t.y + (2.5 + layer * 1.25) * t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
       this.instance(g, new THREE.ConeGeometry(1.78 * scale, 2.35, 7), this.materials.snow, trees.map(t => ({ id:t.id, x: t.x, y: t.y + (2.75 + layer * 1.25) * t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
     }
+    const stumps=data.trees.map((t,i)=>({...t,id:`tree:${data.cx}:${data.cz}:${i}`})).filter(t=>this.game.state.changes.treeRegrowth?.[t.id]!==undefined);
+    this.instance(g,new THREE.CylinderGeometry(.25,.36,.55,7),this.materials.wood,stumps.map(t=>({id:t.id,x:t.x,y:w.height(t.x,t.z)+.25,z:t.z,sx:t.scale,sy:1,sz:t.scale})));
+    const stumpMesh=g.children.at(-1);if(stumps.length&&stumpMesh){stumpMesh.userData.stumpIds=stumps.map(t=>t.id);delete stumpMesh.userData.treeIds;}
     const nodes = this.game.nodesInChunk(data);
-    for (const resource of ['wood', 'stone', 'metal', 'charcoal'] as const) {
+    for (const resource of ['wood', 'stone', 'metal', 'gold', 'charcoal'] as const) {
       const points = nodes.filter(n => n.kind!=='tree'&&this.game.nodeResource(n) === resource && this.game.nodeRemaining(n) > 0 && !w.isWater(n.x, n.z)).map(n => ({ x: n.x, y: w.height(n.x, n.z) + (n.kind==='boulder'?1.1:.45), z: n.z, sx: n.kind==='boulder'?1.8:n.kind==='fragment'?.45:resource === 'wood' ? 1.3 : .9, sy: n.kind==='boulder'?1.6:n.kind==='fragment'?.4:resource === 'wood' ? .5 : .8, sz:n.kind==='boulder'?1.6:n.kind==='fragment'?.45:.7, rotation: n.x }));
-      this.instance(g, resource === 'wood' ? new THREE.CylinderGeometry(.4, .4, 2, 7).rotateZ(Math.PI / 2) : new THREE.DodecahedronGeometry(.85, 0), resource === 'charcoal' ? this.materials.dark : this.materials[resource === 'wood' ? 'wood' : resource === 'stone' ? 'ice' : 'metal'], points);
+      this.instance(g, resource === 'wood' ? new THREE.CylinderGeometry(.4, .4, 2, 7).rotateZ(Math.PI / 2) : new THREE.DodecahedronGeometry(.85, 0), resource === 'charcoal' ? this.materials.dark : this.materials[resource === 'wood' ? 'wood' : resource === 'stone' ? 'ice' : resource==='gold'?'gold':'metal'], points);
+    }
+    for(const cliff of w.cliffs({x:x0+size/2,z:z0+size/2}))if(Math.floor(cliff.x/size)===data.cx&&Math.floor(cliff.z/size)===data.cz){
+      g.add(cliffMesh(w,cliff));
     }
     if (w.spec.config.riverDensity > 0) {
       const vertices: number[] = [];
@@ -196,9 +203,26 @@ export class Renderer {
   private dispose(group: THREE.Group) {
     group.traverse(o => { o.userData.ownedTexture?.dispose();if (o instanceof THREE.Mesh||o instanceof THREE.Line) { if (o instanceof THREE.InstancedMesh) o.dispose(); o.geometry.dispose(); const mats = Array.isArray(o.material) ? o.material : [o.material]; for (const m of mats) if (!Object.values(this.materials).includes(m as THREE.MeshStandardMaterial)) m.dispose(); } }); group.removeFromParent();
   }
-  refreshChunks() { for (const id of this.chunks.keys()) this.dirtyChunks.add(id); }
+  refreshChunks(ids:Iterable<string>=this.chunks.keys()) { for (const id of ids) this.dirtyChunks.add(id); }
   private clearChunks() { for (const g of this.chunks.values()) this.dispose(g); this.chunks.clear(); this.dirtyChunks.clear(); }
   resize() { const w = this.host.clientWidth, h = this.host.clientHeight; this.webgl.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
+  readonly loadStats={chunks:0,total:0,durationMs:0,maxChunkMs:0};
+  renderIdle(){this.webgl.render(this.scene,this.camera);}
+  async prepareWorld(progress:(value:number,label:string)=>void){
+    const start=performance.now(),world=this.game.world,radius=this.game.state.settings.renderDistance,coords=world.chunkCoordinates(this.game.state.player,radius+1),visible=new Set(world.chunkCoordinates(this.game.state.player,radius).map(c=>c.id));
+    Object.assign(this.loadStats,{chunks:0,total:coords.length,durationMs:0,maxChunkMs:0});
+    const paint=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
+    for(const [i,c]of coords.entries()){
+      progress(i/coords.length*.8,`Preparing terrain / ${i+1} of ${coords.length}`);if(!world.cachedChunk(c.id)||visible.has(c.id)&&(!this.chunks.has(c.id)||this.dirtyChunks.has(c.id))||i%8===0)await paint();
+      const before=performance.now(),data=world.chunk(c.cx,c.cz);
+      if(visible.has(c.id)&&(!this.chunks.has(c.id)||this.dirtyChunks.has(c.id))){const group=this.chunk(data),old=this.chunks.get(c.id);if(old)this.dispose(old);this.scene.add(group);this.chunks.set(c.id,group);this.dirtyChunks.delete(c.id);}
+      this.loadStats.maxChunkMs=Math.max(this.loadStats.maxChunkMs,performance.now()-before);this.loadStats.chunks=i+1;
+    }
+    progress(.83,'Preparing survivors and camp');this.update(0,0,false);await paint();
+    const deadline=performance.now()+15000;while(!this.playerCharacter.ready||[...this.residents.values()].some(v=>!v.ready)){if(performance.now()>deadline)throw new Error('Character assets are taking too long. Please try entering again.');await paint();}
+    progress(.9,'Warming graphics');this.update(0,0,false);await this.webgl.compileAsync(this.scene,this.camera);await paint();this.renderIdle();
+    this.loadStats.durationMs=performance.now()-start;progress(1,'Your world is ready');await paint();
+  }
   setGame(game: Game) { for(const fall of this.falls)this.dispose(fall.group);this.falls=[];this.shaking=undefined;this.game = game; this.combatVisual.clear(); this.playerCharacter.reset(); for (const visual of this.residents.values()) visual.dispose(); this.residents.clear(); this.clearChunks(); this.dispose(this.entities); this.entities = new THREE.Group(); this.scene.add(this.entities); this.dynamic.clear(); this.target.set(game.state.player.x, 1, game.state.player.z); }
   screenPoint(point: { x: number; z: number }) {
     const v = new THREE.Vector3(point.x, this.game.world.height(point.x, point.z) + 1.2, point.z).project(this.camera);
@@ -210,6 +234,10 @@ export class Renderer {
     let chosen:string|undefined,nearest=Infinity;
     for(const w of this.game.state.workers){const visual=this.residents.get(w.id);if(!visual?.ready||!visual.object.visible||visibilityAt(this.game.state,w)>.9)continue;const hit=this.ray.intersectObject(visual.object,true)[0];if(hit&&hit.distance<nearest){chosen=w.id;nearest=hit.distance;}}
     return chosen;
+  }
+  stumpAt(clientX:number,clientY:number){
+    const b=this.webgl.domElement.getBoundingClientRect();this.ray.setFromCamera(new THREE.Vector2((clientX-b.x)/b.width*2-1,-(clientY-b.y)/b.height*2+1),this.camera);
+    let chosen:string|undefined,nearest=Infinity;for(const chunk of this.chunks.values())chunk.traverse(o=>{if(o instanceof THREE.InstancedMesh&&o.userData.stumpIds){const hit=this.ray.intersectObject(o)[0];if(hit&&hit.distance<nearest){const id=o.userData.stumpIds[hit.instanceId!],stump=this.game.treeGrowth.stumps(this.game.state.player).find(t=>t.id===id);if(stump&&visibilityAt(this.game.state,stump)<.9){chosen=id;nearest=hit.distance;}}}});return chosen;
   }
   structureAt(clientX:number,clientY:number){
     const bounds=this.webgl.domElement.getBoundingClientRect();this.ray.setFromCamera(new THREE.Vector2((clientX-bounds.x)/bounds.width*2-1,-(clientY-bounds.y)/bounds.height*2+1),this.camera);
@@ -254,14 +282,12 @@ export class Renderer {
     this.sun.position.set(sx - 22, 35, sz + 15); this.sun.target.position.set(sx, 0, sz);
     this.playerCharacter.update(game, dt, aiming);
     this.terrainFeedback(dt);
-    const needed = game.world.around(p, game.state.settings.renderDistance), ids = new Set(needed.map(c => c.id));
+    const needed = game.world.chunkCoordinates(p, game.state.settings.renderDistance), ids = new Set(needed.map(c => c.id));
     for (const [id, g] of this.chunks) if (!ids.has(id)) { this.dispose(g); this.chunks.delete(id); this.dirtyChunks.delete(id); }
-    // Budget generation to two rendered chunks per frame.
-    let budget = 2; for (const c of needed) if ((!this.chunks.has(c.id) || this.dirtyChunks.has(c.id)) && budget-- > 0) {
-      const replacement = this.chunk(c), previous = this.chunks.get(c.id);
-      this.scene.add(replacement); this.chunks.set(c.id, replacement); this.dirtyChunks.delete(c.id);
-      if (previous) this.dispose(previous);
-    }
+    // One nearby mesh build per frame; warm the next ring only when no mesh is pending.
+    const pending=needed.find(c=>!this.chunks.has(c.id)||this.dirtyChunks.has(c.id));
+    if(pending){const replacement=this.chunk(game.world.chunk(pending.cx,pending.cz)),previous=this.chunks.get(pending.id);this.scene.add(replacement);this.chunks.set(pending.id,replacement);this.dirtyChunks.delete(pending.id);if(previous)this.dispose(previous);}
+    else{const next=game.world.chunkCoordinates(p,game.state.settings.renderDistance+1).find(c=>!game.world.cachedChunk(c.id));if(next)game.world.chunk(next.cx,next.cz);}
     const entityIds = new Set<string>();
     for (const b of game.settlement.structures(p,game.state.settings.renderDistance)) {
       const integrity=game.settlement.integrity(b);if(integrity.stage==='gone'||Math.hypot(b.x-p.x,b.z-p.z)>(game.state.settings.renderDistance+1)*game.world.spec.config.chunkSize)continue;
