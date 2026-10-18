@@ -87,3 +87,7 @@ Implemented stages: versioned naming/legacy fallbacks; persistent community reco
 ## User-directed harvesting and ration feedback
 
 Implemented within the existing rig, transactions and fixed-step survival systems: downward axe/pickaxe strikes, impact/recovery and interrupted-pose cleanup; food outcome validation, visible ration effects/counts, shared paused-cooldown feedback and immediate HUD refresh. Gathering durations/yields, food balance, simulation pause rules and save format remain unchanged. This does not mark unrelated roadmap phases complete. See [inspection findings and verification](HARVEST_AND_RATIONS.md).
+
+## User-directed spawn-expiry performance correction
+
+Implemented immutable natural-collision caching, conservative AI query bounds, scoped actor/unit-list reuse, bounded LRU chunk retention and paused loading preparation for prospective encounter terrain and shared hostile templates. Encounter creation and survival/combat timing remain unchanged. Severe CPU-throttle measurements improve substantially but still show low post-expiry rendering FPS; smooth performance on all devices is not claimed. See [root causes, benchmark method, regression results and limits](SPAWN_PERFORMANCE.md). This does not mark unrelated roadmap features complete.

@@ -1,3 +1,5 @@
+import {WORLD_CHUNK_CACHE_LIMIT} from '../world/WorldManager';
+import {prepareCombatTemplates} from './NPCCharacter';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {fireVisual,animateFire,furnaceEmbers} from './FireVisuals';
 import {cliffMesh} from './CliffMesh';
@@ -231,11 +233,11 @@ export class Renderer {
   refreshChunks(ids:Iterable<string>=this.chunks.keys()) { for (const id of ids) if(this.chunks.has(id))this.dirtyChunks.add(id); }
   private clearChunks() { for (const g of this.chunks.values()) this.dispose(g); this.chunks.clear(); this.dirtyChunks.clear(); }
   resize() { const w = this.host.clientWidth, h = this.host.clientHeight; this.webgl.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
-  readonly loadStats={chunks:0,total:0,durationMs:0,maxChunkMs:0};
+  readonly loadStats={chunks:0,total:0,durationMs:0,maxChunkMs:0,collisionChunks:0};
   renderIdle(){this.applyGraphics();this.webgl.render(this.scene,this.camera);}
   async prepareWorld(progress:(value:number,label:string)=>void){
     const start=performance.now(),world=this.game.world,radius=this.game.state.settings.renderDistance,coords=world.chunkCoordinates(this.game.state.player,radius+1),visible=new Set(world.chunkCoordinates(this.game.state.player,radius).map(c=>c.id));
-    Object.assign(this.loadStats,{chunks:0,total:coords.length,durationMs:0,maxChunkMs:0});
+    Object.assign(this.loadStats,{chunks:0,total:coords.length,durationMs:0,maxChunkMs:0,collisionChunks:0});
     const paint=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
     for(const [i,c]of coords.entries()){
       progress(i/coords.length*.8,`Preparing terrain / ${i+1} of ${coords.length}`);if(!world.cachedChunk(c.id)||visible.has(c.id)&&(!this.chunks.has(c.id)||this.dirtyChunks.has(c.id))||i%8===0)await paint();
@@ -243,9 +245,21 @@ export class Renderer {
       if(visible.has(c.id)&&(!this.chunks.has(c.id)||this.dirtyChunks.has(c.id))){const group=this.chunk(data),old=this.chunks.get(c.id);if(old)this.dispose(old);this.scene.add(group);this.chunks.set(c.id,group);this.dirtyChunks.delete(c.id);}
       this.loadStats.maxChunkMs=Math.max(this.loadStats.maxChunkMs,performance.now()-before);this.loadStats.chunks=i+1;
     }
-    progress(.83,'Preparing survivors and camp');this.update(0,0,false);await paint();
+    // Keep the exact prospective encounter geometry out of the protection-expiry frame.
+    // Include the loading region, then nearest spawn neighborhoods; never exceed the world's cache.
+    const collisionCoords=new Map(coords.map(c=>[c.id,c]));
+    const extras=new Map(this.game.combat.encounterPreparationPoints().flatMap(p=>world.chunkCoordinates(p,1)).map(c=>[c.id,c]));
+    const p=this.game.state.player,n=world.spec.config.chunkSize;
+    for(const c of [...extras.values()].sort((a,b)=>Math.hypot(a.cx*n-p.x,a.cz*n-p.z)-Math.hypot(b.cx*n-p.x,b.cz*n-p.z))){if(collisionCoords.size>=Math.max(coords.length,WORLD_CHUNK_CACHE_LIMIT-16))break;collisionCoords.set(c.id,c);}
+    let prepared=0;
+    for(const c of collisionCoords.values()){
+      progress(.8+.08*prepared/collisionCoords.size,`Preparing collision terrain / ${++prepared} of ${collisionCoords.size}`);await paint();
+      this.game.prepareCollisionChunk(world.chunk(c.cx,c.cz));this.loadStats.collisionChunks=prepared;
+    }
+    progress(.89,'Preparing wildlife models');await prepareCombatTemplates(paint);
+    progress(.94,'Preparing survivors and camp');this.update(0,0,false);await paint();
     const deadline=performance.now()+15000;while(!this.playerCharacter.ready||[...this.residents.values()].some(v=>!v.ready)){if(performance.now()>deadline)throw new Error('Character assets are taking too long. Please try entering again.');await paint();}
-    progress(.9,'Warming graphics');this.update(0,0,false);await this.webgl.compileAsync(this.scene,this.camera);await paint();this.renderIdle();
+    progress(.97,'Warming graphics');this.update(0,0,false);await this.webgl.compileAsync(this.scene,this.camera);await paint();this.renderIdle();
     this.loadStats.durationMs=performance.now()-start;progress(1,'Your world is ready');await paint();
   }
   setGame(game: Game) { for(const fall of this.falls)this.dispose(fall.group);this.falls=[];this.shaking=undefined;this.game = game; this.combatVisual.clear(); this.playerCharacter.reset(); for (const visual of this.residents.values()) visual.dispose(); this.residents.clear(); this.clearChunks(); this.dispose(this.entities); this.entities = new THREE.Group(); this.scene.add(this.entities); this.dynamic.clear(); this.target.set(game.state.player.x, 1, game.state.player.z); }

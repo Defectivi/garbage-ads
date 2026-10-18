@@ -1,3 +1,4 @@
+import {NaturalChunkCache,overlapsQuery} from '../world/NaturalChunkCache';
 import { FOOD, FOOD_COOLDOWN } from '../data/food';
 import {MapNotes} from '../systems/MapJournal';
 import {VillageCommunitySystem} from '../systems/VillageCommunitySystem';
@@ -26,6 +27,7 @@ import { WEAPONS, weaponCost, weaponUses, type WeaponType } from '../data/weapon
 export interface Input { x: number; z: number; sprint?: boolean }
 export class Game {
   readonly world: WorldManager;
+  private readonly natural:NaturalChunkCache;
   readonly treeGrowth:TreeGrowth;
   readonly dirtyTerrainChunks=new Set<string>();
   markTerrainChanged(point:Point){const n=this.state.world.config.chunkSize;this.dirtyTerrainChunks.add(`${Math.floor(point.x/n)},${Math.floor(point.z/n)}`);this.revision++;}
@@ -55,33 +57,36 @@ export class Game {
   private villagePathBudget=2;
   private paths = new Map<string, Point[]>();
   private velocity = { x: 0, z: 0 };
-  constructor(public state: GameState) { for(const w of state.combat.weapons)w.uses=Math.min(w.uses,weaponUses(w.type));this.world = new WorldManager(state.world); this.combat = new CombatSystem(this);this.settlement=new SettlementSystem(this);this.treeGrowth=new TreeGrowth(this);this.communities=new VillageCommunitySystem(this);this.notes=new MapNotes(this);for(const v of this.world.villages())if(state.communities?.[v.id]||state.furnaces.some(f=>f.id===`${v.id}:furnace`))this.communities.ensure(v); }
+  constructor(public state: GameState) { for(const w of state.combat.weapons)w.uses=Math.min(w.uses,weaponUses(w.type));this.world = new WorldManager(state.world);this.natural=new NaturalChunkCache(this.world); this.combat = new CombatSystem(this);this.settlement=new SettlementSystem(this);this.treeGrowth=new TreeGrowth(this);this.communities=new VillageCommunitySystem(this);this.notes=new MapNotes(this);for(const v of this.world.villages())if(state.communities?.[v.id]||state.furnaces.some(f=>f.id===`${v.id}:furnace`))this.communities.ensure(v); }
   get inventoryLimit() { return this.state.settings.inventoryLimit ? Math.min(INT32_MAX,this.state.settings.inventoryLimit + this.state.buildings.filter(b => b.type === 'storage'&&this.settlement.ready(b.id)).length * 50) : 0; }
   get dead() { return this.state.player.hp <= 0 || this.state.settings.difficulty === 'survival' && this.state.player.warmth <= 0; }
   notify(message: string) { this.message = message; }
   nodeRemaining(node: Node) { if(node.kind==='log'&&this.state.changes.terrain?.[node.id.slice(4)]!=='felled')return 0;if(node.id.startsWith('charcoal:tree:')&&!this.state.combat.charredTrees.includes(node.id.slice(9)))return 0;if(node.id.startsWith('fish:'))return Math.max(0,node.amount-(this.state.changes.fishing[node.id]??0));return this.state.changes.nodes[node.id] ?? node.amount; }
   nodeResource(node: Node): Resource { return this.state.combat.charredNodes.includes(node.id) ? 'charcoal' : node.resource; }
+  prepareCollisionChunk(chunk:Chunk){this.natural.get(chunk);}
   nodesInChunk(chunk: Chunk): Node[] {
-    const terrain=this.state.changes.terrain??{};
-    const nodes=chunk.nodes.filter(n=>!this.world.cliffAt(n)).filter(n=>!this.state.buildings.some(b=>b.id==='starter:hut'&&distance(b,n)<3.5)).filter(n=>!this.world.bridgeAt(n.x,n.z)).filter(n=>this.state.world.generationVersion<4||!this.world.villages().some(v=>distance(v,n)<15)).flatMap((n):Node[]=>{
-      const large=!n.kind&&n.resource==='stone'&&!n.id.startsWith('starter:')&&derive(this.state.world.seeds.resources,n.id)%3===0;
+    const terrain=this.state.changes.terrain??{},natural=this.natural.get(chunk);
+    const nodes=natural.nodes.filter(n=>!this.state.buildings.some(b=>b.id==='starter:hut'&&distance(b,n)<3.5)).flatMap((n):Node[]=>{
+      const large=natural.large.has(n.id);
       if(!large)return[n];
       if(terrain[n.id]==='broken')return Array.from({length:3},(_,i)=>({...n,id:`fragment:${n.id}:${i}`,x:n.x+Math.cos(i*2.1)*.6,z:n.z+Math.sin(i*2.1)*.6,amount:Math.floor(this.nodeRemaining(n)/3)+(i<this.nodeRemaining(n)%3?1:0),radius:.4,kind:'fragment' as const}));
       return[{...n,kind:'boulder',radius:1.7}];
     });
-    return [...nodes,...chunk.trees.flatMap((tree,i):Node[]=>{
-      const id=`tree:${chunk.cx}:${chunk.cz}:${i}`;if(this.world.bridgeAt(tree.x,tree.z))return[];
+    return [...nodes,...natural.trees.flatMap(({tree,id}):Node[]=>{
       if(this.state.combat.charredTrees.includes(id))return[{...tree,id:`charcoal:${id}`,resource:'charcoal',amount:3,radius:.4}];
       if(terrain[id]==='felled')return[{...tree,x:tree.x+1,z:tree.z+.4,id:`log:${id}`,resource:'wood',amount:3+Math.floor(tree.scale*2),radius:.7,kind:'log'}];
       return[{...tree,id,resource:'wood',amount:1,radius:.38*tree.scale,kind:'tree',scale:tree.scale}];
     })];
   }
   nodes() { return this.world.around(this.state.player).flatMap(chunk => this.nodesInChunk(chunk)); }
-  solids(point: Point) {
-    const trees = this.world.around(point).flatMap(c => c.trees.flatMap((t, i) => (this.world.bridgeAt(t.x,t.z)||this.state.combat.charredTrees.includes(`tree:${c.cx}:${c.cz}:${i}`)||this.state.changes.terrain?.[`tree:${c.cx}:${c.cz}:${i}`]==='felled') ? [] : [{ ...t, radius: .38 * t.scale }]));
+  solids(point: Point, reach?:number) {
+    // Conservative circle around the query: callers can bound work without dropping a possible contact.
+    const near=(s:Point&{radius:number})=>reach===undefined||(s.x-point.x)**2+(s.z-point.z)**2<=(reach+s.radius)**2;
+    const chunks=this.world.around(point),terrain=this.state.changes.terrain??{},charred=this.state.combat.charredTrees;
+    const trees=chunks.flatMap(c=>{const natural=this.natural.get(c);return overlapsQuery(natural.treeBounds,point,reach)?natural.trees.filter(t=>near(t.solid)&&!charred.includes(t.id)&&terrain[t.id]!=='felled').map(t=>t.solid):[];});
     const ruins=this.world.settlements(point).flatMap(r=>[...(this.npc(r).hp>0&&this.settlement.refuge(`npc:${r.id}`)?.phase!=='hidden'?[{id:`npc:${r.id}`,...this.settlement.position(`npc:${r.id}`,r.trader),radius:.5}]:[]),{...r.container,radius:.65}]);
-    const rocks=this.world.around(point).flatMap(c=>this.nodesInChunk(c)).filter(n=>n.kind==='boulder'&&this.nodeRemaining(n)>0).map(n=>({...n,radius:1.45}));
-    return [...this.world.cliffs(point).map(c=>({...c,radius:c.radius})),...trees,...rocks,...ruins,...this.settlement.structures(point).filter(b=>this.settlement.integrity(b).stage!=='gone').map(b=>({...b,radius:BUILDINGS[b.type].radius}))];
+    const rocks=chunks.flatMap(c=>{const natural=this.natural.get(c);return overlapsQuery(natural.rockBounds,point,reach)?natural.boulders.filter(({node,derived,solid})=>near(solid)&&(!derived||terrain[node.id]!=='broken')&&this.nodeRemaining(node)>0&&!this.state.buildings.some(b=>b.id==='starter:hut'&&distance(b,node)<3.5)).map(b=>b.solid):[];});
+    return [...this.world.cliffs(point).map(c=>({...c,radius:c.radius})),...trees,...rocks,...ruins,...this.settlement.structures(point).filter(b=>this.settlement.integrity(b).stage!=='gone').map(b=>({...b,radius:BUILDINGS[b.type].radius}))].filter(near);
   }
   move(point: Point, dx: number, dz: number, radius = .42,ignoreId?:string) {
     let x = point.x + dx, z = point.z + dz;

@@ -36,6 +36,8 @@
     "test:workshop": "node tests/workshop-shelter.mjs",
     "test:difficulty": "node tests/difficulty.mjs",
     "test:communities": "node tests/community-map-performance.mjs",
+    "test:spawn-performance": "node tests/spawn-performance.mjs",
+    "test:spawn-live": "node tests/spawn-live.mjs",
     "test:performance": "node tests/render-performance.mjs"
   },
   "dependencies": {

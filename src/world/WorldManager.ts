@@ -13,6 +13,7 @@ const EASY_VILLAGES=[{id:'village:cedar',name:'Cedar Rest',x:-256,z:192},{id:'vi
 export interface Cliff extends Point{id:string;radius:number;height:number}
 export interface Lake extends Point{id:string;rx:number;rz:number}
 export interface FishingSpot extends Point { id: string; availability: number }
+export const WORLD_CHUNK_CACHE_LIMIT=128;
 export interface Chunk { id: string; cx: number; cz: number; trees: Tree[]; nodes: Node[]; ruins: Ruin[]; fishing: FishingSpot[] }
 export const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
 export class WorldManager {
@@ -108,7 +109,7 @@ export class WorldManager {
     return out;
   }
   chunk(cx: number, cz: number): Chunk {
-    const id = `${cx},${cz}`, cached = this.cache.get(id); if (cached) return cached;
+    const id = `${cx},${cz}`, cached = this.cache.get(id); if (cached) { this.cache.delete(id); this.cache.set(id,cached); return cached; }
     const n = this.spec.config.chunkSize, rng = new SeededRNG(derive(this.spec.seeds.resources, 'chunk-nodes', cx, cz));
     const nodes: Node[] = [], trees: Tree[] = [], fishing: FishingSpot[] = [], ruins = this.nearbyRuins(cx, cz);
     for (let i = 0; i < Math.floor(14 * this.spec.config.resourceDensity); i++) {
@@ -133,7 +134,7 @@ export class WorldManager {
     const accessible=[...nodes];
     for(const cliff of this.cliffs({x:cx*n+n/2,z:cz*n+n/2}))accessible.push(...this.cliffOres(cliff).filter(node=>Math.floor(node.x/n)===cx&&Math.floor(node.z/n)===cz));
     const result = { id, cx, cz, trees:this.spec.mode==='hard'?trees.filter(t=>Math.hypot(t.x,t.z)>200):trees, nodes:this.spec.mode==='hard'?accessible.filter(t=>Math.hypot(t.x,t.z)>200):accessible, fishing:this.spec.mode==='hard'?fishing.filter(t=>Math.hypot(t.x,t.z)>200):fishing, ruins: ruins.filter(r => Math.floor(r.x / n) === cx && Math.floor(r.z / n) === cz) };
-    if (this.cache.size > 128) this.cache.delete(this.cache.keys().next().value!); this.cache.set(id, result); return result;
+    if (this.cache.size >= WORLD_CHUNK_CACHE_LIMIT) this.cache.delete(this.cache.keys().next().value!); this.cache.set(id, result); return result;
   }
   chunkCoordinates(point:Point,radius=1){const n=this.spec.config.chunkSize,cx=Math.floor(point.x/n),cz=Math.floor(point.z/n),out:{id:string;cx:number;cz:number}[]=[];for(let x=cx-radius;x<=cx+radius;x++)for(let z=cz-radius;z<=cz+radius;z++)out.push({id:`${x},${z}`,cx:x,cz:z});return out.sort((a,b)=>Math.hypot(a.cx-cx,a.cz-cz)-Math.hypot(b.cx-cx,b.cz-cz));}
   cachedChunk(id:string){return this.cache.get(id);}

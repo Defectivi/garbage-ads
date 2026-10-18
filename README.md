@@ -274,3 +274,5 @@ Focused checks: `npm run test:communities` and `npm run test:performance`. Profi
 Player axes and pickaxes use hand-attached downward strikes synchronized to the existing gathering tasks, with cosmetic recovery and cancellation cleanup. Rucksack food controls show effects, quantities, hunger/HP, success feedback and the shared three-second cooldown. Menus pause that countdown; Resume expedition continues it. Food effects and gathering speeds are unchanged. Eating at full hunger/HP still spends a portion, with capped benefits clearly explained.
 
 Run `npm run test:rations` for the focused browser checks. See [root causes, changed files, verification and limits](docs/HARVEST_AND_RATIONS.md).
+
+Spawn-protection expiry now reuses natural collision geometry, bounds AI queries and prepares collision neighborhoods/hostile templates during loading. Enemy counts and simulation rules are unchanged. See [measurements and remaining constrained-device limits](docs/SPAWN_PERFORMANCE.md). `npm run test:spawn-performance` measures fixed-step CPU cost; `npm run test:spawn-live` measures actual rendering around expiry.

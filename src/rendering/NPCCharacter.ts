@@ -16,6 +16,11 @@ function template(id:string) {
   if(!templates.has(id))templates.set(id,new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${id}.glb`).catch(()=>id.startsWith('wolf-')?createWolfAsset(id):id.startsWith('bear-')?createBearAsset(id):createSurvivorAsset(CHARACTER_STYLES.find(s=>s.id===id))));
   return templates.get(id)!;
 }
+/** Load each shared hostile template during the paused loading screen, yielding between assets. */
+export async function prepareCombatTemplates(paint:()=>Promise<void>){
+  const ids=[...CHARACTER_STYLES.filter(s=>s.id.startsWith('bandit-')||s.id.startsWith('arsonist-')||s.id.startsWith('guard-')).map(s=>s.id),'bear-ivory','bear-frost','wolf-slate','wolf-ash'];
+  for(const id of ids){await template(id);await paint();}
+}
 export class NPCCharacter {
   readonly object=new T.Group(); ready=false;
   private asset?:T.Group;private mixer?:T.AnimationMixer;private actions=new Map<string,T.AnimationAction>();
