@@ -2,11 +2,15 @@ import type { Point } from './GameState';
 
 export const meleeDuration=(weapon:string)=>weapon==='punch'?.45:(weapon==='wooden_sword'||weapon==='stone_sword')?.55:weapon==='machete'?.6:.65;
 export function meleePath(weapon:string,progress:number){
-  const t=Math.max(0,Math.min(1,progress)),u=Math.max(0,Math.min(1,(t-.12)/.6)),sweep=u*u*(3-2*u);
+  const t=Math.max(0,Math.min(1,progress));
   if(weapon==='punch')return {x:.22,y:1.4,z:.2+Math.sin(Math.PI*t)*.45,dx:0,dy:0,dz:1,length:.15};
   if(weapon==='spear')return {x:.28,y:1.13,z:.12+Math.sin(Math.PI*t*t*(3-2*t))*.48,dx:0,dy:.04,dz:1,length:1.48};
-  const angle=1.25-sweep*2.65;
-  return {x:Math.sin(angle)*.48,y:1.15+Math.sin(sweep*Math.PI)*.06,z:.22+Math.cos(angle)*.3,dx:Math.sin(angle),dy:-.12,dz:Math.cos(angle),length:weapon==='machete'?.8:.82};
+  // Raise beside the shoulder, cut diagonally down and forward, then recover.
+  // The renderer and collision sweep sample this same blade axis.
+  const ease=(n:number)=>{const v=Math.max(0,Math.min(1,n));return v*v*(3-2*v);};
+  const wind=ease(t/.24),cut=ease((t-.24)/.43),rest=ease((t-.78)/.22);
+  const x=.32+.05*wind-.5*cut+.5*rest,y=1.16+.53*wind-.67*cut+.14*rest,z=.32+.03*wind+.19*cut-.19*rest;
+  return {x,y,z,dx:.25+.2*wind-.95*cut+.75*rest,dy:-.85+1.8*wind-1.65*cut-.15*rest,dz:.4-.65*wind+1.1*cut-.45*rest,length:weapon==='machete'?.8:.82};
 }
 export function bladeSegment(origin:Point,heading:number,weapon:string,progress:number){
   const pose=meleePath(weapon,progress),sin=Math.sin(heading),cos=Math.cos(heading);

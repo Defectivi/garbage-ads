@@ -91,3 +91,7 @@ Implemented within the existing rig, transactions and fixed-step survival system
 ## User-directed spawn-expiry performance correction
 
 Implemented immutable natural-collision caching, conservative AI query bounds, scoped actor/unit-list reuse, bounded LRU chunk retention and paused loading preparation for prospective encounter terrain and shared hostile templates. Encounter creation and survival/combat timing remain unchanged. Severe CPU-throttle measurements improve substantially but still show low post-expiry rendering FPS; smooth performance on all devices is not claimed. See [root causes, benchmark method, regression results and limits](SPAWN_PERFORMANCE.md). This does not mark unrelated roadmap features complete.
+
+## User-directed worker actions, terrain and settings increment
+
+Implemented shared worker harvesting poses and human weapon actions, diagonal blade cuts with shared contact geometry, version-7 tributaries/highlands/vegetation eligibility, and a readable settings/expedition desk redesign. Old terrain generations and current save fields remain supported. Real world difficulty stays a creation choice; the old exposure field now states its actual cold-defeat behavior. See [scope, verification and limitations](FIELD_REVAMP.md). This is an incremental user-directed change, not completion of the remaining original roadmap.

@@ -1,8 +1,8 @@
+import {ActionPoseState,rangedPose} from './ActionPose';
 import { HarvestMotion, harvestPose } from './HarvestPose';
 import { gatherSeconds } from '../game/Game';
 import {workerTool} from './WorkerTools';
 import { meleePose } from './MeleePose';
-import { solveArm } from './RigIK';
 import * as T from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Game } from '../game/Game';
@@ -19,8 +19,7 @@ export class PlayerCharacter {
   private base?: T.AnimationAction; private upper?: T.AnimationAction; private oneShot = false;
   private tool?:T.Group;
   private harvestMotion=new HarvestMotion();
-  private harvestRestore:{bone:T.Object3D;rotation:T.Quaternion}[]=[];
-  private restoreHarvest(){for(const saved of this.harvestRestore)saved.bone.quaternion.copy(saved.rotation);this.harvestRestore=[];}
+  private pose=new ActionPoseState();
   private held?: T.Group; private equipped = ''; private type?: WeaponType;
   private previous?: { x:number; z:number }; private speed = 0;
   private attackStamp = -100; private gatherStamp = -100; private hp = 100;
@@ -53,13 +52,13 @@ export class PlayerCharacter {
     if(upper){this.upper=next;this.oneShot=once;}else this.base=next;
   }
   reset() {
-    this.restoreHarvest();this.harvestMotion.reset();this.previous=undefined;this.speed=0;this.attackStamp=-100;this.gatherStamp=-100;this.hp=100;
+    this.pose.restore();this.harvestMotion.reset();this.previous=undefined;this.speed=0;this.attackStamp=-100;this.gatherStamp=-100;this.hp=100;
     this.mixer?.stopAllAction();this.base=undefined;this.upper=undefined;this.oneShot=false;
     if(this.tool)disposeWeapon(this.tool);this.tool=undefined;
     if(this.held)disposeWeapon(this.held);this.held=undefined;this.equipped='';this.type=undefined;
   }
   update(game:Game,dt:number,aiming=false) {
-    this.restoreHarvest();
+    this.pose.restore();
     const p=game.state.player,elapsed=game.state.elapsed;
     const travel=this.previous?Math.hypot(p.x-this.previous.x,p.z-this.previous.z):0;
     const speed=dt>0?Math.min(12,travel/dt):0;this.speed=T.MathUtils.lerp(this.speed,speed,1-Math.exp(-dt*12));
@@ -99,30 +98,17 @@ export class PlayerCharacter {
     const motion=this.reduced.matches;
     if(this.upper&&this.upper.getClip().name==='arms_idle')this.upper.setEffectiveTimeScale(motion?0:1);
     this.mixer!.update(game.paused?0:dt);
-    if((aiming||this.oneShot)&&this.held&&(this.type==='bow'||this.type==='shotgun')&&this.upper?.getClip().name!=='hurt')this.rangedGrip(this.type);
-    if(this.held&&!wanted&&this.type&&['stone_sword','wooden_sword','machete','spear'].includes(this.type)){if(this.oneShot&&this.upper?.getClip().name===this.type)meleePose(this.object,this.asset!,this.held,this.type,this.upper.time/this.upper.getClip().duration);else this.held.rotation.set(this.type==='spear'?0:Math.PI,0,-.15);}
+    if(this.held&&['bow','shotgun','molotov'].includes(this.type??''))this.held.rotation.set(0,0,0);
+    const flash=this.held?.getObjectByName('muzzle-flash');if(flash)flash.visible=false;
+    if(this.held&&(this.oneShot||aiming)&&['bow','shotgun','molotov'].includes(this.type??'')&&this.upper?.getClip().name!=='hurt'){this.pose.capture(this.asset!);rangedPose(this.object,this.asset!,this.held,this.type!,this.oneShot?this.upper?.time:undefined);}
+    if(this.held&&!wanted&&this.type&&['stone_sword','wooden_sword','machete','spear'].includes(this.type)){if(this.oneShot&&this.upper?.getClip().name===this.type){this.pose.capture(this.asset!);meleePose(this.object,this.asset!,this.held,this.type,this.upper.time/this.upper.getClip().duration);}else this.held.rotation.set(this.type==='spear'?0:Math.PI,0,-.15);}
     if(harvest&&this.tool){
-      for(const name of ['ArmR','ElbowR','HandR','ArmL','ElbowL','HandL']){const bone=this.asset!.getObjectByName(name)!;this.harvestRestore.push({bone,rotation:bone.quaternion.clone()});}
+      this.pose.capture(this.asset!);
       harvestPose(this.object,this.asset!,this.tool,harvest.kind,harvest.progress);
     }
     this.object.userData.harvestProgress=harvest?.progress;
     this.object.userData.animation=wanted?'gather':this.oneShot?this.upper?.getClip().name:locomotion;
     this.object.userData.upperAnimation=this.upper?.getClip().name;this.object.userData.weapon=this.type;
-  }
-  private solveArm(side:'L'|'R',target:T.Vector3) { solveArm(this.object,this.asset!,side,target); }
-  private rangedGrip(type:'bow'|'shotgun') {
-    const world=(point:T.Vector3)=>this.object.localToWorld(point);
-    if(type==='shotgun'){
-      const t=this.upper?.getClip().name==='shotgun'?this.upper.time:1;
-      const kick=Math.sin(Math.min(1,t/.16)*Math.PI)*Math.max(0,1-t/.3);
-      this.held!.rotation.x=-kick*.12;
-      this.solveArm('R',world(new T.Vector3(.06,1.4+kick*.03,.11-kick*.05)));
-      this.solveArm('L',this.held!.localToWorld(new T.Vector3(0,-.04,.44)));
-    }else{
-      this.solveArm('L',world(new T.Vector3(-.14,1.52,.48)));
-      const release=this.upper?.getClip().name==='bow'?Math.min(1,this.upper.time/.35):0;
-      this.solveArm('R',world(new T.Vector3(-.14,1.55,.14+release*.16)));
-    }
   }
   private disposeAsset(asset:T.Group) {
     const materials=new Set<T.Material>();asset.traverse(o=>{if(o instanceof T.Mesh){o.geometry.dispose();for(const m of Array.isArray(o.material)?o.material:[o.material])materials.add(m);if(o instanceof T.SkinnedMesh)o.skeleton.dispose();}});for(const m of materials)m.dispose();

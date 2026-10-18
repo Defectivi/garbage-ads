@@ -1,5 +1,5 @@
 import { derive } from '../utils/SeededRNG';
-export const GENERATION_VERSION = 6;
+export const GENERATION_VERSION = 7;
 export const INT32_MIN=-2147483648,INT32_MAX=2147483647,UINT32_MAX=4294967295;
 export interface WorldConfig { chunkSize: number; initialRegionSize: number; worldScale: number; riverDensity: number; ruinDensity: number; resourceDensity: number }
 export type DifficultyMode = 'easy'|'normal'|'hard';

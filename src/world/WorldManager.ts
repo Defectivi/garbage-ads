@@ -1,4 +1,5 @@
 import {villageNames} from './VillageNames';
+import {Highlands} from './Highlands';
 import { SeededRNG, derive, noise, smooth } from '../utils/SeededRNG';
 import type { WorldSpec } from '../game/GameConfig';
 import type { Point } from '../game/GameState';
@@ -22,19 +23,40 @@ export class WorldManager {
   private cliffCache=new Map<string,Cliff|undefined>();
   private lakeCache=new Map<string,Lake|undefined>();
   private cache = new Map<string, Chunk>();
-  constructor(readonly spec: WorldSpec) {}
+  private riverSamples=new Map<string,ReturnType<WorldManager['legacyRiver']>[]>();
+  private heightSamples=new Map<string,number>();
+  private highlands:Highlands;
+  constructor(readonly spec: WorldSpec) {this.highlands=new Highlands(spec.seeds.terrain,spec.config.worldScale);}
   private names?:Record<string,string>;
   private villageOverrides=new Map<string,string>();
   rememberVillageName(id:string,name:string){if(this.villageOverrides.get(id)!==name){this.villageOverrides.set(id,name);this.villageCache=undefined;}}
   private villageCache?:Village[];
   private get villageSites(){const base=this.spec.generationVersion>=4?DISTANT_VILLAGE_SITES:VILLAGE_SITES;return this.spec.mode==='easy'?[...base,...EASY_VILLAGES]:base;}
-  river(x: number, z: number) {
+  private legacyRiver(x: number, z: number) {
     const s = this.spec.seeds, row = Math.round((z - 48) / 128);
     let center = 48 + row * 128 + Math.sin(x / 31 + s.rivers * .01) * 6 + Math.sin(x / 83 + s.terrain * .01) * 10;
     if (this.spec.generationVersion >= 2) for (const v of this.villageSites) if (Math.abs(x - v.x) < 34 && Math.abs(center - v.z) < 30) center += (center > v.z ? 1 : -1) * (30 - Math.abs(center - v.z)) * smooth((34 - Math.abs(x - v.x)) / 8);
     const width = 3.4 * this.spec.config.riverDensity + noise(s.rivers, x / 38, row) * 1.8;
     return { center, width, distance: Math.abs(z - center), row, crossing: Math.abs(x - Math.round(x / 64) * 64) < 2.4 };
   }
+  /** Candidate channels retain stable row IDs even where tributaries intersect. */
+  rivers(x:number,z:number){
+    if(this.spec.generationVersion<7)return[this.legacyRiver(x,z)];
+    const key=`${x},${z}`,cached=this.riverSamples.get(key);if(cached)return cached;
+    const main=this.legacyRiver(x,z),out=[main],s=this.spec.seeds;
+    for(const side of [-1,1])out.push(this.legacyRiver(x,z+side*128));
+    const slope=(derive(s.rivers,'tributary-direction')%2?1:-1)*(.35+(derive(s.rivers,'tributary-slope')%30)/100),wave=Math.sin(x/67+s.terrain*.01)*14;
+    const row=Math.round((z-92-slope*x-wave)/256);
+    for(let i=row-1;i<=row+1;i++){
+      let center=92+i*256+slope*x+wave;
+      for(const v of this.villageSites)if(Math.abs(x-v.x)<38&&Math.abs(center-v.z)<32)center+=(center>=v.z?1:-1)*(32-Math.abs(center-v.z))*smooth((38-Math.abs(x-v.x))/8);
+      const width=2.8*this.spec.config.riverDensity+noise(s.rivers^1837,x/47,i)*1.6;
+      out.push({center,width,distance:Math.abs(z-center),row:1000000+i,crossing:main.crossing});
+    }
+    // legacyRiver evaluated neighboring rows against another query; recompute actual distances.
+    const result=out.map(r=>({...r,distance:Math.abs(z-r.center)}));if(this.riverSamples.size>=8192)this.riverSamples.delete(this.riverSamples.keys().next().value!);this.riverSamples.set(key,result);return result;
+  }
+  river(x:number,z:number){return this.rivers(x,z).reduce((a,b)=>a.distance-a.width<=b.distance-b.width?a:b);}
   lakes(point:Point,radius=1):Lake[]{
     if(this.spec.generationVersion<5||this.spec.config.riverDensity===0)return[];
     const cx=Math.floor(point.x/128),cz=Math.floor(point.z/128),key=`${cx},${cz},${radius}`,cached=this.lakeRegions.get(key);if(cached)return cached.slice();const out:Lake[]=[];
@@ -73,9 +95,15 @@ export class WorldManager {
     for(let i=1;i<steps;i++){const t=i/steps,x=a.x+(b.x-a.x)*t,z=a.z+(b.z-a.z)*t;if(this.height(x,z)>ay+(by-ay)*t)return false;}return true;
   }
   height(x: number, z: number) {
+    if(this.spec.generationVersion<7)return this.terrainHeight(x,z);
+    const key=`${x},${z}`,cached=this.heightSamples.get(key);if(cached!==undefined)return cached;
+    const result=this.terrainHeight(x,z);if(this.heightSamples.size>=8192)this.heightSamples.delete(this.heightSamples.keys().next().value!);this.heightSamples.set(key,result);return result;
+  }
+  private terrainHeight(x:number,z:number){
     const { terrain } = this.spec.seeds, scale = this.spec.config.worldScale;
     let raw = (noise(terrain, x / (62 * scale), z / (62 * scale)) - .4) * 8 + noise(terrain ^ 5182, x / 17, z / 17) * 1.5;
     if(this.spec.generationVersion>=5){const ridge=Math.max(0,noise(terrain^30917,x/(85*scale),z/(85*scale))-.42);raw+=ridge*38+Math.max(0,noise(terrain^51039,x/34,z/34)-.6)*12;}
+    if(this.spec.generationVersion>=7)raw+=this.highlands.height(x,z);
     const home = smooth((Math.hypot(x, z) - 10) / 18); let base = .8 * (1 - home) + raw * home;
     if (this.spec.generationVersion >= 2) for (const v of this.villageSites) { const edge = smooth((distance(v, { x, z }) - 15) / 8); base = .8 * (1 - edge) + base * edge; }
     const r = this.river(x, z); if (this.spec.config.riverDensity === 0) return base;
@@ -83,11 +111,16 @@ export class WorldManager {
     let result=(-1.1 + Math.min(1, r.distance / r.width) * .8) * (1 - bank) + base * bank;
     for(const lake of this.lakes({x,z})){const d=this.lakeDistance({x,z},lake);if(d<1.6){const shore=smooth((d-1)/.6);result=(-1.1+Math.min(1,d)*.8)*(1-shore)+result*shore;}}return result;
   }
-  bridgeAt(x:number,z:number){
+  bridgeAt(x:number,z:number,padding=0){
     if(this.spec.config.riverDensity===0)return undefined;
-    const bx=Math.round(x/64)*64,r=this.river(bx,z),halfWidth=2.35,halfLength=r.width+1.5;
-    return Math.abs(x-bx)<=halfWidth&&Math.abs(z-r.center)<=halfLength?{x:bx,z:r.center,halfWidth,halfLength,height:.65}:undefined;
+    const bx=Math.round(x/64)*64,halfWidth=2.35;
+    if(Math.abs(x-bx)>halfWidth+padding)return undefined;
+    const r=this.river(bx,z),halfLength=r.width+1.5;
+    if(this.spec.generationVersion>=7&&this.rivers(bx,z).some(other=>other.row!==r.row&&Math.abs(other.center-r.center)<r.width+other.width+8))return undefined;
+    return Math.abs(x-bx)<=halfWidth+padding&&Math.abs(z-r.center)<=halfLength+padding?{x:bx,z:r.center,halfWidth,halfLength,height:.65}:undefined;
   }
+  slope(x:number,z:number){const d=1.25;return Math.hypot(this.height(x+d,z)-this.height(x-d,z),this.height(x,z+d)-this.height(x,z-d))/(2*d);}
+  canGrowTree(x:number,z:number){return !this.bridgeAt(x,z,1.6)&&(this.spec.generationVersion<7||this.slope(x,z)<=.3);}
   walkHeight(x:number,z:number){return this.bridgeAt(x,z)?.height??(this.isWater(x,z)?-.05:this.height(x,z));}
   isWater(x:number,z:number){if(this.bridgeAt(x,z))return false;const r=this.river(x,z);return this.spec.config.riverDensity>0&&r.distance<r.width+.2||this.lakes({x,z}).some(lake=>this.lakeDistance({x,z},lake)<1);}
   biome(x: number, z: number) { return noise(this.spec.seeds.biomes, x / 70, z / 70) > .56 ? 'Pinewood' : noise(this.spec.seeds.biomes, x / 25, z / 25) < .32 ? 'Rocky uplands' : 'Snowfields'; }
@@ -124,12 +157,12 @@ export class WorldManager {
     const veg = new SeededRNG(derive(this.spec.seeds.biomes, 'trees', cx, cz));
     for (let i = 0; i < 35; i++) {
       const x = cx * n + veg.range(.7, n - .7), z = cz * n + veg.range(.7, n - .7), scale = veg.range(.8, 1.5), sparse = veg.next();
-      if (this.cliffAt({x,z},5)||Math.hypot(x, z) < 13 || this.isWater(x, z) || ruins.some(r => distance(r, { x, z }) < 15) || this.villages().some(v => distance(v, { x, z }) < 19) || (this.biome(x, z) !== 'Pinewood' && sparse > .35)) continue;
+      if (this.cliffAt({x,z},5)||Math.hypot(x, z) < 13 || this.isWater(x, z) || this.spec.generationVersion>=7&&!this.canGrowTree(x,z) || ruins.some(r => distance(r, { x, z }) < 15) || this.villages().some(v => distance(v, { x, z }) < 19) || (this.biome(x, z) !== 'Pinewood' && sparse > .35)) continue;
       trees.push({ x, z, scale });
     }
     if (this.spec.config.riverDensity > 0) {
       const x = cx * n + n * .4, r = this.river(x, cz * n + n / 2), z = r.center - r.width - 1.5;
-      if (Math.floor(z / n) === cz) fishing.push({ id: `fish:${cx}:${r.row}`, x, z, availability: 8 + derive(this.spec.seeds.resources, 'fish', cx, r.row) % 16 });
+      if (Math.floor(z / n) === cz&&(this.spec.generationVersion<7||!this.isWater(x,z))) fishing.push({ id: `fish:${cx}:${r.row}`, x, z, availability: 8 + derive(this.spec.seeds.resources, 'fish', cx, r.row) % 16 });
     }
     const accessible=[...nodes];
     for(const cliff of this.cliffs({x:cx*n+n/2,z:cz*n+n/2}))accessible.push(...this.cliffOres(cliff).filter(node=>Math.floor(node.x/n)===cx&&Math.floor(node.z/n)===cz));

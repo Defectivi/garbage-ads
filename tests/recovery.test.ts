@@ -24,11 +24,12 @@ test('furnace binding persists, recovery halves both supplies once and finds cle
  for(const r of RESOURCE_IDS){g.state.inventory[r]=5;g.state.stockpile[r]=11;}g.state.inventory.gold=-3;g.state.combat.statuses.player={bleed:5,tick:0};g.state.player.hp=0;assert(g.recover());for(const r of RESOURCE_IDS){assert.equal(g.state.inventory[r],r==='gold'?-3:2);assert.equal(g.state.stockpile[r],5);}assert.equal(g.state.player.hp,100);assert.equal(g.state.player.warmth,100);assert(!g.state.combat.statuses.player);assert(Math.hypot(g.state.player.x-f.x,g.state.player.z-f.z)<12);assert(!g.world.isWater(g.state.player.x,g.state.player.z));assert(g.solids(g.state.player).every(s=>Math.hypot(s.x-g.state.player.x,s.z-g.state.player.z)>s.radius+.42));assert(!g.recover());assert.equal(g.state.inventory.wood,2);
  const bad=JSON.parse(exportFull(g.state));bad.state.respawnFurnaceId='missing';assert.throws(()=>importJSON(JSON.stringify(bad)),/Respawn furnace/);delete bad.state.respawnFurnaceId;assert.equal(importJSON(JSON.stringify(bad)).respawnFurnaceId,undefined);
 });
-test('sword and machete blade axes sweep horizontally across the body rather than pointing upward',()=>{
+test('sword and machete rise then cut down; spear remains a forward thrust',()=>{
  for(const type of ['wooden_sword','machete','spear'] as const){const root=new T.Group(),asset=createSurvivorAsset(),weapon=weaponMesh(type,true);root.add(asset.scene);asset.scene.getObjectByName('HandR')!.add(weapon);const directions=[];
- for(const t of [0,.4,.8]){meleePose(root,asset.scene,weapon,type,t);const axis=new T.Vector3(0,1,0).applyQuaternion(weapon.getWorldQuaternion(new T.Quaternion()));assert(Math.abs(axis.y)<.2);directions.push(axis);}
- if(type!=='spear'){assert(directions[0].x>.7);assert(directions[2].x<-.7);}disposeWeapon(weapon);}
+ for(const t of [.24,.67,1]){meleePose(root,asset.scene,weapon,type,t);const axis=new T.Vector3(0,1,0).applyQuaternion(weapon.getWorldQuaternion(new T.Quaternion()));assert(Number.isFinite(axis.y));directions.push(axis);}
+ if(type==='spear')assert(directions.every(d=>d.z>.99));else{assert(directions[0].y>.7);assert(directions[1].y<-.4);assert(directions[2].y<-.7);}disposeWeapon(weapon);}
 });
+
 test('snow wraps individual flakes smoothly, stays bounded and respects pause/reduced motion',()=>{
  const weather=new SnowWeather(),geometry=weather.points.geometry,before=geometry.attributes.position.array.slice();weather.update(.05,true,{x:0,z:0},10);const after=geometry.attributes.position.array;assert.notEqual(after[1],before[1]);assert.equal(weather.points.position.y,10);
  for(let i=0;i<1000;i++)weather.update(.05,true,{x:500,z:-500},10);for(let i=0;i<after.length;i+=3){assert(after[i]>=-44&&after[i]<=44);assert(after[i+1]>=0&&after[i+1]<=44);assert(after[i+2]>=-44&&after[i+2]<=44);}assert(geometry.drawRange.count>850);

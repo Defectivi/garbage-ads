@@ -110,7 +110,7 @@ label { display: grid; gap: 8px; margin: 21px 0 13px; font: 12px var(--mono); le
 
 /* Field-kit panels share a stamped edge, flat controls and consistent spacing. */
 .modal-backdrop { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; background: #152c354f; backdrop-filter: blur(5px); pointer-events: auto; touch-action: pan-y; }
-.modal { position: relative; width: min(660px, calc(100vw - 48px)); min-width: 0; max-height: 92dvh; overflow: auto; padding: 28px 30px 24px; background: var(--paper); border: 1px solid #3f514fcc; border-top: 3px solid #8e9c88; border-radius: 2px; box-shadow: inset 0 0 0 3px #f1f1df80, 0 15px 70px #142c3c50; touch-action: pan-y; }
+.modal { color:var(--ink); position: relative; width: min(660px, calc(100vw - 48px)); min-width: 0; max-height: 92dvh; overflow: auto; padding: 28px 30px 24px; background: var(--paper); border: 1px solid #3f514fcc; border-top: 3px solid #8e9c88; border-radius: 2px; box-shadow: inset 0 0 0 3px #f1f1df80, 0 15px 70px #142c3c50; touch-action: pan-y; }
 .modal::after { content: ''; position: absolute; top: 9px; left: 10px; width: 3px; height: 3px; background: #7b8c7e; box-shadow: 0 5px #a0aa94; }
 .modal h2 { font: 400 35px/1.15 'Oxanium', sans-serif; letter-spacing: -.4px; margin: 12px 42px 20px 0; }
 .modal p { font-size: 12px; line-height: 1.8; margin: 9px 0 20px; }
@@ -620,3 +620,25 @@ button:focus-visible{outline:2px solid #f1c477;outline-offset:3px}
 #meal-warning{color:#98382d;font:700 12px 'Oxanium',monospace;margin:0 0 9px}#meal-warning:empty{display:none}
 
 body:has(.modal-backdrop) #message{visibility:hidden}
+
+/* Expedition desk: substantial touch targets with a clear purpose for each file action. */
+.menu-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;border-top:1px solid #78939b66;padding:18px 0 10px;margin-top:22px}
+.menu-tools-heading{grid-column:1/-1;display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-bottom:4px;color:#e8d4ae}
+.menu-tools-heading>span{font:600 11px 'Oxanium',monospace;letter-spacing:.13em}.menu-tools-heading>small{color:#b0c5ce;font-size:13px}
+.menu-tools button{display:flex;align-items:center;gap:10px;text-align:left;min-height:74px;padding:12px;background:#143440;border:1px solid #58758180;color:#f2e6ce;box-shadow:none}
+.menu-tools button:hover{background:#2c4c58;border-color:#d3ac70}.menu-tools button>.ui-icon{color:#dcaf6c;width:23px;height:23px}.menu-tools button>span{display:grid;gap:5px;min-width:0}.menu-tools strong{font-size:15px;line-height:1.3}.menu-tools button small{font-size:13px;font-weight:500;color:#b9cdd2;line-height:1.3}
+.menu-panel{scrollbar-width:thin;scrollbar-color:#8da8af #142f3b;padding-bottom:16px}.menu-panel::-webkit-scrollbar{width:6px}.menu-panel::-webkit-scrollbar-thumb{background:#8da8af}.menu-panel::-webkit-scrollbar-track{background:#142f3b}
+
+/* Scope the whole settings palette: title-screen text colors must never leak into it. */
+.modal.settings-modal{width:min(880px,calc(100vw - 40px));max-width:880px;padding:30px;background:linear-gradient(125deg,#142d39,#213f49);color:#eef0df;border-color:#718d94;border-top-color:#d6ad6c;line-height:1.5;scrollbar-width:thin;scrollbar-color:#809da4 #193541}
+.settings-modal h2{color:#f4e3c3;margin:16px 32px 12px 0;font-size:clamp(26px,3vw,36px)}.settings-modal>.eyebrow{color:#afc8cd}.settings-modal p.settings-intro{color:#c4d7d8;font-size:18px;margin:0 0 24px}
+.settings-modal .expedition-rule{border-left:3px solid #dcaf6c;padding:15px 18px;background:#0b2430;margin-bottom:24px}.settings-kicker{display:block;color:#c3bd9c;font:600 11px 'Oxanium',monospace;letter-spacing:.06em}.expedition-rule>strong{display:block;font:600 22px 'Oxanium',sans-serif;color:#f4d49c;margin-top:8px}.settings-modal .expedition-rule p{color:#c1d4d7;font-size:16px;margin:10px 0}.settings-modal .expedition-rule>small{display:block;color:#acc5cb;font-size:14px;margin-top:10px}
+.settings-modal button{background:#34535f;color:#f5e6cb;border-color:#728f98;min-height:44px;font-size:16px}.settings-modal button:hover{background:#456672;color:#fff5dd}.settings-modal .close-modal{min-height:34px;min-width:34px;padding:4px}.settings-modal button.primary{background:#e3ab65;color:#162b34;border-color:#f0cd91}.settings-modal button.primary:hover{background:#f2c281}
+.settings-sections{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}.settings-sections fieldset{min-width:0;margin:0;padding:18px 0 0;border:0;border-top:1px solid #647e895c}.settings-sections legend{font:600 17px 'Oxanium',sans-serif;color:#f1e1c2;padding-right:12px}.settings-sections legend span{font-size:12px;color:#dfb473;margin-right:9px}.settings-modal label{display:block;color:#edf1e5;font-size:17px;letter-spacing:0;margin:8px 0}.settings-modal select,.settings-modal input[type=number]{display:block;width:100%;min-height:48px;font:600 17px 'Rajdhani',sans-serif;background:#0c2734;color:#f0f0df;border:1px solid #7b979f;padding:10px}.settings-modal option{background:#173541;color:#f0f0df}.settings-modal .setting-help{color:#bdcfd2;font-size:15px;line-height:1.6;margin:10px 0 16px}
+.settings-modal label.setting-toggle{display:flex;align-items:center;justify-content:space-between;gap:18px;border-top:1px solid #6b87904d;padding:14px 0;margin:0;cursor:pointer}.setting-toggle>span{display:grid;gap:6px}.setting-toggle strong{color:#eef0df;font-size:17px}.setting-toggle small{color:#bdcfd2;font-size:15px;line-height:1.5;font-weight:500}.settings-modal .setting-toggle input{flex:none;accent-color:#dfad6b;width:22px;height:22px;margin:0}
+.settings-apply{position:sticky;bottom:-30px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin:24px -6px -6px;padding:16px 6px;background:#17333f;border-top:1px solid #79939a}.settings-apply>span{font-size:15px;color:#c2d3d5}.settings-modal #dialog-status{color:#ffc8af;font-size:16px;line-height:1.5}.settings-modal #dialog-status:empty{display:none}
+@media(max-width:700px){.modal.settings-modal{padding:22px;width:calc(100vw - 20px)}.settings-sections{grid-template-columns:1fr;gap:22px}.settings-modal .settings-intro{font-size:17px}.settings-apply{bottom:-22px}.settings-apply>span{max-width:18ch}.menu-tools button{padding:10px;gap:8px}.menu-tools button>.ui-icon{width:18px;height:18px}.menu-tools strong{font-size:14px}.menu-tools button small{font-size:12px}}
+
+.settings-modal{scroll-padding-block:54px 100px}.settings-modal>.close-modal{position:sticky;top:0;float:right;z-index:3}
+
+@media(max-width:700px) and (min-height:501px){.menu-panel{max-height:calc(100dvh - 146px)}}

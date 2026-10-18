@@ -25,7 +25,7 @@ export function validateBalances(v: unknown, settings: Settings, path = 'resourc
 }
 export function validateWorld(v: unknown): WorldSpec {
   const w = record(v, 'world');
-  if (![1, 2, 3, 4, 5, GENERATION_VERSION].includes(w.generationVersion as number)) throw new Error(`Unsupported generation version ${String(w.generationVersion)}. Supported terrain generations: 1, 2, 3, 4, 5 and ${GENERATION_VERSION}.`);
+  if (![1, 2, 3, 4, 5, 6, GENERATION_VERSION].includes(w.generationVersion as number)) throw new Error(`Unsupported generation version ${String(w.generationVersion)}. Supported terrain generations: 1, 2, 3, 4, 5, 6 and ${GENERATION_VERSION}.`);
   if(w.namingVersion!==undefined&&w.namingVersion!==1)throw new Error('Unsupported village naming version.');
   if(w.mode!==undefined&&!['easy','normal','hard'].includes(String(w.mode)))throw new Error('Unknown expedition difficulty.');
   if(w.hardship!==undefined&&(w.mode!=='hard'||typeof w.hardship!=='string'||!Object.hasOwn(HARDSHIPS,w.hardship)))throw new Error('Unknown Siberia hardship.');

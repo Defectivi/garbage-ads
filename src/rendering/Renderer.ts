@@ -1,3 +1,5 @@
+import {harvestPhase} from './HarvestPose';
+import {gatherSeconds} from '../game/Game';
 import {WORLD_CHUNK_CACHE_LIMIT} from '../world/WorldManager';
 import {prepareCombatTemplates} from './NPCCharacter';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
@@ -120,10 +122,15 @@ export class Renderer {
     const g = new THREE.Group(), w = this.game.world, size = w.spec.config.chunkSize, x0 = data.cx * size, z0 = data.cz * size;
     const terrain = new THREE.PlaneGeometry(size, size, 16, 16); terrain.rotateX(-Math.PI / 2); terrain.translate(x0 + size / 2, 0, z0 + size / 2);
     const pos = terrain.attributes.position, colors: number[] = [], color = new THREE.Color();
-    for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), z = pos.getZ(i), y = w.height(x, z); pos.setY(i, y); const river = w.river(x, z); color.setHex(y < .1 && river.distance < river.width + 2 ? 0x839ea9 : 0xe0ebef); color.multiplyScalar(1 - Math.max(0, y) * .007); colors.push(color.r, color.g, color.b); }
+    for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), z = pos.getZ(i), y = w.height(x, z); pos.setY(i, y); const river = w.river(x, z); color.setHex(y < .1 && river.distance < river.width + 2 ? 0x839ea9 : 0xe0ebef); const shade=1-Math.max(0,y)*.007;color.multiplyScalar(w.spec.generationVersion>=7?Math.max(.45,shade):shade); colors.push(color.r, color.g, color.b); }
     terrain.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3)); terrain.computeVertexNormals();
+    if(w.spec.generationVersion>=7){
+      // Existing normals expose steep rock without extra height queries, meshes or frame work.
+      const normals=terrain.attributes.normal,tints=terrain.attributes.color,rock=new THREE.Color(0x6e858b);
+      for(let i=0;i<pos.count;i++){const ny=Math.abs(normals.getY(i)),slope=Math.sqrt(Math.max(0,1-ny*ny))/Math.max(.01,ny);color.fromBufferAttribute(tints,i).lerp(rock,THREE.MathUtils.clamp((slope-.27)*.9,0,.75));tints.setXYZ(i,color.r,color.g,color.b);}
+    }
     const ground = this.mesh(terrain, mat(0xffffff, { vertexColors: true })); ground.castShadow = false; g.add(ground);
-    const trees = data.trees.map((t,i)=>({...t,id:`tree:${data.cx}:${data.cz}:${i}`})).filter((t) => !w.bridgeAt(t.x,t.z)&&!this.game.state.combat.charredTrees.includes(t.id)&&this.game.state.changes.terrain?.[t.id]!=='felled').map(t => ({ ...t, y: w.height(t.x, t.z) }));
+    const trees = data.trees.map((t,i)=>({...t,id:`tree:${data.cx}:${data.cz}:${i}`})).filter((t) => w.canGrowTree(t.x,t.z)&&!this.game.state.combat.charredTrees.includes(t.id)&&this.game.state.changes.terrain?.[t.id]!=='felled').map(t => ({ ...t, y: w.height(t.x, t.z) }));
     this.instance(g, new THREE.CylinderGeometry(.16, .25, 2.2, 5), this.materials.wood, trees.map(t => ({ id:t.id, x: t.x, y: t.y + t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
     // Identical crowns, two material batches instead of six draw calls per chunk.
     for(const snowy of [false,true]){
@@ -145,16 +152,16 @@ export class Renderer {
     if (w.spec.config.riverDensity > 0) {
       const vertices: number[] = [];
       for (let x = x0; x < x0 + size; x += 2) {
-        const a = w.river(x, z0 + size / 2), b = w.river(x + 2, z0 + size / 2);
+        for(const a of w.rivers(x,z0+size/2)){const b=w.rivers(x+2,z0+size/2).find(r=>r.row===a.row);if(!b)continue;
         if (a.center + a.width < z0 || a.center - a.width > z0 + size) continue;
         const za = Math.max(z0, a.center - a.width), zb = Math.min(z0 + size, a.center + a.width), zc = Math.max(z0, b.center - b.width), zd = Math.min(z0 + size, b.center + b.width);
-        vertices.push(x, .12, za, x, .12, zb, x + 2, .12, zc, x, .12, zb, x + 2, .12, zd, x + 2, .12, zc);
+        if(za<=zb&&zc<=zd)vertices.push(x, .12, za, x, .12, zb, x + 2, .12, zc, x, .12, zb, x + 2, .12, zd, x + 2, .12, zc);}
       }
-      if (vertices.length) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); geo.computeVertexNormals(); const water = this.mesh(geo, this.materials.water); water.castShadow = false; g.add(water); }
+      if (vertices.length) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); geo.computeVertexNormals(); const water = this.mesh(geo, this.materials.water); water.castShadow = false;water.name='river-water';g.add(water); }
       for(const lake of w.lakes({x:x0+size/2,z:z0+size/2}))if(Math.floor(lake.x/size)===data.cx&&Math.floor(lake.z/size)===data.cz){
         const water=this.mesh(new THREE.CircleGeometry(1,64).rotateX(-Math.PI/2),this.materials.water,lake.x,.12,lake.z);water.scale.set(lake.rx,1,lake.rz);water.castShadow=false;water.name='lake-water';water.userData.lakeId=lake.id;g.add(water);
       }
-      for (let x = Math.ceil(x0 / 64) * 64; x < x0 + size; x += 64) { const r = w.river(x, z0 + size / 2); if (r.center < z0 || r.center >= z0 + size) continue; this.box(g, x, .45, r.center, 4.7, .4, r.width * 2 + 3, this.materials.wood); for (const side of [-1, 1]) this.box(g, x + side * 2.3, 1.05, r.center, .12, .16, r.width * 2 + 3, this.materials.snow); }
+      for (let x = Math.ceil(x0 / 64) * 64; x < x0 + size; x += 64) { for(const r of w.rivers(x,z0+size/2)){if(!w.bridgeAt(x,r.center)||r.center<z0||r.center>=z0+size)continue; this.box(g, x, .45, r.center, 4.7, .4, r.width * 2 + 3, this.materials.wood); for (const side of [-1, 1]) this.box(g, x + side * 2.3, 1.05, r.center, .12, .16, r.width * 2 + 3, this.materials.snow); }}
     }
     for (const r of [...data.ruins, ...w.villages().filter(v => Math.floor(v.x / size) === data.cx && Math.floor(v.z / size) === data.cz)]) this.addRuin(g, r);
     for (const f of data.fishing) { const post = this.mesh(new THREE.CylinderGeometry(.08, .08, 1.5, 5), this.materials.wood, f.x, w.height(f.x, f.z) + .75, f.z); g.add(post); this.box(g, f.x, w.height(f.x, f.z) + 1.35, f.z, .85, .4, .12, mat(0x5a94a6)); }
@@ -383,7 +390,7 @@ export class Renderer {
       if(worker.hp<=0||Math.hypot(worker.x-p.x,worker.z-p.z)>65)continue;residentIds.add(worker.id);let visual=this.residents.get(worker.id);
       if(!visual){visual=new NPCCharacter(characterStyle(worker.communityId?'villager':'worker',worker.id).id);this.residents.set(worker.id,visual);this.entities.add(visual.object);}
       const harvest=game.harvestTargets.get(worker.id);
-      const refuge=game.settlement.refuge(worker.id),dx=worker.x-visual.object.position.x,dz=worker.z-visual.object.position.z;visual.update(worker,game.world.walkHeight(worker.x,worker.z),harvest?Math.atan2(harvest.x-worker.x,harvest.z-worker.z):Math.hypot(dx,dz)>.01?Math.atan2(dx,dz):visual.object.rotation.y,game.paused?0:dt,game.state.elapsed,null,-100,worker.state==='gathering'&&!refuge,harvest?.resource==='wood'?'axe':harvest?.resource==='stone'?'pickaxe':undefined);visual.object.visible=visual.ready&&refuge?.phase!=='hidden';visual.object.userData.refuge=refuge?.phase;
+      const refuge=game.settlement.refuge(worker.id),dx=worker.x-visual.object.position.x,dz=worker.z-visual.object.position.z;visual.update(worker,game.world.walkHeight(worker.x,worker.z),harvest?Math.atan2(harvest.x-worker.x,harvest.z-worker.z):Math.hypot(dx,dz)>.01?Math.atan2(dx,dz):visual.object.rotation.y,game.paused?0:dt,game.state.elapsed,null,-100,worker.state==='gathering'&&!refuge,harvest?.resource==='wood'?'axe':['stone','metal','gold'].includes(harvest?.resource??'')?'pickaxe':undefined,harvest?harvestPhase(worker.progress/gatherSeconds(harvest.resource),gatherSeconds(harvest.resource)):0);visual.object.visible=visual.ready&&refuge?.phase!=='hidden';visual.object.userData.refuge=refuge?.phase;
     }
     for(const [id,visual] of this.residents)if(!residentIds.has(id)){visual.dispose();this.residents.delete(id);}
     for (const [id, group] of this.dynamic) if (!entityIds.has(id)) { this.dispose(group); this.dynamic.delete(id); }

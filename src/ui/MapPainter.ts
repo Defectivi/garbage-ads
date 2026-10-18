@@ -10,7 +10,7 @@ export function paintMap(canvas:HTMLCanvasElement,game:Game,known:Ruin[]){
  }
  let trees=0;
  for(const c of w.around(p,Math.ceil(128/w.spec.config.chunkSize)))for(const [i,tree]of c.trees.entries()){
-  if(w.bridgeAt(tree.x,tree.z))continue;
+  if(!w.canGrowTree(tree.x,tree.z))continue;
   if(game.state.changes.terrain?.[`tree:${c.cx}:${c.cz}:${i}`]==='felled'||game.state.combat.charredTrees.includes(`tree:${c.cx}:${c.cz}:${i}`))continue;
   const at=screen(tree.x,tree.z);if(at.x<0||at.x>512||at.y<0||at.y>512)continue;ctx.fillStyle='#467465';ctx.beginPath();ctx.moveTo(at.x,at.y-3);ctx.lineTo(at.x-2.2,at.y+2);ctx.lineTo(at.x+2.2,at.y+2);ctx.fill();trees++;
  }

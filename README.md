@@ -278,3 +278,13 @@ Run `npm run test:rations` for the focused browser checks. See [root causes, cha
 Escape acts once per key press; holding it cannot toggle Pause repeatedly, reopen a closed panel or open Pause after cancelling placement. Run `npm run test:escape` for the held-key regression checks.
 
 Spawn-protection expiry now reuses natural collision geometry, bounds AI queries and prepares collision neighborhoods/hostile templates during loading. Enemy counts and simulation rules are unchanged. See [measurements and remaining constrained-device limits](docs/SPAWN_PERFORMANCE.md). `npm run test:spawn-performance` measures fixed-step CPU cost; `npm run test:spawn-live` measures actual rendering around expiry.
+
+## Worker actions, highlands and expedition settings
+
+Workers share the player's downward axe/pickaxe motion. Player and human NPC weapons have common release/recoil/throw poses, and swords/machetes use a raised diagonal cut with shared visible/contact geometry. Gathering speeds, weapon damage and wear rules are unchanged.
+
+New **generation-7** worlds add intersecting oblique tributaries, broad regional mountains and foothills, exposed steep rock and tree-free steep slopes/bridge approaches. Existing saves retain their generation and terrain; start a new expedition for the new landforms.
+
+The title's Expedition Desk explains local saves, full-world imports and sandbox configurations. Settings has readable Survival, Graphics, Sound and Sandbox sections. **World difficulty** is selected when creating an expedition; **Cold exposure** separately controls whether zero warmth causes defeat. Settings links back to the real expedition difficulty choices without changing an existing world's startup rules.
+
+Run `npm run test:field-revamp` for the focused browser checks. See [implementation, compatibility and verification](docs/FIELD_REVAMP.md).

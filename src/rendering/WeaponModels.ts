@@ -38,6 +38,7 @@ export function weaponMesh(type: WeaponType, inHand = false) {
     const magazine=cylinder(.035,.51,materials.steel,0,-.02,.51);magazine.rotation.x=Math.PI/2;
     const pump=cylinder(.056,.24,materials.wood,0,-.018,.56);pump.rotation.x=Math.PI/2;
     const muzzle=add(new T.RingGeometry(.023,.035,10),materials.edge,0,.065,1.04);muzzle.material.side=T.DoubleSide;
+    const flash=add(new T.ConeGeometry(.11,.3,5).rotateX(Math.PI/2),new T.MeshBasicMaterial({color:0xffdc83,transparent:true,opacity:.85,depthWrite:false}),0,.065,1.15);flash.name='muzzle-flash';flash.visible=false;flash.castShadow=false;
     add(new T.TorusGeometry(.065,.011,4,10,Math.PI*1.6),materials.steel,0,-.08,.13).rotation.y=Math.PI/2;
     profile([[-.014,.1],[.014,.1],[.01,.14],[-.01,.14]],.02,materials.brass).position.z=.92;
   } else if(type==='bow') {

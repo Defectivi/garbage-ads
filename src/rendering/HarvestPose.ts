@@ -5,6 +5,10 @@ export type HarvestTool = 'axe' | 'pickaxe';
 type Task = { node: { resource: string }; remaining: number };
 export const HARVEST_RECOVERY = .18;
 export const harvestCycles=(duration:number)=>Math.max(1,Math.ceil(duration/.8));
+export function harvestPhase(fraction:number,duration:number){
+  const progress=T.MathUtils.clamp(fraction,0,1)*harvestCycles(duration),phase=progress%1,last=Math.floor(progress)>=harvestCycles(duration)-1;
+  return fraction>=1?1:last?phase:phase<.75?phase/.75:1+(phase-.75)/.25;
+}
 export function harvestTool(resource:string):HarvestTool|undefined {
   return resource==='wood'?'axe':['stone','metal','gold'].includes(resource)?'pickaxe':undefined;
 }
@@ -20,9 +24,7 @@ export class HarvestMotion {
       const kind=harvestTool(task.node.resource);
       if(!kind){this.reset();return;}
       this.task=task;this.kind=kind;this.finished=undefined;
-      const progress=T.MathUtils.clamp(1-task.remaining/duration,0,1)*harvestCycles(duration);
-      const phase=progress%1,last=Math.floor(progress)>=harvestCycles(duration)-1;
-      return {kind,progress:task.remaining<=1e-8?1:last?phase:phase<.75?phase/.75:1+(phase-.75)/.25};
+      return {kind,progress:task.remaining<=1e-8?1:harvestPhase(1-task.remaining/duration,duration)};
     }
     if(!this.task||this.task.remaining>1e-8){this.reset();return;}
     this.finished??=elapsed;

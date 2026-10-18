@@ -1,3 +1,5 @@
+import {ActionPoseState,rangedPose} from './ActionPose';
+import {harvestPose} from './HarvestPose';
 import {workerTool} from './WorkerTools';
 import {createWolfAsset} from './WolfAsset';
 import { meleePose } from './MeleePose';
@@ -9,7 +11,6 @@ import type { WeaponType } from '../data/weapons';
 import { createSurvivorAsset } from './SurvivorAsset';
 import { createBearAsset } from './BearAsset';
 import { weaponMesh, disposeWeapon } from './WeaponModels';
-import { solveArm } from './RigIK';
 
 const templates=new Map<string,Promise<{scene:T.Group;animations:T.AnimationClip[]}>>();
 function template(id:string) {
@@ -25,6 +26,7 @@ export class NPCCharacter {
   readonly object=new T.Group(); ready=false;
   private asset?:T.Group;private mixer?:T.AnimationMixer;private actions=new Map<string,T.AnimationAction>();
   private tool?:T.Group;
+  private pose=new ActionPoseState();
   private base?:T.AnimationAction;private upper?:T.AnimationAction;private action=false;private lastAttack=-100;
   private old?:{x:number;z:number};private speed=0;private weapon?:T.Group;private weaponType?:WeaponType;private disposed=false;
   constructor(readonly appearance:string) {
@@ -37,7 +39,8 @@ export class NPCCharacter {
     next.reset().setEffectiveWeight(1).setEffectiveTimeScale(1).setLoop(once?T.LoopOnce:T.LoopRepeat,once?1:Infinity);next.clampWhenFinished=once;next.play();if(old&&old!==next)old.crossFadeTo(next,.18,false);
     if(upper){this.upper=next;this.action=once;}else this.base=next;
   }
-  update(point:{x:number;z:number},height:number,heading:number,dt:number,clock:number,weapon:WeaponType|null=null,attack=-100,working=false,tool?:'axe'|'pickaxe') {
+  update(point:{x:number;z:number},height:number,heading:number,dt:number,clock:number,weapon:WeaponType|null=null,attack=-100,working=false,tool?:'axe'|'pickaxe',harvestProgress=0) {
+    this.pose.restore();
     const distance=this.old?Math.hypot(point.x-this.old.x,point.z-this.old.z):0;this.old={...point};
     this.speed=T.MathUtils.lerp(this.speed,dt>0?Math.min(3,distance/dt):0,1-Math.exp(-dt*12));
     this.object.position.set(point.x,height,point.z);this.object.rotation.y+=Math.atan2(Math.sin(heading-this.object.rotation.y),Math.cos(heading-this.object.rotation.y))*(1-Math.exp(-dt*10));
@@ -49,13 +52,16 @@ export class NPCCharacter {
     if(this.action&&this.upper&&this.upper.time>=this.upper.getClip().duration-.02)this.action=false;
     if(attack>this.lastAttack){this.lastAttack=attack;if(clock-attack<.8)this.play(bear?'attack':weapon??'punch',true,true);}
     if(!this.action&&bear&&this.upper){this.upper.fadeOut(.15);this.upper=undefined;}
-    if(!this.action&&!bear)this.play(working?'gather':moving?'arms_walk':'arms_idle',true);
+    if(!this.action&&!bear)this.play(working&&!tool?'gather':moving?'arms_walk':'arms_idle',true);
     this.mixer!.update(dt);
-    if(this.action&&this.weapon&&this.asset&&(weapon==='shotgun'||weapon==='bow')){
-      if(weapon==='shotgun') {solveArm(this.object,this.asset,'R',this.object.localToWorld(new T.Vector3(.06,1.4,.11)));solveArm(this.object,this.asset,'L',this.weapon.localToWorld(new T.Vector3(0,-.04,.44)));}
-      else {solveArm(this.object,this.asset,'L',this.object.localToWorld(new T.Vector3(-.14,1.52,.48)));solveArm(this.object,this.asset,'R',this.object.localToWorld(new T.Vector3(-.14,1.55,.14)));}
+    if(this.weapon&&['bow','shotgun','molotov'].includes(weapon??''))this.weapon.rotation.set(0,0,0);
+    const flash=this.weapon?.getObjectByName('muzzle-flash');if(flash)flash.visible=false;
+    if(this.action&&this.weapon&&this.asset&&(weapon==='shotgun'||weapon==='bow'||weapon==='molotov')){
+      this.pose.capture(this.asset);rangedPose(this.object,this.asset,this.weapon,weapon,this.upper?.time);
     }
-    if(this.weapon&&weapon&&['stone_sword','wooden_sword','machete','spear'].includes(weapon)){if(this.action&&this.upper?.getClip().name===weapon)meleePose(this.object,this.asset!,this.weapon,weapon,this.upper.time/this.upper.getClip().duration);else this.weapon.rotation.set(weapon==='spear'?0:Math.PI,0,-.15);}
+    if(this.weapon&&weapon&&['stone_sword','wooden_sword','machete','spear'].includes(weapon)){if(this.action&&this.upper?.getClip().name===weapon){this.pose.capture(this.asset!);meleePose(this.object,this.asset!,this.weapon,weapon,this.upper.time/this.upper.getClip().duration);}else this.weapon.rotation.set(weapon==='spear'?0:Math.PI,0,-.15);}
+    if(working&&this.tool&&this.asset){this.pose.capture(this.asset);harvestPose(this.object,this.asset,this.tool,tool!,harvestProgress);}
+    this.object.userData.harvestProgress=working&&tool?harvestProgress:undefined;
     this.object.userData.animation=this.action?this.upper?.getClip().name:working?'gather':moving?'walk':'idle';
   }
   dispose(){this.disposed=true;if(this.tool)disposeWeapon(this.tool);if(this.weapon)disposeWeapon(this.weapon);this.mixer?.stopAllAction();if(this.asset){this.mixer?.uncacheRoot(this.asset);this.asset.traverse(o=>{if(o instanceof T.SkinnedMesh)o.skeleton.dispose();});}this.object.removeFromParent();}

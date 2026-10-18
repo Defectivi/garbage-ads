@@ -1,0 +1,80 @@
+[
+  {
+    "spec": {
+      "seed": 0,
+      "namingVersion": 1,
+      "generationVersion": 6,
+      "seeds": {
+        "terrain": 33518,
+        "rivers": 11256,
+        "biomes": 3790,
+        "resources": 1459,
+        "ruins": 49938,
+        "wildlife": 54113,
+        "villages": 13178,
+        "loot": 59941
+      },
+      "config": {
+        "chunkSize": 32,
+        "initialRegionSize": 256,
+        "worldScale": 1,
+        "riverDensity": 1,
+        "ruinDensity": 1,
+        "resourceDensity": 1
+      }
+    },
+    "digest": "00708871fc7efcd595fef58f4facb7e26f6a2288ad04b65c9ce721942913d7f6"
+  },
+  {
+    "spec": {
+      "seed": 42,
+      "namingVersion": 1,
+      "generationVersion": 6,
+      "seeds": {
+        "terrain": 52290,
+        "rivers": 24169,
+        "biomes": 48803,
+        "resources": 64604,
+        "ruins": 51108,
+        "wildlife": 42560,
+        "villages": 60105,
+        "loot": 56487
+      },
+      "config": {
+        "chunkSize": 32,
+        "initialRegionSize": 256,
+        "worldScale": 1,
+        "riverDensity": 1,
+        "ruinDensity": 1,
+        "resourceDensity": 1
+      }
+    },
+    "digest": "2834c317f459ab7de1b077c7583a3394f599e9fdc242f981a62bea3f7d7f694f"
+  },
+  {
+    "spec": {
+      "seed": 12345,
+      "namingVersion": 1,
+      "generationVersion": 6,
+      "seeds": {
+        "terrain": 18729,
+        "rivers": 19366,
+        "biomes": 19246,
+        "resources": 42854,
+        "ruins": 50974,
+        "wildlife": 62302,
+        "villages": 49460,
+        "loot": 41283
+      },
+      "config": {
+        "chunkSize": 32,
+        "initialRegionSize": 256,
+        "worldScale": 1,
+        "riverDensity": 1,
+        "ruinDensity": 1,
+        "resourceDensity": 1
+      }
+    },
+    "digest": "a94c227e164216f4a116a5e0e528185c47f7fb5b778fe20f7a06dbbb685aad59"
+  }
+]

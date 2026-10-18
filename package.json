@@ -30,6 +30,7 @@
     "test:night": "node tests/balance-night.mjs",
     "test:workers": "node tests/worker-pause.mjs",
     "test:escape": "node tests/escape.mjs",
+    "test:field-revamp": "node tests/field-revamp.mjs",
     "test:seeds": "node tests/seed-hud.mjs",
     "test:harvest": "node tests/worker-harvest.mjs",
     "test:field": "node tests/field-ui-night.mjs",

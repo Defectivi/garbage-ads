@@ -10,9 +10,9 @@ import {simulationState as newState} from './fixtures/state';
 import { equipmentDrops } from '../src/systems/CombatSystem';
 import { exportFull, importJSON, validateWorld } from '../src/systems/SaveSystem';
 
-test('generation 6 separates all eight RNG streams and validates new seed fields', () => {
+test('generation 7 separates all eight RNG streams and validates new seed fields', () => {
   const spec = worldSpec(42);
-  assert.equal(spec.generationVersion, 6);
+  assert.equal(spec.generationVersion, 7);
   assert.equal(Object.keys(spec.seeds).length, 8);
   assert.equal(new Set(Object.values(spec.seeds)).size, 8);
   for (const value of Object.values(spec.seeds)) assert(Number.isInteger(value) && value >= 0 && value <= 65535);
