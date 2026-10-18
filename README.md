@@ -275,4 +275,6 @@ Player axes and pickaxes use hand-attached downward strikes synchronized to the 
 
 Run `npm run test:rations` for the focused browser checks. See [root causes, changed files, verification and limits](docs/HARVEST_AND_RATIONS.md).
 
+Escape acts once per key press; holding it cannot toggle Pause repeatedly, reopen a closed panel or open Pause after cancelling placement. Run `npm run test:escape` for the held-key regression checks.
+
 Spawn-protection expiry now reuses natural collision geometry, bounds AI queries and prepares collision neighborhoods/hostile templates during loading. Enemy counts and simulation rules are unchanged. See [measurements and remaining constrained-device limits](docs/SPAWN_PERFORMANCE.md). `npm run test:spawn-performance` measures fixed-step CPU cost; `npm run test:spawn-live` measures actual rendering around expiry.

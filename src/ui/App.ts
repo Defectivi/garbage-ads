@@ -46,7 +46,7 @@ export class App {
   start() {
     window.addEventListener('resize', () => this.renderer.resize());
     window.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { if(this.game.dead&&this.mode==='game')return; if (this.placement) this.cancelBuilding(); else if (this.root.querySelector('.modal-backdrop')) this.closeModal(); else if (this.mode === 'game') this.pause(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); if(e.repeat||this.game.dead&&this.mode==='game')return; if (this.placement) this.cancelBuilding(); else if (this.root.querySelector('.modal-backdrop')) this.closeModal(); else if (this.mode === 'game') this.pause(); return; }
       if ((e.target as HTMLElement).closest('input,select,textarea,[contenteditable="true"]')) return;
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
       if(e.shiftKey&&e.key.toLowerCase()==='s'&&this.mode==='game'&&!this.game.dead){e.preventDefault();this.keys.delete('s');if(!e.repeat){const result=saveLocal(this.game.state);this.game.notify(result.message);this.refresh();}return;}
