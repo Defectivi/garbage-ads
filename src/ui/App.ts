@@ -1,3 +1,4 @@
+import { refreshFoodUI } from './InventoryUI';
 import {SimulationClock,RenderTiming} from '../game/FrameTiming';
 import {MODE_NAMES,HARDSHIPS} from '../systems/Difficulty';
 import type {DifficultyMode,Hardship} from '../game/GameConfig';
@@ -198,6 +199,7 @@ export class App {
     return candidates.sort((a, b) => a.d - priority(a.kind) - b.d + priority(b.kind))[0];
   }
   refresh() {
+    refreshFoodUI(this);
     if (this.mode !== 'game') return;
     const s = this.game.state;
     const inspected=s.workers.find(w=>w.id===this.inspectedWorker),inspectedBuilding=this.inspectedStructure?this.game.settlement.structures(s.player,s.settings.renderDistance).find(b=>b.id===this.inspectedStructure):undefined;

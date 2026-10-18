@@ -593,3 +593,30 @@ button:focus-visible{outline:2px solid #f1c477;outline-offset:3px}
 .map-tools{border-top:1px solid #a48551;padding-top:16px;margin-top:16px}.map-tools input,.map-tools select{width:100%;min-width:0}.map-tools .button-row{flex-wrap:wrap}.map-tools .button-row button{min-height:44px}#map-note-list{display:flex;gap:8px;flex-wrap:wrap}#map-note-list button{max-width:100%;overflow-wrap:anywhere}#map-canvas{cursor:crosshair;touch-action:pan-y}
 
 #fps-counter{position:absolute;right:20px;top:72px;padding:5px 9px;background:#122b38ed;border-left:2px solid #d6aa68;font:600 12px 'Oxanium',monospace;color:#f0e4c9;z-index:4;pointer-events:none}#fps-counter[hidden]{display:none}.setting-help{font-size:15px;max-width:55ch;color:#b5c6cc}@media(max-width:700px){#fps-counter{top:66px;right:10px;font-size:10px;padding:4px 6px}}
+
+/* Field rations: authoritative effects and the shared, paused expedition clock. */
+.item-slot.edible{border-bottom-color:#86ad64}
+.edible-tag{position:absolute;top:3px;left:3px;font:700 8px 'Oxanium',monospace;color:#d9edb9;letter-spacing:.3px}
+.meal-kit{margin:16px 0;padding:12px;border-left:3px solid #63805a;background:#233a3210}
+.meal-heading{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font:700 12px 'Oxanium',monospace;margin-bottom:9px}
+.meal-heading span{color:#365244}
+.meal-kit .food-actions{margin:0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.meal-kit .food-actions button{height:auto;min-height:56px;text-align:left;padding:8px;gap:8px;font-size:13px}
+.meal-kit .food-actions button span{display:grid;gap:4px;flex:1}
+.meal-kit .food-actions small{font-size:11px}
+.meal-kit .food-actions button[data-cooling=true]{background:#b9bdb0;border-color:#879282}
+.meal-kit .food-actions button[data-empty=true]{color:#667466}
+.meal-kit>small{display:block;font-size:11px;line-height:1.6;color:#4c6153}
+.meal-clock{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:10px 0 6px;font:600 12px 'Oxanium',monospace}
+.meal-clock button{padding:6px 9px;font-size:11px;flex-shrink:0}
+.meal-cooldown-track{height:3px;background:#8c9a8140;margin-bottom:8px}
+.meal-cooldown-track i{display:block;height:100%;background:#8f6541}
+.inventory-modal #dialog-status{position:sticky;bottom:0;background:#c7ccbf;min-height:22px;line-height:1.6;padding:8px 0;border-top:1px solid #7b897a4d}
+.inventory-modal #dialog-status.meal-success{color:#285433;animation:meal-confirm .35s ease-out}
+@keyframes meal-confirm{from{background:#b0ce94}to{background:#c7ccbf}}
+@media(max-width:500px){.meal-clock{align-items:flex-start;flex-direction:column}.meal-kit{padding:10px}.meal-kit .food-actions button{padding:6px;gap:5px}.meal-kit .food-actions .item-icon{width:22px}.meal-kit .food-actions small{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.inventory-modal #dialog-status.meal-success{animation:none}}
+
+#meal-warning{color:#98382d;font:700 12px 'Oxanium',monospace;margin:0 0 9px}#meal-warning:empty{display:none}
+
+body:has(.modal-backdrop) #message{visibility:hidden}

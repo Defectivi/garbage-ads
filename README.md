@@ -268,3 +268,9 @@ The Map supports saved markers and named waypoint routes on charted ground, with
 Exports now use **format 3**; format-1/2 saves remain readable and the existing local slot is retained. Sandbox imports start fresh communities/exploration rather than restoring the old journal or economy. See [behavior, migration, performance and current limits](docs/COMMUNITIES_MAP_PERFORMANCE.md).
 
 Focused checks: `npm run test:communities` and `npm run test:performance`. Profiling writes actual results to ignored `test-results/render-performance.json`, using headless Edge with 4x CPU throttling rather than physical low-end hardware.
+
+## Harvesting and field rations
+
+Player axes and pickaxes use hand-attached downward strikes synchronized to the existing gathering tasks, with cosmetic recovery and cancellation cleanup. Rucksack food controls show effects, quantities, hunger/HP, success feedback and the shared three-second cooldown. Menus pause that countdown; Resume expedition continues it. Food effects and gathering speeds are unchanged. Eating at full hunger/HP still spends a portion, with capped benefits clearly explained.
+
+Run `npm run test:rations` for the focused browser checks. See [root causes, changed files, verification and limits](docs/HARVEST_AND_RATIONS.md).

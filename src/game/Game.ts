@@ -1,3 +1,4 @@
+import { FOOD, FOOD_COOLDOWN } from '../data/food';
 import {MapNotes} from '../systems/MapJournal';
 import {VillageCommunitySystem} from '../systems/VillageCommunitySystem';
 import {visitVillage,HARDSHIPS,actorMaxHP} from '../systems/Difficulty';
@@ -38,6 +39,7 @@ export class Game {
   readonly collectionEvents: { resource: Resource; amount: number; x: number; z: number }[] = [];
   readonly actionEvents: SettlementEvent[] = [];
   private action(event: SettlementEvent) { if(this.actionEvents.length>=24)this.actionEvents.shift();this.actionEvents.push(event); }
+  /** Completed pickup cue only; harvesting tools follow the live task instead. */
   lastGather = -100;
   gathering?:{node:Node;remaining:number};
   readonly terrainEvents:{id:string;x:number;z:number;scale:number}[]=[];
@@ -124,7 +126,7 @@ export class Game {
     if(this.gathering){
       const task=this.gathering;
       if((this.state.player.stunned??0)>0||len>.1||distance(task.node,this.state.player)>3||this.nodeRemaining(task.node)<=0){this.gathering=undefined;this.notify('Gathering cancelled.');}
-      else{const before=task.remaining;task.remaining-=dt;if(Math.floor(before/.65)!==Math.floor(task.remaining/.65))this.lastGather=this.state.elapsed;if(task.remaining<=1e-8){this.gathering=undefined;const result=this.gather(task.node);if(!result.ok)this.notify(result.error);}}
+      else{task.remaining-=dt;if(task.remaining<=1e-8){this.gathering=undefined;const result=this.gather(task.node);if(!result.ok)this.notify(result.error);}}
     }
     this.updateCampfires(dt);
     this.communities.update(dt);this.settlement.update(dt);this.updatePlayerShelter(dt);
@@ -137,7 +139,7 @@ export class Game {
     if(this.gathering||this.fishing)return{ok:false,error:'Finish the current action first.'};
     if(distance(node,this.state.player)>3||this.nodeRemaining(node)<=0)return{ok:false,error:'Approach an available resource.'};
     this.state.player.heading=Math.atan2(node.x-this.state.player.x,node.z-this.state.player.z);
-    this.gathering={node:{...node},remaining:gatherSeconds(this.nodeResource(node))};this.lastGather=this.state.elapsed;this.notify(`Gathering ${this.nodeResource(node)} / ${this.gathering.remaining}s`);return{ok:true};
+    this.gathering={node:{...node},remaining:gatherSeconds(this.nodeResource(node))};this.notify(`Gathering ${this.nodeResource(node)} / ${this.gathering.remaining}s`);return{ok:true};
   }
   breakNatural(node:Node):boolean {
     if(node.kind!=='tree'&&node.kind!=='boulder')return false;
@@ -185,9 +187,17 @@ export class Game {
     this.fishing=undefined;this.gathering=undefined;this.stopMovement();this.notify('Recovered at your furnace. Half of carried and stored supplies were lost.');return true;
   }
   eat(resource: 'fish' | 'meat'): Result {
-    const p=this.state.player;if(this.dead||(p.foodCooldown??0)>0)return{ok:false,error:'Wait three seconds between meals.'};
+    if(!Object.hasOwn(FOOD,resource))return{ok:false,error:'That item is not edible.'};
+    const p=this.state.player;
+    if(this.dead)return{ok:false,error:'You cannot eat after falling. Recover first.'};
+    if((p.foodCooldown??0)>1e-8)return{ok:false,error:`Wait three seconds between meals: ${p.foodCooldown!.toFixed(1)}s remaining.${this.paused?' Close the rucksack to resume the countdown.':''}`};
+    if(this.state.inventory[resource]<1)return{ok:false,error:`No ${resource} in your pack. Take food from storage first.`};
     const r=transact([{account:this.state.inventory,delta:single(resource,-1)}],this.state.settings);
-    if(r.ok){const hunger=resource==='meat'?3:2;p.hunger=Math.min(20,(p.hunger??20)+hunger);p.hp=Math.min(maxPlayerHP(this.state),p.hp+5);p.foodCooldown=3;this.notify(`Meal: +5 HP, +${hunger} hunger. Next meal in 3s.`);}return r;
+    if(r.ok){
+      const beforeHP=p.hp,beforeHunger=p.hunger??20,food=FOOD[resource];
+      p.hunger=Math.min(20,beforeHunger+food.hunger);p.hp=Math.min(maxPlayerHP(this.state),p.hp+food.health);p.foodCooldown=FOOD_COOLDOWN;
+      this.notify(`Ate ${resource}: +${p.hunger-beforeHunger} hunger, +${Math.max(0,p.hp-beforeHP)} HP. Next meal in 3s.${this.paused?' Close the rucksack to resume the countdown.':''}${beforeHunger===20&&beforeHP>=maxPlayerHP(this.state)?' Already full; one portion used.':''}`);
+    }return r;
   }
   stash(): Result {
     if (!this.state.furnaces.some(f => this.settlement.ready(f.id)&&distance(f, this.state.player) < 5) && !this.state.buildings.some(b => b.type === 'storage' &&!b.construction&&this.state.changes.structures?.[b.id]?.stage!=='gone'&&distance(b, this.state.player) < 5)) return { ok: false, error: 'Approach a furnace or storehouse.' };

@@ -11,6 +11,7 @@
     "test": "tsx --test tests/*.test.ts",
     "test:browser": "node tests/browser.mjs",
     "test:production": "node tests/production.mjs",
+    "test:rations": "node tests/harvest-food.mjs",
     "test:ui": "node tests/ui.mjs",
     "test:combat": "node tests/combat.mjs",
     "test:foundation": "node tests/foundation.mjs",
