@@ -1,3 +1,17 @@
+# Current export: format 3
+
+The historical format-2 sections below remain useful field documentation. Current exports use **formatVersion 3**; readers accept formats 1, 2 and 3 and terrain generations 1-6. The local key remains `frostbound.world.v2`. New fields:
+
+- `world.namingVersion: 1` selects procedural names; absent legacy worlds retain their fixed names and IDs.
+- `settings.budgetMeal`, `settings.showFPS` are optional booleans, defaulting to disabled.
+- `state.communities` maps generated village IDs to version-1 records: identity/name/seed, representative/furnace/store IDs, complete bounded stockpile, capacity, three resident IDs, guard roster, patrol points and security threat IDs/calm timer. Fuel remains authoritative in `state.furnaces`; guard health/equipment/patrol indices remain in `state.combat.actors`.
+- Village residents reuse `state.workers` with `communityId` and wood/stone/fish `assignment`. Generated house references and complete rosters are validated. Dead/missing residents are not silently recreated.
+- `state.journal` version 1 holds `nextId`, up to 200 markers `{id,label,x,z}`, up to 50 routes `{id,label,points}` with 2-128 points each, and up to 50,000 explored 16-unit cell keys. Note IDs are unique across both arrays. Labels are at most 64 printable NFC-normalized characters; finite coordinates remain within +/-1,000,000 and must be charted.
+
+Format 3 explicitly identifies resident-house references unsupported by older applications. Missing fields in format-1/2 saves migrate without regenerating terrain or discarding existing inventories, fuel or combat state. Full saves preserve mutable community/journal data; sandbox imports deliberately reset it. Resource bounds, atomic transactions, detached validation and replacement confirmation remain unchanged. See [implemented behavior and migration](COMMUNITIES_MAP_PERFORMANCE.md).
+
+---
+
 # Frostbound JSON format 2 / generations 1, 2 and 3
 
 Both documents require `format: "frostbound"`, `formatVersion: 2`, `mode`, and `world`. JSON is parsed as data and never evaluated. UI strings from files are never inserted into HTML. Files over 12 MB, nonfinite/fractional resource numbers, invalid types, IDs, coordinates or unsupported versions are rejected before any state replacement.

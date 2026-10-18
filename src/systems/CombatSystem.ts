@@ -48,7 +48,7 @@ export class CombatSystem {
   ensureEncounters() {
     const p = this.s.player, world = this.game.world;
     for (const v of world.villages()) if (distance(v, p) < 85) {
-      if (!this.s.furnaces.some(f => f.id === `${v.id}:furnace`)) this.s.furnaces.push({ id: `${v.id}:furnace`, x: v.x, z: v.z + 1, fuel: 240, charcoal: 0, level: 1 });
+      this.game.communities.ensure(v);
       if(this.s.world.mode==='hard')for(let i=0;i<5;i++)this.spawn(`raider:${v.id}:${i}`,'bandit',{x:v.x+18+i*1.7,z:v.z+12},`raiders:${v.id}`,i%2?'bow':'machete');
       for (let i = 0; i < v.guardCount; i++) { const angle = i * Math.PI * 2 / v.guardCount; this.spawn(`guard:${v.id}:${i}`, 'guard', { x: v.x + Math.cos(angle) * 10, z: v.z + Math.sin(angle) * 10 }, v.id, i % 2 ? 'machete' : 'shotgun', v.id); }
     }
@@ -76,11 +76,11 @@ export class CombatSystem {
   }
   units(): CombatUnit[] {
     const units: CombatUnit[] = this.s.player.shelter?[]:[{ ...this.s.player, id: 'player', kind: 'player' }];
-    for (const a of Object.values(this.c.actors)) if (a.hp > 0 && distance(a, this.s.player) < 85 && this.game.settlement.refuge(a.id)?.phase !== 'hidden') units.push({ ...a, kind: a.type === 'guard' ? 'guard' : 'enemy' });
-    for (const w of this.s.workers) if (w.hp > 0 && distance(w, this.s.player) < 85&&this.game.settlement.refuge(w.id)?.phase!=='hidden') units.push({ ...w, ...this.game.settlement.position(w.id,w),kind: 'npc' });
-    for (const r of this.game.world.settlements(this.s.player, 2)) { const npc = this.game.npc(r); if (npc.hp > 0&&this.game.settlement.refuge(npc.id)?.phase!=='hidden') units.push({ ...this.game.settlement.position(npc.id,r.trader), id: npc.id, hp: npc.hp, kind: 'npc', villageId: r.id.startsWith('village:') ? r.id : null }); }
-    for(const building of this.game.settlement.structures()){
-      const integrity=this.game.settlement.integrity(building);if(integrity.stage!=='gone'&&distance(building,this.s.player)<85)units.push({...building,hp:integrity.hp,kind:'building',radius:BUILDINGS[building.type].radius});
+    for (const a of Object.values(this.c.actors)) if (a.hp > 0 && (distance(a, this.s.player) < 85||this.game.communities.near(a)) && this.game.settlement.refuge(a.id)?.phase !== 'hidden') units.push({ ...a, kind: a.type === 'guard' ? 'guard' : 'enemy' });
+    for (const w of this.s.workers) if (w.hp > 0 && (distance(w, this.s.player) < 85||!!w.communityId)&&this.game.settlement.refuge(w.id)?.phase!=='hidden') units.push({ ...w, ...this.game.settlement.position(w.id,w),villageId:w.communityId,kind: 'npc' });
+    for (const r of [...new Map([...this.game.world.settlements(this.s.player,2),...this.game.world.villages().filter(v=>!!this.s.communities?.[v.id])].map(v=>[v.id,v])).values()]) { const npc = this.game.npc(r); if (npc.hp > 0&&this.game.settlement.refuge(npc.id)?.phase!=='hidden') units.push({ ...this.game.settlement.position(npc.id,r.trader), id: npc.id, hp: npc.hp, kind: 'npc', villageId: r.id.startsWith('village:') ? r.id : null }); }
+    for(const building of [...new Map([this.s.player,...this.game.communities.active().map(c=>this.game.communities.village(c.id)!)].flatMap(p=>this.game.settlement.structures(p)).map(b=>[b.id,b])).values()]){
+      const integrity=this.game.settlement.integrity(building);if(integrity.stage!=='gone'&&(distance(building,this.s.player)<85||this.game.communities.near(building)))units.push({...building,hp:integrity.hp,kind:'building',radius:BUILDINGS[building.type].radius});
     }
     return units;
   }
@@ -94,8 +94,10 @@ export class CombatSystem {
     if (before <= 0 || target.id==='player'&&(!!this.s.player.shelter||(this.s.player.invulnerable??0)>0||spawnProtected(this.s))) return 0;
     const enemy=this.c.actors[target.id];
     if(enemy&&(enemy.type==='wolf'||enemy.type==='polar_bear')&&isNight(this.s))amount*=.75;
-    if(enemy&&this.hostile(enemy)&&inPlayerHeat(this.s,enemy)&&ownerId!=='furnace')amount*=2;
+    if(enemy&&this.hostile(enemy)&&this.defensiveHeat(enemy)&&ownerId!=='furnace')amount*=2;
     if (target.id === 'player' && inPlayerHeat(this.s)) amount *= .5;
+    const communityId=target.villageId??this.s.workers.find(w=>w.id===target.id)?.communityId??(enemy?.type==='guard'?enemy.villageId:undefined),community=communityId?this.s.communities?.[communityId]:undefined;
+    if(community){const f=this.s.furnaces.find(f=>f.id===community.furnaceId);if(f&&structureIntact(this.s,f.id)&&distance(f,target)<heatRadius(f))amount*=.5;}
     if (target.id === 'player'){this.s.player.hp = Math.max(0, this.s.player.hp - amount);if(amount>0&&this.s.furnaces.some(f=>structureIntact(this.s,f.id)&&distance(f,this.s.player)<heatRadius(f)))this.s.player.recentDamage=3;}
     else if (this.c.actors[target.id]) {
       const actor = this.c.actors[target.id], wasAlive = actor.hp > 0; actor.hp = Math.max(0, actor.hp - amount);
@@ -164,7 +166,7 @@ export class CombatSystem {
     if(owner?.type==='polar_bear'&&this.s.world.mode==='easy'&&!owner.alerted)return false;
     if(owner?.type==='wolf'&&this.s.world.mode==='hard'&&this.c.actors[target.id]?.type==='bandit')return false;
     if(owner?.type==='wolf')return (target.kind!=='building'||target.id===this.s.player.shelter?.houseId)&&this.c.actors[target.id]?.groupId!==owner.groupId;
-    return owner?.type === 'guard' ? target.kind === 'enemy' || (target.kind === 'player'||target.id===this.s.player.shelter?.houseId) && !!owner.villageId && this.c.villageAlerts.includes(owner.villageId) : target.kind !== 'enemy'||this.c.actors[target.id]?.type==='wolf';
+    return owner?.type === 'guard' ? target.kind === 'enemy'&&this.c.actors[target.id]?.type!=='guard'&&!(this.c.actors[target.id]?.type==='polar_bear'&&this.s.world.mode==='easy'&&!this.c.actors[target.id]?.alerted) || (target.kind === 'player'||target.id===this.s.player.shelter?.houseId) && !!owner.villageId && this.c.villageAlerts.includes(owner.villageId) : target.kind !== 'enemy'||this.c.actors[target.id]?.type==='wolf';
   }
   fireWeapon(ownerId: string, from: Point, target: Point, weapon: WeaponType|'punch', weaponId?:string) {
     if (ownerId !== 'player') this.actorAttacks.set(ownerId, this.s.elapsed);
@@ -252,14 +254,15 @@ export class CombatSystem {
       if(this.game.settlement.refuge(actor.id)?.phase!=='hidden'){this.heatEntry(actor);this.heatBurn(actor,dt);}
       if(actor.hp<=0)continue;
       actor.stunned=Math.max(0,(actor.stunned??0)-dt);if(actor.stunned>0){this.velocities.delete(actor.id);continue;}
-      if(distance(actor,this.s.player)>70&&!(actor.type==='wolf'&&actor.pursuitId==='player')){if(actor.type!=='wolf'){delete actor.pursuitId;actor.alerted=false;actor.retreating=true;}continue;}
+      if(distance(actor,this.s.player)>70&&!(actor.type==='guard'&&actor.villageId&&this.s.communities?.[actor.villageId])&&!this.game.communities.near(actor)&&!(actor.type==='wolf'&&actor.pursuitId==='player')){if(actor.type!=='wolf'){delete actor.pursuitId;actor.alerted=false;actor.retreating=true;}continue;}
       actor.cooldown = Math.max(0, actor.cooldown - dt); actor.roamTimer = Math.max(0, actor.roamTimer - dt);
-      if(this.game.settlement.refuge(actor.id)){this.velocities.delete(actor.id);continue;}
+      if(this.game.settlement.refuge(actor.id)){this.velocities.delete(actor.id);delete actor.pursuitId;continue;}
       const guard = actor.type === 'guard';
       const wolf=actor.type==='wolf';
-      const targets=units.filter(u=>(u.id==='player'?this.s.player.hp:this.c.actors[u.id]?.hp??this.s.workers.find(w=>w.id===u.id)?.hp??this.s.changes.npcs[u.id]?.hp??u.hp)>0&&this.canHit(actor.id,u));
+      const village=actor.type==='guard'&&actor.villageId?this.game.communities.village(actor.villageId):undefined;
+      const targets=units.filter(u=>(!village||distance(u,village)<30)&&(u.id==='player'?this.s.player.hp:this.c.actors[u.id]?.hp??this.s.workers.find(w=>w.id===u.id)?.hp??this.s.changes.npcs[u.id]?.hp??u.hp)>0&&this.canHit(actor.id,u));
       let target=actor.pursuitId?targets.find(u=>u.id===actor.pursuitId):undefined;
-      if(target&&!wolf&&distance(target,actor)>40){actor.retreating=true;actor.alerted=false;target=undefined;delete actor.pursuitId;}
+      if(target&&!wolf&&(distance(target,actor)>40||!!village&&distance(actor,village)>32)){actor.retreating=true;actor.alerted=false;target=undefined;delete actor.pursuitId;}
       if(actor.retreating){if(distance(actor,{x:actor.homeX,z:actor.homeZ})>4){this.walk(actor,{x:actor.homeX,z:actor.homeZ},dt,1.8);continue;}actor.retreating=false;}
       if(!target)target=targets.filter(u=>distance(u,actor)<(actor.alerted?30:snow?27:guard?16:18)&&(!wolf||u.kind!=='building'||u.id===this.s.player.shelter?.houseId)).sort((a,b)=>distance(a,actor)-distance(b,actor)||a.id.localeCompare(b.id)).find(u=>!this.blocked(actor,u,u.id));
       if(target)actor.pursuitId=target.id;else delete actor.pursuitId;
@@ -272,6 +275,7 @@ export class CombatSystem {
         }
         if (d > (weapon === 'bow' ? 8 : weapon === 'molotov' ? 6 : weapon === 'shotgun' ? 2.2 : 1.35)+(target.kind==='building'?(target.radius??0):0)) this.walk(actor, target, dt, actor.type==='wolf'?3.2:actor.type === 'polar_bear' ? 2.1 : 1.8);
       } else {
+        if(village){const patrol=this.s.communities?.[village.id]?.patrol;if(patrol?.length){actor.patrolIndex=(actor.patrolIndex??Number(actor.id.split(':').at(-1))??0)%patrol.length;let waypoint=patrol[actor.patrolIndex];if(distance(actor,waypoint)<1.5){actor.patrolIndex=(actor.patrolIndex+1)%patrol.length;waypoint=patrol[actor.patrolIndex];}this.walk(actor,waypoint,dt,1.1);continue;}}
         if (actor.roamTimer <= 0) { actor.roamTimer = 3 + derive(this.s.world.seeds.wildlife, actor.id, Math.floor(this.s.elapsed / 4)) % 5; const a = derive(this.s.world.seeds.wildlife, actor.id, Math.floor(this.s.elapsed / 5)) / 4294967296 * Math.PI * 2; actor.targetX = actor.homeX + Math.cos(a) * (guard ? 5 : 11); actor.targetZ = actor.homeZ + Math.sin(a) * (guard ? 5 : 11); }
         this.walk(actor, { x: actor.targetX, z: actor.targetZ }, dt, 1.1);
       }
@@ -299,20 +303,22 @@ export class CombatSystem {
     actor.heading += Math.atan2(Math.sin(angle - actor.heading), Math.cos(angle - actor.heading)) * (1 - Math.exp(-dt * 8));
   }
   private hostile(actor:Actor){return (actor.type!=='polar_bear'||this.s.world.mode!=='easy'||actor.alerted)&&(actor.type!=='guard'||!!actor.villageId&&this.c.villageAlerts.includes(actor.villageId));}
+  private defensiveSources(actor:Actor){return [...playerHeatSources(this.s),...(actor.type==='guard'?[]:this.s.furnaces.filter(f=>Object.values(this.s.communities??{}).some(c=>c.furnaceId===f.id)&&structureIntact(this.s,f.id)&&heatRadius(f)>0))];}
+  defensiveHeat(actor:Actor){return this.defensiveSources(actor).some(f=>distance(f,actor)<heatRadius(f));}
   private heatBurn(actor:Actor,dt:number){
-    if(!this.hostile(actor)||!inPlayerHeat(this.s,actor)){actor.heatBurn=0;return;}
+    if(!this.hostile(actor)||!this.defensiveHeat(actor)){actor.heatBurn=0;return;}
     actor.heatBurn=(actor.heatBurn??0)+dt;
     while(actor.heatBurn>=1-1e-8&&actor.hp>0){actor.heatBurn=Math.max(0,actor.heatBurn-1);this.damage({...actor,kind:actor.type==='guard'?'guard':'enemy'},12,'furnace');}
   }
   private heatEntry(actor: Actor) {
     const hostile = this.hostile(actor);
-    const sources = playerHeatSources(this.s);
+    const sources = this.defensiveSources(actor);
     const inside = sources.some(f => distance(f,actor) < heatRadius(f) + (actor.heatInside ? .35 : 0));
     if (inside && !actor.heatInside && hostile && actor.hp > 0) this.damage({ ...actor, kind: actor.type === 'guard' ? 'guard' : 'enemy' }, actorMaxHP(this.s,actor.type) * .1, 'furnace');
     actor.heatInside = inside;
   }
   private walk(actor: Actor, target: Point, dt: number, speed: number) {
-    if(this.hostile(actor)&&inPlayerHeat(this.s,actor))speed*=.5;
+    if(this.hostile(actor)&&this.defensiveHeat(actor))speed*=.5;
     if(this.game.world.isWater(actor.x,actor.z))speed*=.1;
     const d = distance(actor,target), oldVelocity = this.velocities.get(actor.id) ?? {x:0,z:0};
     const dx = d > .5 ? (target.x-actor.x)/d*speed : 0, dz = d > .5 ? (target.z-actor.z)/d*speed : 0;

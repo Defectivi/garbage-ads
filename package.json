@@ -33,7 +33,9 @@
     "test:field": "node tests/field-ui-night.mjs",
     "test:cliffs": "node tests/cliffs-loading.mjs",
     "test:workshop": "node tests/workshop-shelter.mjs",
-    "test:difficulty": "node tests/difficulty.mjs"
+    "test:difficulty": "node tests/difficulty.mjs",
+    "test:communities": "node tests/community-map-performance.mjs",
+    "test:performance": "node tests/render-performance.mjs"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.3.0",

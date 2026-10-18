@@ -14,16 +14,16 @@ try {
   assert.equal(await page.title(), 'FYWS: Frostbound');
   await page.locator('#seed').fill('0'); await page.locator('#new-world').click();await page.locator('#resources').waitFor();await isolateStartingCamp(page);
   await page.waitForFunction(() => window.__frostbound.game.state.elapsed > .2);
-  assert.match(await page.locator('#seed-hud').textContent(), /SEED 0 \/ GEN 5/);
+  assert.match(await page.locator('#seed-hud').textContent(), /SEED 0 \/ GEN 6/);
   await page.waitForFunction(() => window.__frostbound.renderer.chunks.has('2,0'));
   const outerResources = await page.evaluate(() => {
     const { game, renderer } = window.__frostbound, group = renderer.chunks.get('2,0');
     const expected = game.nodesInChunk(game.world.chunk(2,0)).filter(n => n.kind!=='tree'&&!game.world.isWater(n.x,n.z) && game.nodeRemaining(n) > 0).length;
-    const rendered = group.children.filter(o => o.isInstancedMesh && (o.geometry.type === 'DodecahedronGeometry' || o.geometry.parameters.radiusTop === .4)).reduce((sum,o) => sum + o.count, 0);
+    const rendered = group.children.filter(o => o.isInstancedMesh && (o.geometry.type === 'DodecahedronGeometry' || o.geometry.parameters?.radiusTop === .4)).reduce((sum,o) => sum + o.count, 0);
     const trees=game.nodesInChunk(game.world.chunk(2,0)).filter(n=>n.kind==='tree').length,treeParts=group.children.filter(o=>o.isInstancedMesh&&o.userData.treeIds).map(o=>o.count);
-    return { expected, rendered,trees,treeParts };
+    const canopyBounds=group.children.filter(o=>o.isInstancedMesh&&o.userData.treeIds&&o.geometry.type==='BufferGeometry').map(o=>{o.geometry.computeBoundingBox();return[o.geometry.boundingBox.min.y,o.geometry.boundingBox.max.y];});return { expected, rendered,trees,treeParts,canopyBounds };
   });
-  assert(outerResources.expected > 0); assert.equal(outerResources.rendered, outerResources.expected);assert(outerResources.treeParts.every(n=>n===outerResources.trees));if(outerResources.trees)assert.equal(outerResources.treeParts.length,7);
+  assert(outerResources.expected > 0); assert.equal(outerResources.rendered, outerResources.expected);assert(outerResources.treeParts.every(n=>n===outerResources.trees));if(outerResources.trees){assert.equal(outerResources.treeParts.length,3);assert.equal(outerResources.canopyBounds.length,2);assert(Math.abs(outerResources.canopyBounds[0][0]-1.25)<.00001);assert(Math.abs(outerResources.canopyBounds[0][1]-6.25)<.00001);assert(Math.abs(outerResources.canopyBounds[1][1]-6.425)<.00001);}
   const position = () => page.evaluate(() => ({ x: window.__frostbound.game.state.player.x, z: window.__frostbound.game.state.player.z }));
   await page.evaluate(() => { window.__frostbound.renderer.yaw = 0; });
   const start = await position();

@@ -1,6 +1,6 @@
 # FYWS: Frostbound
 
-Official repository identity: **`FYWS-Frostbound`**. Open `frostbound.code-workspace` to display that name in VS Code. The existing folder stays in place. No GitHub remote is configured; no remote rename or publication has occurred.
+Official repository identity: **`FYWS-Frostbound`**. Open `frostbound.code-workspace` to display that name in VS Code. The existing folder stays in place. The configured origin is `https://github.com/Defectivi/garbage-ads.git`; no remote rename has occurred.
 
 FYWS means **Fuck You Whiteout Survival**. The project began with frustration at misleading mobile-game advertisements. The game is called **Frostbound**, uses original procedural artwork, and has no affiliation with Whiteout Survival or its publisher.
 
@@ -95,7 +95,7 @@ Generations 3 and 4 require all eight seeds. Generations 1 and 2 remain supporte
 
 ## Saves and sandbox JSON
 
-**Local save:** one v2 slot under `frostbound.world.v2`, saved manually or every 20 seconds of active simulation. No old world is automatically loaded over the main menu; use **Load Save**. Storage failures are reported; export JSON as an alternative. v1's `frostbound-save` key is left untouched.
+**Local save:** one local slot under `frostbound.world.v2`, saved manually or every 20 seconds of active simulation. No old world is automatically loaded over the main menu; use **Load Save**. Storage failures are reported; export JSON as an alternative. v1's `frostbound-save` key is left untouched.
 
 **Full save** restores the exact mutable world. **Sandbox configuration** always creates a clean player at home and applies starting balances, home furnace parameters, settings and generation rules. It does **not** carry over old buildings, positions, NPC trades, discoveries, node depletion, or fishing catches. These are deliberately different import modes.
 
@@ -175,7 +175,7 @@ One world unit is one tile. Weapon values follow the current balance update; the
 
 Fire converts timber nodes and standing trees into gatherable charcoal after ten seconds. Charcoal adds 30 base fuel seconds; wood adds 10. Both use the level-adjusted burn interval, and F consumes charcoal first. A whiteout starts after 90 seconds, lasts 55 seconds, triples fuel consumption, reduces visibility, and increases enemy detection distance. Clear intervals thereafter last 90-150 seconds. Furnace reinforcement and chimney models change at every fifth furnace level through level 50; heat radius expands only at levels 5, 10 and 20, for three expansions maximum. See the [complete upgrade cost table](docs/FURNACE_UPGRADES.md).
 
-Save format 2 includes HP, actors, equipment durability, projectiles, fire, bleed, drops, weather, village hostility, and burned terrain. Format 1 files migrate with full health, a starter sword, and zero charcoal. Full saves retain combat state; sandbox imports reset encounters but retain the configured starting equipment. JSON imports validate all combat fields before replacing the active world.
+Full saves include HP, actors, equipment durability, projectiles, fire, bleed, drops, weather, village hostility, and burned terrain. Format 1 files migrate with full health, fresh unarmed combat state, and zero charcoal. Full saves retain combat state; sandbox imports reset encounters but retain the configured starting equipment. JSON imports validate all combat fields before replacing the active world.
 
 Run `node tests/combat.mjs` for desktop/mobile combat UI smoke checks (requires the dev server). `npm test` includes combat simulation and persistence regressions.
 
@@ -258,3 +258,13 @@ Press **F** beside an unoccupied, completed hut to hide; press **F** again (or u
 Player chopping/mining now shows an axe/pickaxe and faces the resource during the deliberate action. Movement continues to set ordinary facing. Furnaces have stronger fire visuals and bounded floating embers, with reduced-motion support. Resource counters sit beside the title, and blizzard maps use pale mist instead of opaque darkness. HP is red below 15%, green otherwise and blue at full health; hunger is red below 15%, amber below 50%, and green from 50-100%. Critical HP adds a slow, reduced-motion-aware edge warning.
 
 See [Workshop and shelter verification](docs/WORKSHOP_AND_SHELTER.md). Run `npm run test:workshop` for the focused browser suite.
+
+## Communities, field notes and low-end rendering
+
+New worlds have procedural village names. Persistent residents maintain their own stores, level-5 furnaces, guard patrols and shelter alerts. Legacy village IDs, sites and names remain compatible. Activated villages continue logical work outside the rendered area; village supplies stay separate from player camp stores.
+
+The Map supports saved markers and named waypoint routes on charted ground, with editing/deletion and storm/unexplored-terrain restrictions. Settings includes reversible **Budget Meal Mode** (30 FPS rendering target) and an optional measured FPS/frame-time counter. Simulation runs independently of rendering cadence.
+
+Exports now use **format 3**; format-1/2 saves remain readable and the existing local slot is retained. Sandbox imports start fresh communities/exploration rather than restoring the old journal or economy. See [behavior, migration, performance and current limits](docs/COMMUNITIES_MAP_PERFORMANCE.md).
+
+Focused checks: `npm run test:communities` and `npm run test:performance`. Profiling writes actual results to ignored `test-results/render-performance.json`, using headless Edge with 4x CPU throttling rather than physical low-end hardware.

@@ -77,3 +77,9 @@ Nearest-hostile assistance on left click/touch Attack, visible actual-damage num
 ## Subsequent user-directed survival, resource and settlement expansion
 
 Implemented in three checked increments: fresh-world/unarmed/healing/heat-debuff/respawn rules; timed collection and staged natural resources; and persistent building integrity, civilian sheltering and scattered village loot. The user clarified repeating healing and that weighted loot is scattered around villages. Buildings are bleed-immune; armed guards keep defending under the optional clarification default. See [EXPANSION.md](EXPANSION.md) for assumptions, save validation, behavior and verification. This does not mark the remaining original roadmap phases complete.
+
+## User-directed communities, map tools and performance increment
+
+The original roadmap remains historical; unrelated phases are not declared complete. This request authorizes persistent village names/economies/security, map notes/routes, targeted rendering options and measured FPS, followed by commit and push. Inspection started from clean `e4d0f6f` with Three.js and the existing origin retained.
+
+Implemented stages: versioned naming/legacy fallbacks; persistent community records; reuse of harvesting/navigation/transactions; separate stores and level-5 furnace maintenance; shared combat patrols/retreat/distant simulation; charted marker/waypoint tools; profiling and tree draw-call batching; reversible Budget Meal Mode and independent simulation clock; measured FPS; format-3 exports with old-save reads. See [current behavior, limits and actual verification](COMMUNITIES_MAP_PERFORMANCE.md). Dynamic founding/politics, offline progression, unrelated planned controls and physical-device/endurance testing are not claimed.

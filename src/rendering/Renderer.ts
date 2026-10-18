@@ -1,3 +1,4 @@
+import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {fireVisual,animateFire,furnaceEmbers} from './FireVisuals';
 import {cliffMesh} from './CliffMesh';
 import {visibilityAt} from '../systems/Visibility';
@@ -25,6 +26,7 @@ export class Renderer {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(48, 1, .1, 220);
   readonly webgl: THREE.WebGLRenderer;
+  private budgetMode:boolean|undefined;private lastShadow=-Infinity;
   yaw = .45; zoom = 34; private target = new THREE.Vector3();
   private dirtyChunks = new Set<string>(); private chunks = new Map<string, THREE.Group>(); private entities = new THREE.Group(); private markers = new THREE.Group();
   readonly playerCharacter = new PlayerCharacter(); private player = this.playerCharacter.object; private dynamic = new Map<string, THREE.Group>();
@@ -121,10 +123,11 @@ export class Renderer {
     const ground = this.mesh(terrain, mat(0xffffff, { vertexColors: true })); ground.castShadow = false; g.add(ground);
     const trees = data.trees.map((t,i)=>({...t,id:`tree:${data.cx}:${data.cz}:${i}`})).filter((t) => !w.bridgeAt(t.x,t.z)&&!this.game.state.combat.charredTrees.includes(t.id)&&this.game.state.changes.terrain?.[t.id]!=='felled').map(t => ({ ...t, y: w.height(t.x, t.z) }));
     this.instance(g, new THREE.CylinderGeometry(.16, .25, 2.2, 5), this.materials.wood, trees.map(t => ({ id:t.id, x: t.x, y: t.y + t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
-    for (let layer = 0; layer < 3; layer++) {
-      const scale = 1 - layer * .23;
-      this.instance(g, new THREE.ConeGeometry(1.7 * scale, 2.5, 7), this.materials.dark, trees.map(t => ({ id:t.id, x: t.x, y: t.y + (2.5 + layer * 1.25) * t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
-      this.instance(g, new THREE.ConeGeometry(1.78 * scale, 2.35, 7), this.materials.snow, trees.map(t => ({ id:t.id, x: t.x, y: t.y + (2.75 + layer * 1.25) * t.scale, z: t.z, sx: t.scale, sy: t.scale, sz: t.scale })));
+    // Identical crowns, two material batches instead of six draw calls per chunk.
+    for(const snowy of [false,true]){
+      const layers=Array.from({length:3},(_,layer)=>new THREE.ConeGeometry((snowy?1.78:1.7)*(1-layer*.23),snowy?2.35:2.5,7).translate(0,(snowy?2.75:2.5)+layer*1.25,0));
+      const canopy=mergeGeometries(layers)!;layers.forEach(g=>g.dispose());
+      this.instance(g,canopy,snowy?this.materials.snow:this.materials.dark,trees.map(t=>({id:t.id,x:t.x,y:t.y,z:t.z,sx:t.scale,sy:t.scale,sz:t.scale})));
     }
     const stumps=data.trees.map((t,i)=>({...t,id:`tree:${data.cx}:${data.cz}:${i}`})).filter(t=>this.game.state.changes.treeRegrowth?.[t.id]!==undefined);
     this.instance(g,new THREE.CylinderGeometry(.25,.36,.55,7),this.materials.wood,stumps.map(t=>({id:t.id,x:t.x,y:w.height(t.x,t.z)+.25,z:t.z,sx:t.scale,sy:1,sz:t.scale})));
@@ -197,13 +200,13 @@ export class Renderer {
     for(let layer=0;layer<3;layer++){const size=1-layer*.23;const leaves=this.mesh(new THREE.ConeGeometry(1.7*size,2.5,7),this.materials.dark,0,(2.5+layer*1.25)*scale),snow=this.mesh(new THREE.ConeGeometry(1.78*size,2.35,7),this.materials.snow,0,(2.75+layer*1.25)*scale);leaves.scale.setScalar(scale);snow.scale.setScalar(scale);g.add(leaves,snow);}return g;
   }
   private terrainFeedback(dt:number){
-    const node=this.game.gathering?.node??[...this.game.harvestTargets.values()].find(n=>n.kind==='tree'),reduced=this.reducedMotion.matches;
+    const node=this.game.gathering?.node??[...this.game.harvestTargets.values()].find(n=>n.kind==='tree'&&this.chunks.has(`${Math.floor(n.x/this.game.world.spec.config.chunkSize)},${Math.floor(n.z/this.game.world.spec.config.chunkSize)}`)),reduced=this.reducedMotion.matches;
     if(this.shaking?.id!==node?.id){if(this.shaking)for(const e of this.shaking.entries)if(e.mesh.parent){e.mesh.setMatrixAt(e.index,e.matrix);e.mesh.instanceMatrix.needsUpdate=true;}this.shaking=undefined;}
     if(node?.kind==='tree'&&!this.shaking){const entries:{mesh:THREE.InstancedMesh;index:number;matrix:THREE.Matrix4}[]=[];for(const chunk of this.chunks.values())chunk.traverse(o=>{if(o instanceof THREE.InstancedMesh){const index=(o.userData.treeIds as string[]|undefined)?.indexOf(node.id)??-1;if(index>=0){const matrix=new THREE.Matrix4();o.getMatrixAt(index,matrix);entries.push({mesh:o,index,matrix});}}});this.shaking={id:node.id,entries};}
     if(this.shaking&&!reduced){const offset=Math.sin(this.game.state.elapsed*45)*.045;for(const e of this.shaking.entries)if(e.mesh.parent){const matrix=e.matrix.clone();matrix.elements[12]+=offset;e.mesh.setMatrixAt(e.index,matrix);e.mesh.instanceMatrix.needsUpdate=true;}}
     for(const event of this.game.terrainEvents.splice(0)){
       for(const chunk of this.chunks.values())chunk.traverse(o=>{if(o instanceof THREE.InstancedMesh){const ids=o.userData.treeIds as string[]|undefined;if(!ids)return;for(let i=0;i<ids.length;i++)if(ids[i]===event.id){o.setMatrixAt(i,new THREE.Matrix4().makeScale(0,0,0));o.instanceMatrix.needsUpdate=true;}}});
-      if(!reduced){if(this.falls.length>=8)this.dispose(this.falls.shift()!.group);const group=this.treeModel(event.scale);group.position.set(event.x,this.game.world.height(event.x,event.z),event.z);group.rotation.y=Math.atan2(event.x-this.game.state.player.x,event.z-this.game.state.player.z)+Math.PI/2;group.name='falling-tree';this.scene.add(group);this.falls.push({group,age:0});}
+      if(!reduced&&this.chunks.has(`${Math.floor(event.x/this.game.world.spec.config.chunkSize)},${Math.floor(event.z/this.game.world.spec.config.chunkSize)}`)){if(this.falls.length>=8)this.dispose(this.falls.shift()!.group);const group=this.treeModel(event.scale);group.position.set(event.x,this.game.world.height(event.x,event.z),event.z);group.rotation.y=Math.atan2(event.x-this.game.state.player.x,event.z-this.game.state.player.z)+Math.PI/2;group.name='falling-tree';this.scene.add(group);this.falls.push({group,age:0});}
     }
     this.falls=this.falls.filter(f=>{f.age+=this.game.paused?0:dt;f.group.rotation.z=-(Math.min(1,f.age/.9)**2)*Math.PI/2;if(f.age>=1){this.dispose(f.group);return false;}return true;});
   }
@@ -225,11 +228,11 @@ export class Renderer {
   private dispose(group: THREE.Group) {
     group.traverse(o => { o.userData.ownedTexture?.dispose();if (o instanceof THREE.Mesh||o instanceof THREE.Line||o instanceof THREE.Points) { if (o instanceof THREE.InstancedMesh) o.dispose(); o.geometry.dispose(); const mats = Array.isArray(o.material) ? o.material : [o.material]; for (const m of mats) if (!Object.values(this.materials).includes(m as THREE.MeshStandardMaterial)) m.dispose(); } }); group.removeFromParent();
   }
-  refreshChunks(ids:Iterable<string>=this.chunks.keys()) { for (const id of ids) this.dirtyChunks.add(id); }
+  refreshChunks(ids:Iterable<string>=this.chunks.keys()) { for (const id of ids) if(this.chunks.has(id))this.dirtyChunks.add(id); }
   private clearChunks() { for (const g of this.chunks.values()) this.dispose(g); this.chunks.clear(); this.dirtyChunks.clear(); }
   resize() { const w = this.host.clientWidth, h = this.host.clientHeight; this.webgl.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
   readonly loadStats={chunks:0,total:0,durationMs:0,maxChunkMs:0};
-  renderIdle(){this.webgl.render(this.scene,this.camera);}
+  renderIdle(){this.applyGraphics();this.webgl.render(this.scene,this.camera);}
   async prepareWorld(progress:(value:number,label:string)=>void){
     const start=performance.now(),world=this.game.world,radius=this.game.state.settings.renderDistance,coords=world.chunkCoordinates(this.game.state.player,radius+1),visible=new Set(world.chunkCoordinates(this.game.state.player,radius).map(c=>c.id));
     Object.assign(this.loadStats,{chunks:0,total:coords.length,durationMs:0,maxChunkMs:0});
@@ -283,10 +286,17 @@ export class Renderer {
     this.preview.traverse(o => { if (o instanceof THREE.Mesh) (o.material as THREE.MeshStandardMaterial).color.setHex(valid ? 0x69caad : 0xd8776c); });
     this.preview.rotation.y = rotation; this.preview.position.set(point.x, this.game.world.height(point.x, point.z), point.z);
   }
+  applyGraphics(){
+    const enabled=!!this.game.state.settings.budgetMeal;if(this.budgetMode===enabled)return;this.budgetMode=enabled;
+    this.webgl.setPixelRatio(Math.min(devicePixelRatio,enabled?1.25:1.75));this.sun.shadow.mapSize.set(enabled?512:1024,enabled?512:1024);this.sun.shadow.map?.dispose();this.sun.shadow.map=null;this.sun.shadow.mapPass?.dispose();this.sun.shadow.mapPass=null;
+    this.webgl.shadowMap.autoUpdate=!enabled;this.webgl.shadowMap.needsUpdate=true;this.lastShadow=-Infinity;this.resize();
+  }
   update(dt: number, time: number, moving: boolean, aiming = false) {
+    this.applyGraphics();if(!this.budgetMode||time-this.lastShadow>=.1){this.webgl.shadowMap.needsUpdate=true;this.lastShadow=time;}
+
     const game = this.game, p = game.state.player, height = game.world.walkHeight(p.x, p.z);
     this.flowTime.value=this.reducedMotion.matches?0:game.state.elapsed;
-    const storm=game.state.combat.weather.mode==='snow';this.weather.update(game.paused?0:dt,storm,p,height,this.reducedMotion.matches);
+    const storm=game.state.combat.weather.mode==='snow';this.weather.update(game.paused?0:dt,storm,p,height,this.reducedMotion.matches,!!this.budgetMode);
     const fog=this.scene.fog as THREE.Fog,intensity=this.snowfall.userData.intensity;
     const visibility=weatherVisibility(this.zoom,game.state.settings.renderDistance,intensity);fog.near=visibility.near;fog.far=visibility.far;
     const night=nightBlend(game.state);this.sun.intensity=THREE.MathUtils.lerp(3,1.7,intensity)*(1-night*.88);
@@ -341,7 +351,7 @@ export class Renderer {
         const aura=group.getObjectByName('heat-aura') as THREE.Mesh|undefined;
         if(aura?.userData.radius!==radius){if(aura)this.dispose(aura as unknown as THREE.Group);if(radius>0)group.add(furnaceAura(game,b,radius));}
         const liveAura=group.getObjectByName('heat-aura');if(liveAura)liveAura.userData.clock.value=this.reducedMotion.matches?0:game.state.elapsed;
-        const embers=group.getObjectByName('heat-embers');if(embers?.userData.radius!==radius){if(embers)this.dispose(embers as THREE.Group);if(radius>0)group.add(furnaceEmbers(game,b,radius));}const liveEmbers=group.getObjectByName('heat-embers');if(liveEmbers)liveEmbers.userData.clock.value=this.reducedMotion.matches?0:game.state.elapsed;
+        const embers=group.getObjectByName('heat-embers');if(embers?.userData.radius!==radius){if(embers)this.dispose(embers as THREE.Group);if(radius>0)group.add(furnaceEmbers(game,b,radius));}const liveEmbers=group.getObjectByName('heat-embers');if(liveEmbers){liveEmbers.userData.clock.value=this.reducedMotion.matches?0:game.state.elapsed;(liveEmbers as THREE.Points).geometry.setDrawRange(0,this.budgetMode?12:Infinity);}
         const ring=group.getObjectByName('heat-ring')!;ring.visible=radius>0;
       }
     }
@@ -356,8 +366,8 @@ export class Renderer {
       const point=game.settlement.position(npc.id,settlement.trader),refuge=game.settlement.refuge(npc.id),dx=point.x-visual.object.position.x,dz=point.z-visual.object.position.z;visual.update(point,game.world.walkHeight(point.x,point.z),Math.hypot(dx,dz)>.01?Math.atan2(dx,dz):visual.object.rotation.y,game.paused?0:dt,game.state.elapsed);visual.object.visible=visual.ready&&refuge?.phase!=='hidden';visual.object.userData.refuge=refuge?.phase;
     }
     for(const worker of game.state.workers) {
-      if(worker.hp<=0)continue;residentIds.add(worker.id);let visual=this.residents.get(worker.id);
-      if(!visual){visual=new NPCCharacter(characterStyle('worker',worker.id).id);this.residents.set(worker.id,visual);this.entities.add(visual.object);}
+      if(worker.hp<=0||Math.hypot(worker.x-p.x,worker.z-p.z)>65)continue;residentIds.add(worker.id);let visual=this.residents.get(worker.id);
+      if(!visual){visual=new NPCCharacter(characterStyle(worker.communityId?'villager':'worker',worker.id).id);this.residents.set(worker.id,visual);this.entities.add(visual.object);}
       const harvest=game.harvestTargets.get(worker.id);
       const refuge=game.settlement.refuge(worker.id),dx=worker.x-visual.object.position.x,dz=worker.z-visual.object.position.z;visual.update(worker,game.world.walkHeight(worker.x,worker.z),harvest?Math.atan2(harvest.x-worker.x,harvest.z-worker.z):Math.hypot(dx,dz)>.01?Math.atan2(dx,dz):visual.object.rotation.y,game.paused?0:dt,game.state.elapsed,null,-100,worker.state==='gathering'&&!refuge,harvest?.resource==='wood'?'axe':harvest?.resource==='stone'?'pickaxe':undefined);visual.object.visible=visual.ready&&refuge?.phase!=='hidden';visual.object.userData.refuge=refuge?.phase;
     }

@@ -5,9 +5,12 @@ import { freshCombat, type CombatState } from './CombatState';
 export interface Point { x: number; z: number }
 export interface Furnace extends Point { id: string; fuel: number; level: number; charcoal: number }
 export interface Building extends Point { id: string; type: BuildingType; rotation: number; construction?:number; burnTime?:number; pulseTime?:number }
-export interface Worker extends Point { villageId?:string;relocated?:boolean; id: string; hutId: string; hp: number; sourceId: string | null; load: number; resource?:'wood'|'stone'|'fish'; progress: number; state: 'seeking' | 'gathering' | 'returning' | 'blocked' }
+export interface Worker extends Point { communityId?:string;assignment?:'wood'|'stone'|'fish'; villageId?:string;relocated?:boolean; id: string; hutId: string; hp: number; sourceId: string | null; load: number; resource?:'wood'|'stone'|'fish'; progress: number; state: 'seeking' | 'gathering' | 'returning' | 'blocked' }
 export interface NPCState { inventory: Balances; hp: number }
+export interface VillageCommunity {version:1;id:string;name:string;seed:number;leaderId:string;furnaceId:string;storageId:string;stockpile:Balances;capacity:number;workerIds:string[];guardIds:string[];patrol:Point[];security:{threatIds:string[];calmTime:number};}
 export interface GameState {
+  journal?:import('../systems/MapJournal').MapJournal;
+  communities?:Record<string,VillageCommunity>;
   world: WorldSpec;
   hardships?:import('./GameConfig').Hardship[];
   villageTrials?:string[];

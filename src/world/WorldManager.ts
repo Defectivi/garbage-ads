@@ -1,3 +1,4 @@
+import {villageNames} from './VillageNames';
 import { SeededRNG, derive, noise, smooth } from '../utils/SeededRNG';
 import type { WorldSpec } from '../game/GameConfig';
 import type { Point } from '../game/GameState';
@@ -21,6 +22,10 @@ export class WorldManager {
   private lakeCache=new Map<string,Lake|undefined>();
   private cache = new Map<string, Chunk>();
   constructor(readonly spec: WorldSpec) {}
+  private names?:Record<string,string>;
+  private villageOverrides=new Map<string,string>();
+  rememberVillageName(id:string,name:string){if(this.villageOverrides.get(id)!==name){this.villageOverrides.set(id,name);this.villageCache=undefined;}}
+  private villageCache?:Village[];
   private get villageSites(){const base=this.spec.generationVersion>=4?DISTANT_VILLAGE_SITES:VILLAGE_SITES;return this.spec.mode==='easy'?[...base,...EASY_VILLAGES]:base;}
   river(x: number, z: number) {
     const s = this.spec.seeds, row = Math.round((z - 48) / 128);
@@ -85,7 +90,7 @@ export class WorldManager {
   walkHeight(x:number,z:number){return this.bridgeAt(x,z)?.height??(this.isWater(x,z)?-.05:this.height(x,z));}
   isWater(x:number,z:number){if(this.bridgeAt(x,z))return false;const r=this.river(x,z);return this.spec.config.riverDensity>0&&r.distance<r.width+.2||this.lakes({x,z}).some(lake=>this.lakeDistance({x,z},lake)<1);}
   biome(x: number, z: number) { return noise(this.spec.seeds.biomes, x / 70, z / 70) > .56 ? 'Pinewood' : noise(this.spec.seeds.biomes, x / 25, z / 25) < .32 ? 'Rocky uplands' : 'Snowfields'; }
-  villages(): Village[] { return this.spec.generationVersion < 2 ? [] : this.villageSites.map((v, i) => ({ ...v, variant: i, houses: 3, trader: { x: v.x - 5, z: v.z + 5 }, container: { x: v.x + 5, z: v.z + 5 }, guardCount: 3 + derive(this.spec.seeds.villages, v.id) % 3 })); }
+  villages(): Village[] { if(this.villageCache)return [...this.villageCache];this.villageCache=this.spec.generationVersion < 2 ? [] : this.villageSites.map((v, i) => ({ ...v, ...(this.spec.namingVersion===1?{name:(this.names??(this.names=villageNames(this.spec.seeds.villages,this.villageSites)))[v.id]}:{}),...(this.villageOverrides.has(v.id)?{name:this.villageOverrides.get(v.id)!}:{}), variant: i, houses: 3, trader: { x: v.x - 5, z: v.z + 5 }, container: { x: v.x + 5, z: v.z + 5 }, guardCount: 3 + derive(this.spec.seeds.villages, v.id) % 3 }));return [...this.villageCache]; }
   settlements(point: Point, radius = 1): Ruin[] { const chunks = this.around(point, radius); return [...chunks.flatMap(c => c.ruins), ...this.villages().filter(v => distance(v, point) < this.spec.config.chunkSize * (radius + 1))]; }
   ruin(rx: number, rz: number): Ruin | undefined {
     if(this.spec.mode==='easy'&&derive(this.spec.seeds.ruins,'easy-ruin',rx,rz)%20!==0)return;

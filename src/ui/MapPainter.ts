@@ -1,8 +1,9 @@
+import {chartKey,visibleRouteSegments} from '../systems/MapJournal';
 import {visibilityAt,sightSettings} from '../systems/Visibility';
 import type {Game} from '../game/Game';
 import type {Ruin} from '../world/WorldManager';
 export function paintMap(canvas:HTMLCanvasElement,game:Game,known:Ruin[]){
- const ctx=canvas.getContext('2d')!,w=game.world,p=game.state.player;
+ const ctx=canvas.getContext('2d')!,w=game.world,p=game.state.player,explored=new Set(game.state.journal?.explored??[]);
  const screen=(x:number,z:number)=>({x:(x-p.x+128)*2,y:(z-p.z+128)*2});
  for(let x=0;x<512;x+=4)for(let y=0;y<512;y+=4){const wx=p.x-128+x/2,wz=p.z-128+y/2,r=w.river(wx,wz),water=w.isWater(wx,wz),height=w.height(wx,wz);
   ctx.fillStyle=water?'#387e9b':w.bridgeAt(wx,wz)?'#b58c58':height>11?'#788586':height>6?'#aab3aa':w.biome(wx,wz)==='Pinewood'?'#c4d3bf':'#e9ece0';ctx.fillRect(x,y,4,4);
@@ -19,6 +20,12 @@ export function paintMap(canvas:HTMLCanvasElement,game:Game,known:Ruin[]){
  for(const r of known)marker(r.x,r.z,r.id.startsWith('village:')?'#bd8740':'#745d58',r.name);
  marker(0,0,'#294e65','HOME');
  const sight=sightSettings(game.state);if(sight.weight>0){for(let x=0;x<512;x+=4)for(let y=0;y<512;y+=4){const fog=visibilityAt(game.state,{x:p.x-128+x/2,z:p.z-128+y/2});ctx.fillStyle=game.state.combat.weather.mode==='snow'?`rgba(207,222,230,${.12+fog*.78})`:`rgba(51,69,81,${Math.max(fog*.65,sight.night*.35)})`;ctx.fillRect(x,y,4,4);}}canvas.dataset.night=String(sight.night);canvas.dataset.fog=String(sight.weight);
+ // Unknown ground stays concealed. Notes are overlays, never terrain or AI navigation.
+ if(game.state.journal)for(let x=0;x<512;x+=4)for(let y=0;y<512;y+=4)if(!explored.has(chartKey({x:p.x-128+x/2,z:p.z-128+y/2}))){ctx.fillStyle=game.state.combat.weather.mode==='snow'?'#c0d0d8':'#273e49';ctx.fillRect(x,y,4,4);}
+ for(const path of game.state.journal?.paths??[]){ctx.strokeStyle='#dfb65e';ctx.lineWidth=3;ctx.setLineDash([6,4]);for(const[a,b]of visibleRouteSegments(game.state,path.points,p)){const s=screen(a.x,a.z),e=screen(b.x,b.z);ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(e.x,e.y);ctx.stroke();}ctx.setLineDash([]);}
+
+ for(const note of game.state.journal?.markers??[])marker(note.x,note.z,'#6a4aa0',note.label,'circle');
+ canvas.dataset.markers=String(game.state.journal?.markers.length??0);canvas.dataset.routes=String(game.state.journal?.paths.length??0);
  marker(p.x,p.z,'#c74d38','YOU','circle');canvas.dataset.trees=String(trees);
  ctx.fillStyle='#263f48';ctx.font='bold 12px Oxanium,monospace';ctx.fillText('N',250,16);ctx.fillText('32 m',10,498);ctx.fillRect(10,502,64,2);
 }

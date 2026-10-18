@@ -8,10 +8,11 @@ function fixture(){
  const g=new Game(newState({...worldSpec(42),generationVersion:3}));g.combat.ensureEncounters();g.combat.ensureEncounters=()=>{};
  const guards=Object.values(g.state.combat.actors).filter(a=>a.type==='guard'),guard=guards[0],healthy=guards[1];
  for(const a of Object.values(g.state.combat.actors))a.hp=0;
- const house={id:'built:1',type:'hut' as const,x:8,z:0,rotation:0};g.state.buildings.push(house);g.state.nextId=2;
- Object.assign(guard,{hp:125,x:7.3,z:3.5,weapon:'shotgun',cooldown:0});
- Object.assign(healthy,{hp:125,x:12,z:4,weapon:'shotgun',cooldown:0});
- const enemy=Object.values(g.state.combat.actors).find(a=>a.type==='bandit')!;Object.assign(enemy,{hp:125,x:12,z:5,weapon:'bow',cooldown:5});
+ // Keep the shelter fixture inside the village's 30-unit engagement boundary.
+ const house={id:'built:1',type:'hut' as const,x:14,z:0,rotation:0};g.state.buildings.push(house);g.state.nextId=2;
+ Object.assign(guard,{hp:125,x:13.3,z:3.5,weapon:'shotgun',cooldown:0});
+ Object.assign(healthy,{hp:125,x:18,z:4,weapon:'shotgun',cooldown:0});
+ const enemy=Object.values(g.state.combat.actors).find(a=>a.type==='bandit')!;Object.assign(enemy,{hp:125,x:18,z:5,weapon:'bow',cooldown:5});
  g.state.furnaces[0].fuel=0;g.solids=()=>[];g.world.isWater=()=>false;
  return{g,guard,healthy,enemy,house};
 }

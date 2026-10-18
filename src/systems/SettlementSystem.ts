@@ -8,17 +8,20 @@ import { villageLoot,structureMaxHP,SALVAGE_AMOUNT } from '../data/settlement';
 import { transact,type Result } from './InventorySystem';
 import { distance } from '../world/WorldManager';
 import { route } from './Navigation';
+import {harvestRoute} from './WorkerHarvest';
 
 export interface Structure extends Building {initialRuin?:boolean;generated?:boolean}
 export interface Integrity {hp:number;stage:'intact'|'ruin'|'gone'}
 export interface Refuge extends Point {houseId:string;homeX:number;homeZ:number;phase:'fleeing'|'hidden'|'returning';remaining:number;reason?:'night'}
 export interface LootPile extends Point {id:string;resources:Partial<Balances>;weapon?:WeaponType;category?:string}
 export class SettlementSystem {
+  private clock=0;
+  private retries=new Map<string,number>();
   private paths=new Map<string,Point[]>();
   constructor(private game:Game){}
   structures(point:Point=this.game.state.player,radius=1):Structure[]{
     const g=this.game;
-    return [...g.state.buildings,...g.state.furnaces.filter(f=>!g.state.buildings.some(b=>b.id===f.id)).map(f=>({...f,type:'furnace' as const,rotation:0})),...g.world.settlements(point,radius).flatMap(r=>Array.from({length:r.houses},(_,i)=>({id:`house:${r.id}:${i}`,type:'hut' as const,x:r.x+(i-1)*6,z:r.z-3,rotation:i%2?.1:-.1,generated:true,initialRuin:!r.id.startsWith('village:')&&i%2===0})))];
+    return [...g.state.buildings,...g.communities.active().flatMap(c=>{const v=g.communities.village(c.id)!;return[{id:c.storageId,type:'storage' as const,x:v.x+12,z:v.z-4,rotation:0,generated:true}];}),...g.state.furnaces.filter(f=>!g.state.buildings.some(b=>b.id===f.id)).map(f=>({...f,type:'furnace' as const,rotation:0})),...g.world.settlements(point,radius).flatMap(r=>Array.from({length:r.houses},(_,i)=>({id:`house:${r.id}:${i}`,type:'hut' as const,x:r.x+(i-1)*6,z:r.z-3,rotation:i%2?.1:-.1,generated:true,initialRuin:!r.id.startsWith('village:')&&i%2===0})))];
   }
   integrity(structure:Structure):Integrity{return this.game.state.changes.structures?.[structure.id]??{hp:structureMaxHP(structure)*(structure.initialRuin?.25:1),stage:structure.initialRuin?'ruin':'intact'};}
   intact(id:string){return this.game.state.changes.structures?.[id]?.stage===undefined||this.game.state.changes.structures[id].stage==='intact';}
@@ -30,7 +33,7 @@ export class SettlementSystem {
     if(next.hp===0){
       if(old.stage==='intact'){next.stage='ruin';next.hp=structureMaxHP(structure)*.25;}
       else{next.stage='gone';const n=SALVAGE_AMOUNT[structure.type];const loot=this.game.state.changes.groundLoot??(this.game.state.changes.groundLoot={});loot[`salvage:${id}`]={id:`salvage:${id}`,x:structure.x,z:structure.z,resources:{wood:n,stone:n}};
-        if(structure.type==='storage'){const remains:Partial<Balances>={};for(const k of RESOURCE_IDS){const amount=Math.max(0,this.game.state.stockpile[k]);remains[k]=Math.floor(amount*.1);if(amount>0)this.game.state.stockpile[k]=0;}loot[`stored:${id}`]={id:`stored:${id}`,x:structure.x,z:structure.z,resources:remains};}}
+        if(structure.type==='storage'){const community=gCommunity(this.game,id),account=community?.stockpile??this.game.state.stockpile;const remains:Partial<Balances>={};for(const k of RESOURCE_IDS){const amount=Math.max(0,account[k]);remains[k]=Math.floor(amount*.1);if(amount>0)account[k]=0;}loot[`stored:${id}`]={id:`stored:${id}`,x:structure.x,z:structure.z,resources:remains};}}
       this.game.revision++;this.paths.clear();
     }
     (this.game.state.changes.structures??(this.game.state.changes.structures={}))[id]=next;
@@ -64,24 +67,32 @@ export class SettlementSystem {
   flee(id:string,point:Point,night=false){
     const g=this.game,worker=g.state.workers.find(w=>w.id===id),old=this.refuge(id);
     if(old){old.remaining=12;if(old.phase==='returning')old.phase='fleeing';return;}
-    const houses=this.structures(point,2).filter(b=>b.id!==g.state.player.shelter?.houseId&&b.type!=='furnace'&&b.type!=='shelter'&&!this.burning(b)&&this.integrity(b).stage==='intact'&&!b.construction&&(night?worker?.villageId?b.id.startsWith(`house:${worker.villageId}:`)&&distance(b,point)<36:b.id===worker?.hutId:distance(b,point)<36)).sort((a,b)=>(a.id===worker?.hutId?-100:distance(a,point))-(b.id===worker?.hutId?-100:distance(b,point)));
-    const house=houses[0];if(!house)return;
-    (g.state.changes.refuges??(g.state.changes.refuges={}))[id]={houseId:house.id,x:point.x,z:point.z,homeX:point.x,homeZ:point.z,phase:'fleeing',remaining:12,...(night?{reason:'night' as const}:{})};this.paths.delete(id);
+    if((this.retries.get(id)??0)>this.clock)return;
+    const houses=this.structures(point,2).filter(b=>b.id!==g.state.player.shelter?.houseId&&Object.values(g.state.changes.refuges??{}).filter(r=>r.houseId===b.id&&r.phase!=='returning').length<4&&b.type==='hut'&&!this.burning(b)&&this.integrity(b).stage==='intact'&&!b.construction&&distance(b,point)<36&&(night&&!worker?.communityId?(worker?.villageId?b.id.startsWith(`house:${worker.villageId}:`):b.id===worker?.hutId):true)).sort((a,b)=>(a.id===worker?.hutId?-100:distance(a,point))-(b.id===worker?.hutId?-100:distance(b,point)));
+    const solids=g.solids(point).filter(s=>!('id'in s)||s.id!==id),valid=(p:Point)=>!g.world.isWater(p.x,p.z)&&solids.every(s=>distance(s,p)>s.radius+.35);
+    for(const house of houses){const target=this.door(house),path=distance(point,target)<1.1?[]:harvestRoute(point,target,.95,valid);if(!path.length&&distance(point,target)>=1.1)continue;
+     (g.state.changes.refuges??(g.state.changes.refuges={}))[id]={houseId:house.id,x:point.x,z:point.z,homeX:point.x,homeZ:point.z,phase:'fleeing',remaining:12,...(night?{reason:'night' as const}:{})};this.paths.set(id,path);return;
+    }
+    this.retries.set(id,this.clock+5);
   }
+  private door(house:Structure){return{x:house.x-.7*Math.cos(house.rotation)+(BUILDINGS[house.type].radius+.5)*Math.sin(house.rotation),z:house.z+.7*Math.sin(house.rotation)+(BUILDINGS[house.type].radius+.5)*Math.cos(house.rotation)};}
+
   update(dt:number){
-    const g=this.game,night=isNight(g.state);
+    this.clock+=dt;const g=this.game,night=isNight(g.state);
     if(night)for(const w of g.state.workers)if(w.hp>0&&!this.refuge(w.id))this.flee(w.id,w,true);
     for(const [id,refuge]of Object.entries(g.state.changes.refuges??{})){
       const actor=g.state.combat.actors[id];
       if((actor&&actor.hp<=0)||g.state.workers.some(w=>w.id===id&&w.hp<=0)){delete g.state.changes.refuges![id];this.paths.delete(id);continue;}
-      if(distance(refuge,g.state.player)>100&&!g.state.workers.some(w=>w.id===id))continue;
+      if(distance(refuge,g.state.player)>100&&!g.state.workers.some(w=>w.id===id)&&!g.communities.near(refuge))continue;
       const house=this.structures(refuge,2).find(b=>b.id===refuge.houseId),worker=g.state.workers.find(w=>w.id===id);
-      if(!house||this.burning(house)||this.integrity(house).stage!=='intact'){refuge.phase='returning';this.paths.delete(id);}
-      if(refuge.phase==='hidden'){if(worker)worker.hp=Math.min(100,worker.hp+dt*5);refuge.remaining=worker&&night&&(house?.id===worker.hutId||!!worker.villageId)?12:worker&&refuge.reason==='night'&&worker.hp>=50?0:Math.max(0,refuge.remaining-dt);if(refuge.remaining<=0){refuge.phase='returning';this.paths.delete(id);}else continue;}
-      const target=refuge.phase==='fleeing'?{x:house!.x-.7*Math.cos(house!.rotation)+(BUILDINGS[house!.type].radius+.5)*Math.sin(house!.rotation),z:house!.z+.7*Math.sin(house!.rotation)+(BUILDINGS[house!.type].radius+.5)*Math.cos(house!.rotation)}:{x:refuge.homeX,z:refuge.homeZ};
-      if(distance(refuge,target)<.4){if(refuge.phase==='fleeing'){refuge.phase='hidden';refuge.remaining=12;}else delete g.state.changes.refuges![id];this.paths.delete(id);continue;}
-      let path=this.paths.get(id);if(!path){const solids=g.solids(refuge).filter(s=>!('id'in s)||s.id!==id),valid=(p:Point)=>!g.world.isWater(p.x,p.z)&&solids.every(s=>distance(s,p)>s.radius+.35),clear=(a:Point,b:Point)=>solids.every(s=>segmentDistance(s,a,b)>s.radius+.3);path=valid(target)&&clear(refuge,target)?[target]:route(refuge,target,valid);if(path.length&&valid(target)&&clear(path[path.length-1],target))path.push(target);this.paths.set(id,path);}
-      const next=path[0];if(!next){this.paths.delete(id);continue;}const d=distance(next,refuge),step=Math.min(d,dt*3.8),oldX=refuge.x,oldZ=refuge.z;g.move(refuge,(next.x-refuge.x)/(d||1)*step,(next.z-refuge.z)/(d||1)*step,.3,id);if(d<.4)path.shift();if(worker){worker.x=refuge.x;worker.z=refuge.z;}if(actor){actor.x=refuge.x;actor.z=refuge.z;if(Math.hypot(refuge.x-oldX,refuge.z-oldZ)>1e-6)actor.heading=Math.atan2(refuge.x-oldX,refuge.z-oldZ);}
+      if(refuge.phase!=='returning'&&(!house||this.burning(house)||this.integrity(house).stage!=='intact')){delete g.state.changes.refuges![id];this.paths.delete(id);this.retries.delete(id);this.flee(id,refuge,night);continue;}
+      if(refuge.phase==='hidden'){if(worker)worker.hp=Math.min(100,worker.hp+dt*5);refuge.remaining=worker&&night&&(house?.id===worker.hutId||!!worker.villageId||!!worker.communityId)?12:worker&&refuge.reason==='night'&&worker.hp>=50?0:Math.max(0,refuge.remaining-dt);if(refuge.remaining<=0){refuge.phase='returning';this.paths.delete(id);continue;}else continue;}
+      const target=refuge.phase==='fleeing'?this.door(house!):{x:refuge.homeX,z:refuge.homeZ};
+      if(distance(refuge,target)<1.1){if(refuge.phase==='fleeing'){refuge.phase='hidden';refuge.remaining=12;}else delete g.state.changes.refuges![id];this.paths.delete(id);continue;}
+      let path=this.paths.get(id);if(!path){const solids=g.solids(refuge).filter(s=>!('id'in s)||s.id!==id),valid=(p:Point)=>!g.world.isWater(p.x,p.z)&&solids.every(s=>distance(s,p)>s.radius+.35),clear=(a:Point,b:Point)=>solids.every(s=>segmentDistance(s,a,b)>s.radius+.3);path=valid(target)&&clear(refuge,target)?[target]:harvestRoute(refuge,target,.95,valid);if(path.length&&valid(target)&&clear(path[path.length-1],target))path.push(target);this.paths.set(id,path);}
+      const next=path[0];if(!next){this.paths.delete(id);if(refuge.phase==='fleeing'){delete g.state.changes.refuges![id];this.retries.set(id,this.clock+3);}else if(distance(refuge,target)<2){delete g.state.changes.refuges![id];}continue;}const d=distance(next,refuge),step=Math.min(d,dt*3.8),oldX=refuge.x,oldZ=refuge.z;g.move(refuge,(next.x-refuge.x)/(d||1)*step,(next.z-refuge.z)/(d||1)*step,.3,id);if(d<.4)path.shift();if(worker){worker.x=refuge.x;worker.z=refuge.z;}if(actor){actor.x=refuge.x;actor.z=refuge.z;if(Math.hypot(refuge.x-oldX,refuge.z-oldZ)>1e-6)actor.heading=Math.atan2(refuge.x-oldX,refuge.z-oldZ);}
     }
   }
 }
+
+function gCommunity(game:Game,id:string){return game.communities.active().find(c=>c.storageId===id);}

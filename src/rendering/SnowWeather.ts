@@ -13,12 +13,12 @@ export class SnowWeather {
     const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.BufferAttribute(this.positions,3).setUsage(T.DynamicDrawUsage));
     this.points=new T.Points(geometry,new T.PointsMaterial({color:0xf1f8ff,map:texture,size:.19,transparent:true,opacity:.8,depthWrite:false,alphaTest:.015}));this.points.name='weather-snow';this.points.frustumCulled=false;
   }
-  update(dt:number,storm:boolean,point:{x:number;z:number},height:number,reduced=false){
+  update(dt:number,storm:boolean,point:{x:number;z:number},height:number,reduced=false,budget=false){
     const step=Math.min(.1,Math.max(0,dt));this.intensity+=(Number(storm)-this.intensity)*(1-Math.exp(-step*2));
     const material=this.points.material as T.PointsMaterial;material.opacity=.2+this.intensity*.65;material.size=.09+this.intensity*.16;
-    const count=Math.round(100+this.intensity*(reduced?120:800));this.points.geometry.setDrawRange(0,count);
+    const count=Math.round(100+this.intensity*(reduced?120:budget?350:800));this.points.geometry.setDrawRange(0,count);
     this.points.position.set(point.x,height,point.z);
-    if(!reduced)for(let i=0;i<900;i++){
+    if(!reduced)for(let i=0;i<(budget?count:900);i++){
       const at=i*3,speed=1.2+this.intensity*5+(i%7)*.2;
       this.positions[at]=T.MathUtils.euclideanModulo(this.positions[at]+44+step*(.7+this.intensity*3),88)-44;
       this.positions[at+1]=T.MathUtils.euclideanModulo(this.positions[at+1]-step*speed,44);

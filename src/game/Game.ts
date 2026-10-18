@@ -1,3 +1,5 @@
+import {MapNotes} from '../systems/MapJournal';
+import {VillageCommunitySystem} from '../systems/VillageCommunitySystem';
 import {visitVillage,HARDSHIPS,actorMaxHP} from '../systems/Difficulty';
 import {TreeGrowth} from '../systems/TreeGrowth';
 import {isNight} from '../systems/DayNight';
@@ -28,6 +30,8 @@ export class Game {
   markTerrainChanged(point:Point){const n=this.state.world.config.chunkSize;this.dirtyTerrainChunks.add(`${Math.floor(point.x/n)},${Math.floor(point.z/n)}`);this.revision++;}
   readonly combat: CombatSystem;
   readonly settlement:SettlementSystem;
+  readonly communities:VillageCommunitySystem;
+  readonly notes:MapNotes;
   paused = true;
   message = 'Welcome to the northern wilderness.';
   revision = 0;
@@ -45,9 +49,11 @@ export class Game {
   readonly harvestTargets=new Map<string,Node>();
   private unavailableSources=new Map<string,Map<string,number>>();
   private fuelTasks=new Map<string,string>();
+  private communitySources=new Map<string,{until:number;revision:number;nodes:Node[]}>();
+  private villagePathBudget=2;
   private paths = new Map<string, Point[]>();
   private velocity = { x: 0, z: 0 };
-  constructor(public state: GameState) { for(const w of state.combat.weapons)w.uses=Math.min(w.uses,weaponUses(w.type));this.world = new WorldManager(state.world); this.combat = new CombatSystem(this);this.settlement=new SettlementSystem(this);this.treeGrowth=new TreeGrowth(this); }
+  constructor(public state: GameState) { for(const w of state.combat.weapons)w.uses=Math.min(w.uses,weaponUses(w.type));this.world = new WorldManager(state.world); this.combat = new CombatSystem(this);this.settlement=new SettlementSystem(this);this.treeGrowth=new TreeGrowth(this);this.communities=new VillageCommunitySystem(this);this.notes=new MapNotes(this);for(const v of this.world.villages())if(state.communities?.[v.id]||state.furnaces.some(f=>f.id===`${v.id}:furnace`))this.communities.ensure(v); }
   get inventoryLimit() { return this.state.settings.inventoryLimit ? Math.min(INT32_MAX,this.state.settings.inventoryLimit + this.state.buildings.filter(b => b.type === 'storage'&&this.settlement.ready(b.id)).length * 50) : 0; }
   get dead() { return this.state.player.hp <= 0 || this.state.settings.difficulty === 'survival' && this.state.player.warmth <= 0; }
   notify(message: string) { this.message = message; }
@@ -92,7 +98,7 @@ export class Game {
   stopMovement() { this.velocity.x = 0; this.velocity.z = 0; }
   update(dt: number, input: Input = { x: 0, z: 0 }) {
     if (this.paused || this.dead) return;
-    dt = Math.min(.1, Math.max(0, dt));
+    dt = Math.min(.1, Math.max(0, dt));this.villagePathBudget=2;
     updateExposure(this.state,dt,this.world.isWater(this.state.player.x,this.state.player.z));
     if(this.state.player.shelter){this.stopMovement();input={x:0,z:0};}
     const len = Math.hypot(input.x, input.z), factor = 1 - Math.exp(-dt * MOVEMENT.response);
@@ -121,9 +127,9 @@ export class Game {
       else{const before=task.remaining;task.remaining-=dt;if(Math.floor(before/.65)!==Math.floor(task.remaining/.65))this.lastGather=this.state.elapsed;if(task.remaining<=1e-8){this.gathering=undefined;const result=this.gather(task.node);if(!result.ok)this.notify(result.error);}}
     }
     this.updateCampfires(dt);
-    this.settlement.update(dt);this.updatePlayerShelter(dt);
+    this.communities.update(dt);this.settlement.update(dt);this.updatePlayerShelter(dt);
     this.updateConstruction(dt);
-    this.updateWorkers(dt);
+    this.updateWorkers(dt);this.notes.explore(dt);
   }
   startGather(node:Node):Result {
     if(this.paused||this.dead||this.state.player.shelter)return{ok:false,error:'Resume before gathering.'};
@@ -133,7 +139,7 @@ export class Game {
     this.state.player.heading=Math.atan2(node.x-this.state.player.x,node.z-this.state.player.z);
     this.gathering={node:{...node},remaining:gatherSeconds(this.nodeResource(node))};this.lastGather=this.state.elapsed;this.notify(`Gathering ${this.nodeResource(node)} / ${this.gathering.remaining}s`);return{ok:true};
   }
-  private breakNatural(node:Node):boolean {
+  breakNatural(node:Node):boolean {
     if(node.kind!=='tree'&&node.kind!=='boulder')return false;
     const terrain=this.state.changes.terrain??(this.state.changes.terrain={});if(terrain[node.id])return true;
     terrain[node.id]=node.kind==='tree'?'felled':'broken';
@@ -314,20 +320,22 @@ export class Game {
       this.revision++;this.notify(`${BUILDINGS[hut.type].name} ready.${hut.type==='hut'?' Two gatherers have joined the settlement.':''}`);this.action({kind:'build',x:hut.x,z:hut.z,label:BUILDINGS[hut.type].name+' complete',costs:[]});
     }
   }
-  private workerFurnaces(hut:Point){return this.state.furnaces.filter(f=>(f.id==='home'||this.state.buildings.some(b=>b.id===f.id&&b.type==='furnace'))&&this.settlement.ready(f.id)&&f.fuel+f.charcoal<=20&&distance(f,hut)<=26).sort((a,b)=>a.fuel+a.charcoal-b.fuel-b.charcoal||distance(a,hut)-distance(b,hut));}
+  private workerFurnaces(hut:Point,communityId?:string){return this.state.furnaces.filter(f=>(communityId?f.id===`${communityId}:furnace`:(f.id==='home'||this.state.buildings.some(b=>b.id===f.id&&b.type==='furnace')))&&this.settlement.ready(f.id)&&f.fuel+f.charcoal<=(communityId&&this.state.elapsed%1200>=540&&this.state.elapsed%1200<600?720:20)&&distance(f,hut)<=26).sort((a,b)=>a.fuel+a.charcoal-b.fuel-b.charcoal||distance(a,hut)-distance(b,hut));}
   private tendFurnace(worker:Worker,hut:Point,dt:number){
     if(worker.hp<50)return false;
+    const account=worker.communityId?this.state.communities![worker.communityId].stockpile:this.state.stockpile;
     const carried=worker.resource==='wood'&&worker.load>0;
-    const furnace=(carried||this.state.stockpile.wood>=1)?this.workerFurnaces(hut)[0]:undefined;
+    const resource=worker.communityId&&account.charcoal>0?'charcoal':'wood';
+    const furnace=(carried||account[resource]>=1)?this.workerFurnaces(hut,worker.communityId)[0]:undefined;
     if(!furnace){if(this.fuelTasks.delete(worker.id))this.paths.delete(worker.id);return false;}
     if(this.fuelTasks.get(worker.id)!==furnace.id){this.paths.delete(worker.id);this.fuelTasks.set(worker.id,furnace.id);worker.sourceId=null;worker.progress=0;worker.state='returning';}
     const target={x:furnace.x,z:furnace.z+3};
     if(distance(worker,target)<1.8){
-      if(carried)worker.load--;else{const r=transact([{account:this.state.stockpile,delta:{wood:-1}}],this.state.settings);if(!r.ok)return false;}
-      const relit=furnace.fuel+furnace.charcoal<=0;furnace.fuel+=10;if(relit)this.notify('A worker relit the furnace with wood.');
+      if(carried)worker.load--;else{const r=transact([{account,delta:{[resource]:-1}}],this.state.settings);if(!r.ok)return false;}
+      const relit=furnace.fuel+furnace.charcoal<=0;if(!carried&&resource==='charcoal')furnace.charcoal+=30;else furnace.fuel+=10;if(relit&&!worker.communityId)this.notify('A worker relit the furnace with wood.');
       this.paths.delete(worker.id);this.fuelTasks.delete(worker.id);worker.state=worker.load?'returning':'seeking';return true;
     }
-    let path=this.paths.get(worker.id);if(!path){const solids=this.solids(hut),valid=(p:Point)=>!this.world.isWater(p.x,p.z)&&solids.every(s=>distance(s,p)>s.radius+.6);path=route(worker,target,valid);this.paths.set(worker.id,path);}
+    let path=this.paths.get(worker.id);if(!path){if(worker.communityId&&this.villagePathBudget--<=0)return true;const solids=this.solids(hut),valid=(p:Point)=>!this.world.isWater(p.x,p.z)&&solids.every(s=>distance(s,p)>s.radius+.6);path=route(worker,target,valid);this.paths.set(worker.id,path);}
     const next=path[0];if(!next){worker.progress+=dt;if(worker.progress>=3){worker.progress=0;this.paths.delete(worker.id);}return true;}
     const d=distance(worker,next),step=Math.min(d,dt*3.8);this.move(worker,(next.x-worker.x)/(d||1)*step,(next.z-worker.z)/(d||1)*step,.3);if(d<.4)path.shift();return true;
   }
@@ -347,41 +355,47 @@ export class Game {
   private updateWorkers(dt: number) {
     this.harvestTargets.clear();
     for (const w of this.state.workers) {
-      if(w.hp>0&&this.state.buildings.some(b=>b.id===w.hutId&&!this.settlement.intact(b.id))){this.migrateWorker(w,dt);continue;}
+      if(!w.communityId&&w.hp>0&&this.state.buildings.some(b=>b.id===w.hutId&&!this.settlement.intact(b.id))){this.migrateWorker(w,dt);continue;}
       if(w.hp>0&&w.hp<50&&!this.settlement.refuge(w.id))this.settlement.flee(w.id,w);
       if (w.hp <= 0||this.settlement.refuge(w.id)||isNight(this.state)) {this.paths.delete(w.id);this.fuelTasks.delete(w.id);w.progress=0;continue;}
-      const hut = this.state.buildings.find(b => b.id === w.hutId); if (!hut||!this.settlement.intact(hut.id)) continue;
+      const community=w.communityId?this.state.communities?.[w.communityId]:undefined,account=community?.stockpile??this.state.stockpile;
+      const hut = this.communities.home(w)??this.state.buildings.find(b => b.id === w.hutId); if (!hut||!this.settlement.intact(hut.id)){if(community){w.state='blocked';w.sourceId=null;w.progress=0;}continue;}
+      if(community&&community.security.calmTime>0){w.state='blocked';w.progress=0;this.paths.delete(w.id);continue;}
       if(this.tendFurnace(w,hut,dt))continue;
-      const needsWood=this.workerFurnaces(hut).length>0;
-      const sources = this.world.around(hut).flatMap(c => [...this.nodesInChunk(c),...c.fishing.map((f):Node=>({...f,amount:f.availability,resource:'fish' as const,radius:.4}))]).filter(n => (['wood','stone','fish'].includes(this.nodeResource(n))) && distance(n, hut) < 26 && this.nodeRemaining(n) > 0 && !this.world.isWater(n.x, n.z));
+      const needsWood=this.workerFurnaces(hut,w.communityId).length>0;
+      let candidates:Node[];
+      if(w.communityId){let cached=this.communitySources.get(w.communityId);if(!cached||cached.until<=this.state.elapsed){const center=this.communities.village(w.communityId)!;cached={until:this.state.elapsed+1,revision:this.revision,nodes:this.world.around(center).flatMap(c=>[...this.nodesInChunk(c),...c.fishing.map((f):Node=>({...f,amount:f.availability,resource:'fish',radius:.4}))])};this.communitySources.set(w.communityId,cached);}candidates=cached.nodes;}
+      else candidates=this.world.around(hut).flatMap(c => [...this.nodesInChunk(c),...c.fishing.map((f):Node=>({...f,amount:f.availability,resource:'fish' as const,radius:.4}))]);
+      const sources = candidates.filter(n => (w.assignment?(needsWood?this.nodeResource(n)==='wood':this.nodeResource(n)===w.assignment):['wood','stone','fish'].includes(this.nodeResource(n))) && distance(n, hut) < 26 && this.nodeRemaining(n) > 0 && !this.world.isWater(n.x, n.z));
       const blocked=this.unavailableSources.get(w.id);for(const [id,until]of blocked??[])if(until<=this.state.elapsed)blocked!.delete(id);const available=sources.filter(n=>!blocked?.has(n.id));
       let source = available.find(n => n.id === w.sourceId);
       if (w.load >= 3 || !source && w.load > 0) w.state = 'returning';
-      if (!source && !w.load) { source = available.sort((a,b)=>(needsWood?Number(b.resource==='wood')-Number(a.resource==='wood'):0)||this.state.stockpile[a.resource]-this.state.stockpile[b.resource]||distance(a,w)-distance(b,w))[0];if(source)w.resource=source.resource as 'wood'|'stone'|'fish'; w.sourceId = source?.id ?? null; w.state = source ? 'seeking' : 'blocked'; this.paths.delete(w.id); }
+      if (!source && !w.load) { source = available.sort((a,b)=>(needsWood?Number(b.resource==='wood')-Number(a.resource==='wood'):0)||account[a.resource]-account[b.resource]||distance(a,w)-distance(b,w))[0];if(source)w.resource=source.resource as 'wood'|'stone'|'fish'; w.sourceId = source?.id ?? null; w.state = source ? 'seeking' : 'blocked'; this.paths.delete(w.id); }
       if (w.state === 'blocked') { w.progress += dt; if (w.progress < 3) continue; w.progress = 0; w.state = w.load ? 'returning' : 'seeking'; this.paths.delete(w.id); }
       if (w.state === 'gathering') {
         if(source&&distance(w,source)>=workerHarvestReach(source)){w.state='seeking';w.progress=0;this.paths.delete(w.id);continue;}
         if(source)this.harvestTargets.set(w.id,source);
         w.progress += dt;
-        if(source&&w.progress>=gatherSeconds(source.resource)-1e-8&&(source.kind==='tree'||source.kind==='boulder')){this.breakNatural(source);w.sourceId=source.kind==='tree'?`log:${source.id}`:`fragment:${source.id}:0`;w.state='seeking';w.progress=0;this.harvestTargets.delete(w.id);this.paths.delete(w.id);continue;}
+        if(source&&w.progress>=gatherSeconds(source.resource)-1e-8&&(source.kind==='tree'||source.kind==='boulder')){this.breakNatural(source);if(w.communityId)this.communitySources.delete(w.communityId);w.sourceId=source.kind==='tree'?`log:${source.id}`:`fragment:${source.id}:0`;w.state='seeking';w.progress=0;this.harvestTargets.delete(w.id);this.paths.delete(w.id);continue;}
         if (source && w.progress >= gatherSeconds(source.resource)-1e-8) { if(source.resource==='fish')this.state.changes.fishing[source.id]=(this.state.changes.fishing[source.id]??0)+1;else this.state.changes.nodes[source.id] = this.nodeRemaining(source) - 1; if (this.nodeRemaining(source) === 0) this.markTerrainChanged(source); w.load++; w.progress = 0; }
         if (!source || w.load >= 3) { w.state = 'returning'; this.paths.delete(w.id); }
         continue;
       }
       if (!source && !w.load) { w.state = 'blocked'; continue; }
-      const destinations = [...this.state.furnaces.filter(f=>this.settlement.ready(f.id)).map(f => ({ x: f.x, z: f.z + 3 })), ...this.state.buildings.filter(b => b.type === 'storage'&&this.settlement.ready(b.id)).map(b => ({ x: b.x, z: b.z + 3.4 }))];
+      const destinations = community?(this.settlement.ready(community.storageId)?[{x:hut.x-(Number(w.hutId.split(':').at(-1))-1)*6+12,z:hut.z+2.4}]:[]):[...this.state.furnaces.filter(f=>this.settlement.ready(f.id)).map(f => ({ x: f.x, z: f.z + 3 })), ...this.state.buildings.filter(b => b.type === 'storage'&&this.settlement.ready(b.id)).map(b => ({ x: b.x, z: b.z + 3.4 }))];
       const destination = destinations.sort((a, b) => distance(a, w) - distance(b, w))[0];
       const target = w.state === 'returning' ? destination : source!;
       if(!target){w.state='blocked';continue;}
       if (distance(w, target) < (w.state === 'returning' ? 1.8 : workerHarvestReach(source!))) {
         if (w.state === 'returning') {
-          const r = transact([{ account: this.state.stockpile, delta: { [w.resource??'wood']: w.load } }], this.state.settings);
+          const r = transact([{ account, delta: { [w.resource??'wood']: w.load },...(community?{capacity:community.capacity}:{}) }], this.state.settings);
           if (r.ok) { w.load = 0; w.sourceId = null; w.state = 'seeking'; this.paths.delete(w.id); } else w.state = 'blocked';
         } else { w.state = 'gathering'; w.progress = 0;this.harvestTargets.set(w.id,source!); }
         continue;
       }
       let path = this.paths.get(w.id);
       if (!path) {
+        if(w.communityId&&this.villagePathBudget--<=0)continue;
         const solids = this.solids(hut);
         const valid = (p: Point) => !this.world.isWater(p.x, p.z) && solids.every(s => distance(s, p) > s.radius + .6);
         path=harvestRoute(w,target,w.state==='returning'?1.8:workerHarvestReach(source!),valid);this.paths.set(w.id,path);
