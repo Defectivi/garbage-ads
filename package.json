@@ -32,7 +32,8 @@
     "test:harvest": "node tests/worker-harvest.mjs",
     "test:field": "node tests/field-ui-night.mjs",
     "test:cliffs": "node tests/cliffs-loading.mjs",
-    "test:workshop": "node tests/workshop-shelter.mjs"
+    "test:workshop": "node tests/workshop-shelter.mjs",
+    "test:difficulty": "node tests/difficulty.mjs"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.3.0",

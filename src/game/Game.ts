@@ -1,3 +1,4 @@
+import {visitVillage,HARDSHIPS,actorMaxHP} from '../systems/Difficulty';
 import {TreeGrowth} from '../systems/TreeGrowth';
 import {isNight} from '../systems/DayNight';
 import {harvestRoute,workerHarvestReach} from '../systems/WorkerHarvest';
@@ -104,7 +105,7 @@ export class Game {
     this.move(this.state.player, this.velocity.x * dt, this.velocity.z * dt);
     if (len > .1) this.state.player.heading = Math.atan2(input.x, input.z);
     this.combat.update(dt); updateSurvival(this.state, dt, sprint,distance(beforeMove,this.state.player)>.0001);this.treeGrowth.update();
-    for (const r of this.world.settlements(this.state.player)) if (distance(r, this.state.player) < 20 && !this.state.discovered.includes(r.id)) { this.state.discovered.push(r.id); this.notify(`Discovered ${r.name}. Search the chest and speak to the trader.`); }
+    for (const r of this.world.settlements(this.state.player)) if (distance(r, this.state.player) < 20 && !this.state.discovered.includes(r.id)) { this.state.discovered.push(r.id);const curse=visitVillage(this.state,r.id);this.notify(curse?`Discovered ${r.name}. Siberia: ${HARDSHIPS[curse].name} / ${HARDSHIPS[curse].detail}`:`Discovered ${r.name}. Search the chest and speak to the trader.`); }
     if (this.fishing) {
       if (distance(this.fishing.spot, this.state.player) > 3 || len > .1) { this.fishing = undefined; this.notify('Fishing cancelled.'); }
       else if ((this.fishing.remaining -= dt) <= 0) {
@@ -174,7 +175,7 @@ export class Game {
     if(!spawn){this.notify('No clear recovery spot near this furnace. Return to Home to save your progress, or start a new world.');return false;}
     for(const account of [this.state.inventory,this.state.stockpile])for(const resource of RESOURCE_IDS)if(account[resource]>0)account[resource]=Math.floor(account[resource]/2);
     this.state.player={...spawn,heading:0,warmth:100,hp:100,hunger:20,invulnerable:5,heatTime:0};delete this.state.combat.statuses.player;
-    beginSpawnProtection(this.state);this.combat.clearSpawnZone();
+    this.state.player.hp=maxPlayerHP(this.state);beginSpawnProtection(this.state);this.combat.clearSpawnZone();
     this.fishing=undefined;this.gathering=undefined;this.stopMovement();this.notify('Recovered at your furnace. Half of carried and stored supplies were lost.');return true;
   }
   eat(resource: 'fish' | 'meat'): Result {
@@ -299,7 +300,7 @@ export class Game {
       const active=Math.min(dt,b.burnTime??15);b.burnTime=Math.max(0,(b.burnTime??15)-dt);b.pulseTime=(b.pulseTime??0)+active;
       while(b.pulseTime>=1-1e-8){b.pulseTime=Math.max(0,b.pulseTime-1);const p=this.state.player;if(p.hp>0&&distance(p,b)<=5){p.hp=Math.min(maxPlayerHP(this.state),p.hp+maxPlayerHP(this.state)*.06);p.warmth=Math.min(100,p.warmth+6);}
         for(const w of this.state.workers)if(w.hp>0&&distance(w,b)<=5)w.hp=Math.min(100,w.hp+6);
-        for(const a of Object.values(this.state.combat.actors))if(a.type==='guard'&&a.hp>0&&!this.state.combat.villageAlerts.includes(a.villageId??'')&&distance(a,b)<=5)a.hp=Math.min(125,a.hp+7.5);
+        for(const a of Object.values(this.state.combat.actors))if(a.type==='guard'&&a.hp>0&&!this.state.combat.villageAlerts.includes(a.villageId??'')&&distance(a,b)<=5)a.hp=Math.min(actorMaxHP(this.state,a.type),a.hp+7.5);
         for(const r of this.world.settlements(b)){const n=this.npc(r);if(n.hp>0&&distance(this.settlement.position(n.id,r.trader),b)<=5)this.state.changes.npcs[n.id]={inventory:n.inventory,hp:Math.min(100,n.hp+6)};}
       }
     }

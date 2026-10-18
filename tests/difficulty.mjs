@@ -1,0 +1,19 @@
+import {chromium} from '@playwright/test';
+import assert from 'node:assert/strict';
+import {mkdirSync} from 'node:fs';
+const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'}),errors=[];
+mkdirSync('test-results',{recursive:true});
+try{
+ const page=await browser.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',e=>errors.push(e.message));await page.goto('http://localhost:5173');
+ assert(await page.locator('[name="difficulty-mode"][value="normal"]').isChecked());assert(!(await page.locator('#hardship-choice').isVisible()));
+ await page.locator('[name="difficulty-mode"][value="easy"] + span').click();await page.screenshot({path:'test-results/difficulty-easy-menu.png'});await page.locator('#new-world').click();await page.locator('#resources').waitFor();await page.evaluate(()=>{window.__frostbound.game.paused=true;});
+ const easy=await page.evaluate(()=>{const s=window.__frostbound.game.state;return{mode:s.world.mode,wood:s.inventory.wood,gold:s.inventory.gold,weapon:s.combat.weapons[0].type,fuel:s.furnaces[0].fuel};});assert.equal(easy.mode,'easy');assert.equal(easy.wood,32);assert.equal(easy.gold,20);assert.equal(easy.weapon,'machete');assert(easy.fuel>118&&easy.fuel<=120);
+ await page.keyboard.press('Escape');assert.match(await page.locator('.pause-summary').textContent(),/December Mosw/);await page.locator('#exit-menu').click();
+ await page.locator('[name="difficulty-mode"][value="hard"] + span').click();assert(await page.locator('#hardship-choice').isVisible());assert.equal(await page.locator('#hardship-choice option').count(),5);await page.locator('#hardship-choice').selectOption('health');await page.screenshot({path:'test-results/difficulty-hard-menu.png'});await page.locator('#new-world').click();await page.locator('#confirm-world').click();await page.locator('#resources').waitFor();await page.evaluate(()=>{window.__frostbound.game.paused=true;});
+ assert.deepEqual(await page.evaluate(()=>{const s=window.__frostbound.game.state;return{mode:s.world.mode,hardships:s.hardships,hp:s.player.hp,weapon:s.combat.weapons[0].type,uses:s.combat.weapons[0].uses};}),{mode:'hard',hardships:['health'],hp:40,weapon:'molotov',uses:1});assert.match(await page.locator('#player-effects').textContent(),/FRAIL HEART/);
+ await page.keyboard.press('Escape');await page.locator('#pause-save').click();const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('frostbound.world.v2')));assert.equal(saved.world.mode,'hard');assert.equal(saved.world.hardship,'health');assert.deepEqual(saved.state.hardships,['health']);await page.locator('#exit-menu').click();assert(await page.locator('[name="difficulty-mode"][value="hard"]').isChecked());assert.equal(await page.locator('#hardship-choice').inputValue(),'health');
+ for(const viewport of [{width:390,height:844},{width:844,height:390}]){
+  const touch=await browser.newPage({viewport,hasTouch:true,isMobile:true});touch.on('pageerror',e=>errors.push(e.message));await touch.goto('http://localhost:5173');await touch.locator('[name="difficulty-mode"][value="hard"] + span').tap();await touch.locator('#hardship-choice').selectOption('unprotected');assert(await touch.evaluate(()=>document.documentElement.scrollWidth===innerWidth));await touch.locator('#new-world').scrollIntoViewIfNeeded();await touch.screenshot({path:`test-results/difficulty-touch-${viewport.width}.png`});await touch.locator('#new-world').tap();await touch.locator('#resources').waitFor();assert.equal(await touch.evaluate(()=>window.__frostbound.game.state.spawnProtection),undefined);await touch.close();
+ }
+ assert.deepEqual(errors,[]);console.log('Difficulty browser checks passed: desktop and touch selection, five hardships, loadouts, HP, saved mode, HUD and pause indicators, portrait and landscape layouts.');
+}finally{await browser.close();}

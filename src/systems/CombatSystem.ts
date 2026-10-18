@@ -1,3 +1,4 @@
+import {actorMaxHP} from './Difficulty';
 import {isNight} from './DayNight';
 import {spawnProtected,SPAWN_RADIUS} from './SpawnProtection';
 import { BUILDINGS } from '../data/definitions';
@@ -5,7 +6,7 @@ import { bladeSegment, meleeDuration, segmentDistance, segmentSegmentDistance, p
 import { heatRadius, inPlayerHeat, playerHeatSources, structureIntact } from './SurvivalSystem';
 import type { Game } from '../game/Game';
 import type { Point } from '../game/GameState';
-import { ACTOR_HP, WEAPONS, weaponUses, type ActorType, type WeaponType } from '../data/weapons';
+import { WEAPONS, weaponUses, type ActorType, type WeaponType } from '../data/weapons';
 import type { Actor, Projectile } from '../game/CombatState';
 import { SeededRNG, derive } from '../utils/SeededRNG';
 import { distance } from '../world/WorldManager';
@@ -42,12 +43,13 @@ export class CombatSystem {
     }
     if (!valid) return;
     point = valid;
-    this.c.actors[id] = { id, type, ...point, hp: ACTOR_HP[type], weapon, groupId, villageId, homeX: point.x, homeZ: point.z, heading: 0, cooldown: 1, roamTimer: 0, targetX: point.x, targetZ: point.z, alerted: false, heatInside: false };
+    this.c.actors[id] = { id, type, ...point, hp: actorMaxHP(this.s,type), weapon, groupId, villageId, homeX: point.x, homeZ: point.z, heading: 0, cooldown: 1, roamTimer: 0, targetX: point.x, targetZ: point.z, alerted: false, heatInside: false };
   }
   ensureEncounters() {
     const p = this.s.player, world = this.game.world;
     for (const v of world.villages()) if (distance(v, p) < 85) {
       if (!this.s.furnaces.some(f => f.id === `${v.id}:furnace`)) this.s.furnaces.push({ id: `${v.id}:furnace`, x: v.x, z: v.z + 1, fuel: 240, charcoal: 0, level: 1 });
+      if(this.s.world.mode==='hard')for(let i=0;i<5;i++)this.spawn(`raider:${v.id}:${i}`,'bandit',{x:v.x+18+i*1.7,z:v.z+12},`raiders:${v.id}`,i%2?'bow':'machete');
       for (let i = 0; i < v.guardCount; i++) { const angle = i * Math.PI * 2 / v.guardCount; this.spawn(`guard:${v.id}:${i}`, 'guard', { x: v.x + Math.cos(angle) * 10, z: v.z + Math.sin(angle) * 10 }, v.id, i % 2 ? 'machete' : 'shotgun', v.id); }
     }
     const cx = Math.floor(p.x / 64), cz = Math.floor(p.z / 64);
@@ -159,6 +161,8 @@ export class CombatSystem {
     if (ownerId === target.id || target.hp <= 0 || target.id==='player'&&spawnProtected(this.s)&&ownerId!=='player') return false;
     if (ownerId === 'player') return true;
     const owner = this.c.actors[ownerId];
+    if(owner?.type==='polar_bear'&&this.s.world.mode==='easy'&&!owner.alerted)return false;
+    if(owner?.type==='wolf'&&this.s.world.mode==='hard'&&this.c.actors[target.id]?.type==='bandit')return false;
     if(owner?.type==='wolf')return (target.kind!=='building'||target.id===this.s.player.shelter?.houseId)&&this.c.actors[target.id]?.groupId!==owner.groupId;
     return owner?.type === 'guard' ? target.kind === 'enemy' || (target.kind === 'player'||target.id===this.s.player.shelter?.houseId) && !!owner.villageId && this.c.villageAlerts.includes(owner.villageId) : target.kind !== 'enemy'||this.c.actors[target.id]?.type==='wolf';
   }
@@ -233,7 +237,7 @@ export class CombatSystem {
   update(dt: number) {
     this.clearSpawnZone();this.ensureEncounters(); this.c.cooldown = Math.max(0, this.c.cooldown - dt);
     const weather = this.c.weather; weather.remaining -= dt;
-    if (weather.remaining <= 0) { weather.mode = weather.mode === 'clear' ? 'snow' : 'clear'; weather.cycle++; weather.remaining = weather.mode === 'snow' ? 55 : 90 + derive(this.s.world.seeds.wildlife, 'weather', weather.cycle) % 61; this.game.notify(weather.mode === 'snow' ? 'Blizzard incoming. Fuel burns 3× faster; enemies track you from farther away.' : 'The storm has passed.'); }
+    if (weather.remaining <= 0) { weather.mode = weather.mode === 'clear' ? 'snow' : 'clear'; weather.cycle++; weather.remaining = weather.mode === 'snow' ? 55 : (this.s.world.mode==='easy'?240:90) + derive(this.s.world.seeds.wildlife, 'weather', weather.cycle) % 61; this.game.notify(weather.mode === 'snow' ? 'Blizzard incoming. Fuel burns 3× faster; enemies track you from farther away.' : 'The storm has passed.'); }
     for (const [id, status] of Object.entries(this.c.statuses)) { status.tick += Math.min(dt,status.bleed); status.bleed = Math.max(0,status.bleed-dt); while (status.tick >= 1 - 1e-8) { status.tick = Math.max(0, status.tick - 1); const u = this.units().find(u => u.id === id); if (u) this.damage(u, status.bleedDamage??2, 'bleed'); } status.wolfTick=(status.wolfTick??0)+Math.min(dt,status.wolfBleed??0);status.wolfBleed=Math.max(0,(status.wolfBleed??0)-dt);while(status.wolfTick>=1-1e-8){status.wolfTick=Math.max(0,status.wolfTick-1);const u=this.units().find(u=>u.id===id);if(u)this.damage(u,4,'bleed');}if (status.bleed <= 1e-8 && status.wolfBleed<=1e-8) delete this.c.statuses[id]; }
     for (const fire of this.c.fires) {
       const active=Math.min(dt,Math.max(0,fire.remaining));fire.remaining -= dt; fire.tick += active;
@@ -294,17 +298,17 @@ export class CombatSystem {
   private face(actor: Actor, angle: number, dt: number) {
     actor.heading += Math.atan2(Math.sin(angle - actor.heading), Math.cos(angle - actor.heading)) * (1 - Math.exp(-dt * 8));
   }
-  private hostile(actor:Actor){return actor.type!=='guard'||!!actor.villageId&&this.c.villageAlerts.includes(actor.villageId);}
+  private hostile(actor:Actor){return (actor.type!=='polar_bear'||this.s.world.mode!=='easy'||actor.alerted)&&(actor.type!=='guard'||!!actor.villageId&&this.c.villageAlerts.includes(actor.villageId));}
   private heatBurn(actor:Actor,dt:number){
     if(!this.hostile(actor)||!inPlayerHeat(this.s,actor)){actor.heatBurn=0;return;}
     actor.heatBurn=(actor.heatBurn??0)+dt;
     while(actor.heatBurn>=1-1e-8&&actor.hp>0){actor.heatBurn=Math.max(0,actor.heatBurn-1);this.damage({...actor,kind:actor.type==='guard'?'guard':'enemy'},12,'furnace');}
   }
   private heatEntry(actor: Actor) {
-    const hostile = actor.type !== 'guard' || !!actor.villageId && this.c.villageAlerts.includes(actor.villageId);
+    const hostile = this.hostile(actor);
     const sources = playerHeatSources(this.s);
     const inside = sources.some(f => distance(f,actor) < heatRadius(f) + (actor.heatInside ? .35 : 0));
-    if (inside && !actor.heatInside && hostile && actor.hp > 0) this.damage({ ...actor, kind: actor.type === 'guard' ? 'guard' : 'enemy' }, ACTOR_HP[actor.type] * .1, 'furnace');
+    if (inside && !actor.heatInside && hostile && actor.hp > 0) this.damage({ ...actor, kind: actor.type === 'guard' ? 'guard' : 'enemy' }, actorMaxHP(this.s,actor.type) * .1, 'furnace');
     actor.heatInside = inside;
   }
   private walk(actor: Actor, target: Point, dt: number, speed: number) {

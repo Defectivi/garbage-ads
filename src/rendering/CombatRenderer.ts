@@ -6,7 +6,7 @@ import { characterStyle, bearAppearance } from '../data/characters';
 import * as THREE from 'three';
 import type { Game } from '../game/Game';
 import type { ActorType, WeaponType } from '../data/weapons';
-import { ACTOR_HP } from '../data/weapons';
+import {actorMaxHP} from '../systems/Difficulty';
 import { distance } from '../world/WorldManager';
 
 import { weaponMesh, disposeWeapon } from './WeaponModels';
@@ -42,7 +42,7 @@ export class CombatRenderer {
       let burn=g.getObjectByName('furnace-burn') as THREE.Group|undefined;
       if(burning&&!burn){burn=new THREE.Group();burn.name='furnace-burn';for(let i=0;i<3;i++){const angle=i*Math.PI*2/3;this.piece(burn,'sphere',this.mats.core,Math.sin(angle)*.4,.35,Math.cos(angle)*.4,.13,.45,.13);}g.add(burn);}
       if(burn){burn.visible=burning;burn.scale.y=.85+Math.sin(game.state.elapsed*9)*.15;}g.userData.burning=burning;
-      const health = g.getObjectByName('health')!; health.quaternion.copy(g.quaternion).invert().multiply(camera.quaternion); (health.getObjectByName('fill') as THREE.Mesh).scale.x = 1.5 * actor.hp / ACTOR_HP[actor.type]; health.visible = distance(actor, game.state.player) < 26 || actor.hp < ACTOR_HP[actor.type];
+      const health = g.getObjectByName('health')!; health.quaternion.copy(g.quaternion).invert().multiply(camera.quaternion); (health.getObjectByName('fill') as THREE.Mesh).scale.x = 1.5 * actor.hp / actorMaxHP(game.state,actor.type); health.visible = distance(actor, game.state.player) < 26 || actor.hp < actorMaxHP(game.state,actor.type);
     }
     for (const p of c.projectiles) {
       const g = get(`projectile:${p.id}`, () => this.projectileModels.create(p.kind));

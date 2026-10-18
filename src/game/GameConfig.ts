@@ -2,7 +2,9 @@ import { derive } from '../utils/SeededRNG';
 export const GENERATION_VERSION = 6;
 export const INT32_MIN=-2147483648,INT32_MAX=2147483647,UINT32_MAX=4294967295;
 export interface WorldConfig { chunkSize: number; initialRegionSize: number; worldScale: number; riverDensity: number; ruinDensity: number; resourceDensity: number }
-export interface WorldSpec { seed: number; seedText?:string; generationVersion: number; seeds: { terrain: number; rivers: number; biomes: number; resources: number; ruins: number; wildlife: number; villages: number; loot: number }; config: WorldConfig }
+export type DifficultyMode = 'easy'|'normal'|'hard';
+export type Hardship = 'hunger'|'slow'|'fuel'|'health'|'unprotected';
+export interface WorldSpec { mode?:DifficultyMode; hardship?:Hardship; seed: number; seedText?:string; generationVersion: number; seeds: { terrain: number; rivers: number; biomes: number; resources: number; ruins: number; wildlife: number; villages: number; loot: number }; config: WorldConfig }
 export interface Settings { difficulty: 'relaxed' | 'survival'; renderDistance: number; sound: boolean; allowDebt: boolean; inventoryLimit: number; resourceMin: number; resourceMax: number }
 export const DEFAULT_SETTINGS: Settings = { difficulty: 'relaxed', renderDistance: 2, sound: true, allowDebt: false, inventoryLimit: 0, resourceMin: INT32_MIN, resourceMax: INT32_MAX };
 /** Numeric seeds retain old low-seed layouts; text hashes include every UTF-16 code unit. */

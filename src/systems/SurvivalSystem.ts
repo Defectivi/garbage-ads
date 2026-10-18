@@ -1,3 +1,4 @@
+import {hungerRate} from './Difficulty';
 import {fuelInterval,furnaceRadius} from '../data/furnaces';
 import {maxPlayerHP} from '../game/GameState';
 import type { GameState, Furnace, Point } from '../game/GameState';
@@ -15,8 +16,8 @@ export function updateSurvival(state: GameState, dt: number, sprint = false, mov
   state.elapsed += dt;
   const player=state.player;player.foodCooldown=Math.max(0,(player.foodCooldown??0)-dt);
   // Separate movement clocks preserve partial walking and sprint intervals across pauses/saves.
-  if(moving&&!sprint){player.hungerTime=(player.hungerTime??0)+dt;while(player.hungerTime>=30-1e-8){player.hungerTime=Math.max(0,player.hungerTime-30);player.hunger=Math.max(0,(player.hunger??20)-1);}}
-  if(moving&&sprint){player.sprintHungerTime=(player.sprintHungerTime??0)+dt;while(player.sprintHungerTime>=15-1e-8){player.sprintHungerTime=Math.max(0,player.sprintHungerTime-15);player.hunger=Math.max(0,(player.hunger??20)-2);}}
+  if(moving&&!sprint){player.hungerTime=(player.hungerTime??0)+dt*hungerRate(state);while(player.hungerTime>=30-1e-8){player.hungerTime=Math.max(0,player.hungerTime-30);player.hunger=Math.max(0,(player.hunger??20)-1);}}
+  if(moving&&sprint){player.sprintHungerTime=(player.sprintHungerTime??0)+dt*hungerRate(state);while(player.sprintHungerTime>=15-1e-8){player.sprintHungerTime=Math.max(0,player.sprintHungerTime-15);player.hunger=Math.max(0,(player.hunger??20)-2);}}
   player.hp=Math.min(player.hp,maxPlayerHP(state));
   if((player.hunger??20)<=0){player.starvationTime=(player.starvationTime??0)+dt;while(player.starvationTime>=1-1e-8){player.starvationTime=Math.max(0,player.starvationTime-1);player.hp=Math.max(0,player.hp-15);}}else player.starvationTime=0;
   if(state.spawnProtection)state.spawnProtection.remaining=Math.max(0,state.spawnProtection.remaining-dt);

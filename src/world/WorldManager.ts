@@ -8,6 +8,7 @@ export interface Ruin extends Point { id: string; name: string; variant: number;
 export interface Village extends Ruin { guardCount: number }
 export const VILLAGE_SITES = [{ id: 'village:hearth', name: 'Hearthwatch', x: 40, z: 8 }, { id: 'village:quarry', name: 'Stonehaven', x: -72, z: -32 }, { id: 'village:river', name: 'Northpass', x: 132, z: 112 }];
 export const DISTANT_VILLAGE_SITES = VILLAGE_SITES.map((v,i)=>({...v,x:[128,-144,192][i],z:[8,-32,176][i]}));
+const EASY_VILLAGES=[{id:'village:cedar',name:'Cedar Rest',x:-256,z:192},{id:'village:pine',name:'Pinehaven',x:320,z:-160},{id:'village:ember',name:'Ember Hollow',x:-352,z:-224},{id:'village:birch',name:'Birchwatch',x:64,z:320},{id:'village:spruce',name:'Spruce Gate',x:384,z:320},{id:'village:ash',name:'Ash Crossing',x:-192,z:384}];
 export interface Cliff extends Point{id:string;radius:number;height:number}
 export interface Lake extends Point{id:string;rx:number;rz:number}
 export interface FishingSpot extends Point { id: string; availability: number }
@@ -20,7 +21,7 @@ export class WorldManager {
   private lakeCache=new Map<string,Lake|undefined>();
   private cache = new Map<string, Chunk>();
   constructor(readonly spec: WorldSpec) {}
-  private get villageSites(){return this.spec.generationVersion>=4?DISTANT_VILLAGE_SITES:VILLAGE_SITES;}
+  private get villageSites(){const base=this.spec.generationVersion>=4?DISTANT_VILLAGE_SITES:VILLAGE_SITES;return this.spec.mode==='easy'?[...base,...EASY_VILLAGES]:base;}
   river(x: number, z: number) {
     const s = this.spec.seeds, row = Math.round((z - 48) / 128);
     let center = 48 + row * 128 + Math.sin(x / 31 + s.rivers * .01) * 6 + Math.sin(x / 83 + s.terrain * .01) * 10;
@@ -87,10 +88,12 @@ export class WorldManager {
   villages(): Village[] { return this.spec.generationVersion < 2 ? [] : this.villageSites.map((v, i) => ({ ...v, variant: i, houses: 3, trader: { x: v.x - 5, z: v.z + 5 }, container: { x: v.x + 5, z: v.z + 5 }, guardCount: 3 + derive(this.spec.seeds.villages, v.id) % 3 })); }
   settlements(point: Point, radius = 1): Ruin[] { const chunks = this.around(point, radius); return [...chunks.flatMap(c => c.ruins), ...this.villages().filter(v => distance(v, point) < this.spec.config.chunkSize * (radius + 1))]; }
   ruin(rx: number, rz: number): Ruin | undefined {
+    if(this.spec.mode==='easy'&&derive(this.spec.seeds.ruins,'easy-ruin',rx,rz)%20!==0)return;
     const rng = new SeededRNG(derive(this.spec.seeds.ruins, 'ruin', rx, rz));
     if ((rx !== 0 || rz !== 0) && rng.next() > this.spec.config.ruinDensity * .65 || this.spec.config.ruinDensity === 0) return;
     const x = rx * 128 + rng.range(48, 78); let z = rz * 128 + rng.range(-36, -18);
     const river = this.river(x, z); if (river.distance < river.width + 18) z = river.center - river.width - 22;
+    if(this.spec.mode==='easy'&&this.villages().some(v=>distance(v,{x,z})<48))return;
     const variant = Math.floor(rng.range(0, 3));
     return { id: `ruin:${rx}:${rz}`, x, z, name: ['Pinefall Trading Post', 'Old Quarry Hamlet', 'Riverwatch Camp'][variant], variant, houses: 2 + Math.floor(rng.range(0, 3)), trader: { x: x - 5, z: z + 5 }, container: { x: x + 4, z: z + 5 } };
   }
@@ -124,7 +127,7 @@ export class WorldManager {
     }
     const accessible=[...nodes];
     for(const cliff of this.cliffs({x:cx*n+n/2,z:cz*n+n/2}))accessible.push(...this.cliffOres(cliff).filter(node=>Math.floor(node.x/n)===cx&&Math.floor(node.z/n)===cz));
-    const result = { id, cx, cz, trees, nodes:accessible, fishing, ruins: ruins.filter(r => Math.floor(r.x / n) === cx && Math.floor(r.z / n) === cz) };
+    const result = { id, cx, cz, trees:this.spec.mode==='hard'?trees.filter(t=>Math.hypot(t.x,t.z)>200):trees, nodes:this.spec.mode==='hard'?accessible.filter(t=>Math.hypot(t.x,t.z)>200):accessible, fishing:this.spec.mode==='hard'?fishing.filter(t=>Math.hypot(t.x,t.z)>200):fishing, ruins: ruins.filter(r => Math.floor(r.x / n) === cx && Math.floor(r.z / n) === cz) };
     if (this.cache.size > 128) this.cache.delete(this.cache.keys().next().value!); this.cache.set(id, result); return result;
   }
   chunkCoordinates(point:Point,radius=1){const n=this.spec.config.chunkSize,cx=Math.floor(point.x/n),cz=Math.floor(point.z/n),out:{id:string;cx:number;cz:number}[]=[];for(let x=cx-radius;x<=cx+radius;x++)for(let z=cz-radius;z<=cz+radius;z++)out.push({id:`${x},${z}`,cx:x,cz:z});return out.sort((a,b)=>Math.hypot(a.cx-cx,a.cz-cz)-Math.hypot(b.cx-cx,b.cz-cz));}

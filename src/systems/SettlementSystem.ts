@@ -44,8 +44,8 @@ export class SettlementSystem {
   }
   loot(point:Point=this.game.state.player):LootPile[]{
     const g=this.game,taken=g.state.changes.lootTaken??[];
-    return [...g.world.villages().filter(v=>distance(v,point)<100).flatMap(v=>Array.from({length:6},(_,i)=>{
-      const id=`supplies:${v.id}:${i}`,angle=i*Math.PI/3+.35,x=v.x+Math.cos(angle)*12,z=v.z+Math.sin(angle)*12;
+    return [...g.world.villages().filter(v=>distance(v,point)<100).flatMap(v=>Array.from({length:g.state.world.mode==='hard'?12:6},(_,i)=>{
+      const id=`supplies:${v.id}:${i}`,angle=i*Math.PI*2/(g.state.world.mode==='hard'?12:6)+.35,x=v.x+Math.cos(angle)*12,z=v.z+Math.sin(angle)*12;
       return{id,x,z,...villageLoot(g.state.world.seeds.loot,id)};
     }).filter(p=>!taken.includes(p.id))),...Object.values(g.state.changes.groundLoot??{}).filter(p=>distance(p,point)<100)];
   }

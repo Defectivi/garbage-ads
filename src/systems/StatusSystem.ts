@@ -1,10 +1,11 @@
+import {HARDSHIPS} from './Difficulty';
 import {isNight} from './DayNight';
 import {spawnProtected} from './SpawnProtection';
 import {maxPlayerHP,type GameState} from '../game/GameState';
 export {maxPlayerHP} from '../game/GameState';
 import {heatRadius,structureIntact,inPlayerHeat,healingAmount} from './SurvivalSystem';
 import {distance} from '../world/WorldManager';
-export function movementMultiplier(state:GameState,sprint=false){return ((state.player.stunned??0)>0?0:state.player.hypothermia?(sprint?.5:.1):1)*((state.player.hunger??20)<10?.8:1);}
+export function movementMultiplier(state:GameState,sprint=false){return ((state.player.stunned??0)>0?0:state.player.hypothermia?(sprint?.5:.1):1)*((state.player.hunger??20)<10?.8:1)*(state.hardships?.includes('slow')?.8:1);}
 /** River exposure is simulation state. Bridges are dry; fire clears lingering cold, not a river's exposure. */
 export function updateExposure(state:GameState,dt:number,inWater:boolean){
  const p=state.player;if(p.stunned!==undefined)p.stunned=Math.max(0,p.stunned-dt);
@@ -18,6 +19,7 @@ export function updateExposure(state:GameState,dt:number,inWater:boolean){
 }
 export function playerEffects(state:GameState):{id:string;label:string;detail:string}[]{
  const p=state.player,status=state.combat.statuses.player,effects=[];
+ for(const key of state.hardships??[])effects.push({id:`hardship-${key}`,label:HARDSHIPS[key].name.toUpperCase(),detail:`Permanent / ${HARDSHIPS[key].detail}`});
  if(p.shelter)effects.push({id:'shelter',label:'TAKING SHELTER',detail:'Hostile attacks blocked / +3% max HP each second / F to leave'});
  if(spawnProtected(state))effects.push({id:'spawn',label:`SPAWN SAFE ${Math.ceil(state.spawnProtection!.remaining)}s`,detail:'100 m safe area / hostiles kept outside'});
  if((p.hunger??20)<10)effects.push({id:'hunger',label:(p.hunger??20)<=0?'STARVING':'HUNGRY',detail:`Speed -20%${(p.hunger??20)<5?' / max HP -50%':''}${(p.hunger??20)<=0?' / -15 HP each second':''}`});

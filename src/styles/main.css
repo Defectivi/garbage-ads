@@ -574,3 +574,18 @@ button:focus-visible{outline:2px solid #f1c477;outline-offset:3px}
 @media(max-width:700px){.playing header .resource-bar b{font-size:10px}}
 
 .playing header .resource-bar{touch-action:pan-x}
+
+/* Expedition rules are chosen only when creating a world. */
+.menu-panel{top:12%;max-height:calc(88dvh - 70px);overflow-y:auto;overscroll-behavior:contain;pointer-events:auto;touch-action:pan-y;padding-right:8px}
+.menu-panel h1{font-size:56px;margin:16px 0}.menu-panel>p{margin-bottom:16px;font-size:16px}
+.difficulty-picker{border:0;border-top:1px solid #66817d60;padding:12px 0;margin:6px 0 14px;min-width:0}
+.difficulty-picker legend{font-size:11px;letter-spacing:.15em;padding-right:10px}
+.difficulty-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.difficulty-options label{cursor:pointer;position:relative}.difficulty-options input{position:absolute;opacity:0;width:1px;height:1px}
+.difficulty-options span{display:flex;flex-direction:column;justify-content:center;min-height:56px;padding:6px;border-bottom:3px solid #788e87;background:#1c3743;color:#d9e6e6;font-size:14px;font-weight:700}
+.difficulty-options input:checked+span{background:#34564e;color:#fff0cc;border-color:#b67d42}.difficulty-options input:focus-visible+span{outline:2px solid #ac6438;outline-offset:2px}
+.difficulty-options small{font-size:10px;letter-spacing:.12em;opacity:.7}
+.difficulty-picker p,.difficulty-picker>small{color:#b8cace;font-size:13px;line-height:1.5;margin:8px 0;display:block}
+#hardship-label{font-size:11px;letter-spacing:.08em}#hardship-label[hidden]{display:none}#hardship-choice{display:block;width:100%;min-width:0;font:inherit;font-size:14px;letter-spacing:0;margin:6px 0;padding:10px;background:#edf0e5;color:#233b3c;border:1px solid #8b9c89}
+@media(max-height:500px) and (min-width:600px){.menu-panel{top:64px;max-height:calc(100dvh - 82px)}#difficulty-setup{grid-column:1;grid-row:5 / span 3}.menu-tools{grid-column:2;grid-row:6}.difficulty-picker{margin-top:12px}}
+@media(max-width:700px){.menu-panel{top:76px;max-height:calc(100dvh - 110px)}.menu-panel h1{font-size:40px}.menu-panel>p{font-size:14px}.difficulty-options span{font-size:13px}}

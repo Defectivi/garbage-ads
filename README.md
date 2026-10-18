@@ -31,12 +31,16 @@ The built application is in `dist/`; preview serves it at **http://localhost:417
 ## Start exploring
 
 1. Enter a **number from 0 to 4,294,967,295 or a text seed**, randomize it, or enter the current world.
-2. **F** starts gathering (wood 0.3s, stone 0.7s, metal 1.1s, gold 2.2s) within three units. Hold it to repeatedly gather timber, stone, or metal. Guaranteed wood and stone sources are beside home.
-3. Approach a furnace and press F to burn **one wood for 10 base seconds or one charcoal for 30** (charcoal is selected first). A bold ring and animated flame-like aura show the active warmth area. New worlds start with 60 seconds of fuel and a completed 500-HP worker hut with two workers.
+2. **F** starts gathering (wood 0.3s, stone 0.7s, metal 1.1s, gold 2.2s) within three units. Hold it to repeatedly gather timber, stone, or metal. In Normal and Easy, guaranteed wood and stone sources are beside home.
+3. Approach a furnace and press F to burn **one wood for 10 base seconds or one charcoal for 30** (charcoal is selected first). A bold ring and animated flame-like aura show the active warmth area. Normal worlds start with 60 seconds of fuel and a completed 500-HP worker hut with two workers.
 4. Open **Build**. A **hut costs 20 wood**, takes 10 simulation seconds to build, and recruits two workers for wood, stone and fish. Press **T** near a furnace to upgrade; the HUD shows costs and shortages. All new building footprints must fit inside an active furnace range. Storehouses, campfires, City Stores, Workshops and outpost furnaces have distinct functional effects. Preview, rotate, confirm or cancel construction.
 5. The map gives a rumour of a generated settlement. Follow it, search the chest, and interact with the trader. Gold purchases and direct resource barter are supported.
 6. Follow a riverbank to a **blue fishing post**. Interact and remain still for four seconds to catch fish. Fish can restore warmth or be traded.
 7. Use **Save / JSON** to save locally, download full worlds, or create/import fresh sandbox starting configurations.
+
+## Expedition difficulty
+
+Choose **December Mosw (Easy)**, **Frostbound (Normal)** or **Siberia (Hard)** before creating a world. Normal retains the existing balance; Easy supplies a machete and gentler survival, while Siberia adds a permanent hardship, scarce nearby resources and dangerous, richer villages. See [difficulty rules and named hardships](docs/DIFFICULTY.md). Existing saves remain Normal unless their saved world explicitly selects another mode.
 
 ## Controls
 
