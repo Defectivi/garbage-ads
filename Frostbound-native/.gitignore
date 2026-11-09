@@ -1,0 +1,6 @@
+/target/
+/build/
+/.tools/
+/captures/
+/saves/
+*.log

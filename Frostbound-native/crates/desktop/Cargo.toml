@@ -1,0 +1,15 @@
+[package]
+name = "frostbound-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+frostbound-core = { path = "../core" }
+bevy = { version = "=0.17.3", default-features = false, features = [
+  "std", "async_executor", "multi_threaded", "animation", "bevy_asset",
+  "bevy_color", "bevy_core_pipeline", "bevy_gltf", "bevy_log", "bevy_pbr",
+  "bevy_render", "bevy_scene", "bevy_image", "bevy_mesh", "bevy_camera",
+  "bevy_light", "bevy_shader", "bevy_state", "bevy_text", "bevy_ui",
+  "bevy_ui_render", "bevy_window", "bevy_winit", "default_font", "png", "x11"
+] }
